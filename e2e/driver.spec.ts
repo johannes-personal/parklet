@@ -51,10 +51,20 @@ test("a slot cannot be booked twice", async ({ browser }) => {
   const b = await (await browser.newContext()).newPage();
   await login(b, "anna@parklet.test");
   await b.goto(url);
-  await expect(b.getByTestId("search-result").filter({ hasText: "Uppfart Västra Hamnen" })).toHaveCount(0);
+  // Wait for results to render before asserting the spot is missing (Malmö has only this spot).
+  await expect(b.getByRole("heading", { name: "Inga lediga platser hittades" })).toBeVisible();
   await b.goto(spotUrl);
-  await expect(b.getByText("Platsen är redan bokad under en del av tiden.")).toBeVisible();
+  // Server-rendered list of busy times, then the client-side price preview.
+  await expect(b.getByRole("heading", { name: "Redan bokad" })).toBeVisible();
+  await expect(b.getByText("Platsen är redan bokad under en del av tiden.")).toBeVisible({ timeout: 15_000 });
   await b.getByPlaceholder(/Registreringsnummer/).fill("XYZ987");
   await b.getByRole("button", { name: "Fortsätt till betalning" }).click();
   await expect(b.getByText(/någon annan har redan bokat/).first()).toBeVisible();
+
+  // Clean up so the slot is free again (keeps retries and repeated runs independent).
+  await a.getByRole("button", { name: /Betala .* \(testläge\)/ }).click();
+  await expect(a.getByText("Din parkering är bokad och betald")).toBeVisible();
+  a.once("dialog", (d) => d.accept());
+  await a.getByRole("button", { name: "Avboka" }).click();
+  await expect(a.getByText("Bokningen är avbokad")).toBeVisible();
 });
