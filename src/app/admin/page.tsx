@@ -15,6 +15,11 @@ export default function AdminPage() {
     <div className="mx-auto w-full max-w-4xl px-4 py-10">
       <h1 className="text-2xl font-bold">Granskning</h1>
       <p className="mt-1 text-ink-soft">Kontrollera att uthyraren har rätt att hyra ut platsen och att organisationer finns och företräds av rätt person.</p>
+      <p className="mt-2 text-sm">
+        <Link href="/admin/epost" className="link">
+          Utkorg för e-post
+        </Link>
+      </p>
       <Suspense fallback={<div className="card mt-6 h-40 animate-pulse" />}>
         <Queue />
       </Suspense>

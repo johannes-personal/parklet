@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   boolean,
   check,
+  customType,
   jsonb,
   doublePrecision,
   index,
@@ -289,6 +290,28 @@ export const documents = pgTable(
   },
   (t) => [index("documents_host_account_idx").on(t.hostAccountId), index("documents_spot_idx").on(t.spotId)],
 );
+
+/**
+ * Document bytes for the "database" storage driver (used on Vercel, where the
+ * filesystem is not persistent). Production should move to a private
+ * Supabase Storage / S3 bucket; see src/server/storage.ts.
+ */
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => "bytea" });
+
+export const documentBlobs = pgTable("document_blobs", {
+  storageKey: text("storage_key").primaryKey(),
+  bytes: bytea("bytes").notNull(),
+  createdAt: createdAt(),
+});
+
+/** Outgoing e-mail when no mail provider is configured (development and the demo deployment). */
+export const mailOutbox = pgTable("mail_outbox", {
+  id: serial("id").primaryKey(),
+  to: text("to").notNull(),
+  subject: text("subject").notNull(),
+  text: text("text").notNull(),
+  createdAt: createdAt(),
+});
 
 /* --------------------------------------------------------------- bookings */
 

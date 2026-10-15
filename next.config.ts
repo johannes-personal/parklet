@@ -13,8 +13,8 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   experimental: {
     serverActions: {
-      // Verification documents are up to 10 MB.
-      bodySizeLimit: "11mb",
+      // Verification documents are up to 4 MB (Vercel caps request bodies at 4.5 MB).
+      bodySizeLimit: "4.5mb",
     },
   },
   async headers() {

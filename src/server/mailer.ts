@@ -1,21 +1,24 @@
 import "server-only";
 import { appendFile, mkdir } from "node:fs/promises";
 import path from "node:path";
+import { db } from "@/db";
+import { mailOutbox } from "@/db/schema";
 
 export type Mail = { to: string; subject: string; text: string };
 
 /**
- * Development mailer: prints emails to the server log and appends them to
- * storage/outbox.jsonl so links (password reset, BRF approval, invitations)
- * can be followed locally and in end-to-end tests. Swap for Postmark, Resend
- * or SES in production by implementing the same function.
+ * Outbox mailer used until a real provider (Postmark, Resend, SES) is wired
+ * in: every e-mail is logged and stored in the mail_outbox table, where
+ * Parklet admins can read it at /admin/epost (so the demo's approval,
+ * invitation and reset links can be followed). If MAIL_OUTBOX is set, mails
+ * are also appended to that JSON-lines file (used by the end-to-end tests).
  */
 export async function sendMail(mail: Mail): Promise<void> {
-  if (process.env.NODE_ENV === "production" && !process.env.MAIL_OUTBOX) {
-    throw new Error("No mail provider configured");
+  console.info(`[mail] to=${mail.to} subject="${mail.subject}"`);
+  await db.insert(mailOutbox).values(mail);
+  if (process.env.MAIL_OUTBOX) {
+    const file = path.resolve(/*turbopackIgnore: true*/ process.env.MAIL_OUTBOX);
+    await mkdir(path.dirname(file), { recursive: true });
+    await appendFile(file, JSON.stringify({ ...mail, at: new Date().toISOString() }) + "\n");
   }
-  console.info(`\n[mail] to=${mail.to} subject="${mail.subject}"\n${mail.text}\n`);
-  const file = process.env.MAIL_OUTBOX ?? path.join(process.cwd(), "storage", "outbox.jsonl");
-  await mkdir(path.dirname(file), { recursive: true });
-  await appendFile(file, JSON.stringify({ ...mail, at: new Date().toISOString() }) + "\n");
 }

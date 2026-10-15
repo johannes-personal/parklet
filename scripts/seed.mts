@@ -13,10 +13,16 @@ import { createSpots } from "@/server/spots";
 if (process.env.NODE_ENV === "production") throw new Error("Refusing to seed in production");
 
 await db.execute(
-  sql`TRUNCATE bookings, availability_windows, documents, spots, host_invitations, host_account_members, host_accounts, vehicles, password_reset_tokens, sessions, users CASCADE`,
+  sql`TRUNCATE bookings, availability_windows, documents, document_blobs, mail_outbox, spots, host_invitations, host_account_members, host_accounts, vehicles, password_reset_tokens, sessions, users CASCADE`,
 );
 
-const password = "parklet-demo-1";
+// SEED_PASSWORD=random gives every demo account a throwaway random password
+// (for public deployments: nobody can log in as them; an admin can still take
+// one over with "Glömt lösenord" and the e-mail outbox).
+const password =
+  process.env.SEED_PASSWORD === "random"
+    ? (await import("node:crypto")).randomBytes(24).toString("base64url")
+    : (process.env.SEED_PASSWORD ?? "parklet-demo-1");
 const hash = await hashPassword(password);
 const now = new Date();
 
@@ -85,7 +91,7 @@ const S: SeedSpot[] = [
   { acc: annaAcc, by: anna.id, title: "BRF-plats i Haga", address: "Haga Nygata 20", city: "Göteborg", lat: 57.6984, lng: 11.9605, type: "outdoor", hour: 20, schedule: { mode: "always" }, rents: "brf", review: "pending_review" },
 ];
 
-const created: { id: string; hour: number; day: number | null }[] = [];
+const created: { id: string; hour: number; day: number | null; always: boolean; reg: boolean }[] = [];
 for (const s of S) {
   const ids = await createSpots(
     s.acc.id,
@@ -129,7 +135,7 @@ for (const s of S) {
         ...(s.rents && !s.review ? { landlordApproval: "approved" as const, landlordApprovedByName: "Lena Sjö", landlordApprovedByRole: "Ordförande", landlordRespondedAt: now } : {}),
       })
       .where(sql`${spots.id} = ${id}`);
-    if (!s.review) created.push({ id, hour: s.hour * 100, day: s.day ? s.day * 100 : null });
+    if (!s.review) created.push({ id, hour: s.hour * 100, day: s.day ? s.day * 100 : null, always: s.schedule.mode === "always", reg: s.reg ?? false });
   }
 }
 
@@ -138,7 +144,8 @@ const [car] = await db.insert(vehicles).values({ userId: driver.id, reg: "ABC123
 const tomorrow9 = new Date(now);
 tomorrow9.setDate(now.getDate() + 2);
 tomorrow9.setHours(9, 0, 0, 0);
-for (const [i, s] of created.slice(0, 3).entries()) {
+// Book spots that are open around the clock so the demo bookings respect availability.
+for (const [i, s] of created.filter((c) => c.always).slice(0, 3).entries()) {
   const start = new Date(tomorrow9.getTime() + i * 3600_000);
   const end = new Date(start.getTime() + 3 * 3600_000);
   const p = calculatePrice({ start, end, pricePerHourOre: s.hour, pricePerDayOre: s.day });
@@ -150,7 +157,7 @@ for (const [i, s] of created.slice(0, 3).entries()) {
     endsAt: end,
     status: "confirmed",
     vehicleReg: car.reg,
-    vehicleRegistration: i === 1 ? "pending" : "not_required",
+    vehicleRegistration: s.reg ? "pending" : "not_required",
     baseOre: p.baseOre,
     feeOre: p.feeOre,
     totalOre: p.totalOre,
@@ -161,7 +168,7 @@ for (const [i, s] of created.slice(0, 3).entries()) {
   });
 }
 
-console.log(`Seeded ${created.length} bookable spots. All demo users have the password "${password}":
+console.log(`Seeded ${created.length} bookable spots. All demo users have the password "${process.env.SEED_PASSWORD ? "(not shown)" : password}":
   admin@parklet.test      Parklet admin (review queue at /admin)
   anna@parklet.test       Private host (Göteborg, Stockholm, Uppsala)
   erik@parklet.test       Private host + admin of Kvarteret Fastigheter AB

@@ -51,6 +51,24 @@ follow approval, invitation and reset links locally.
 | `npm run db:generate` | Generate a migration after changing `src/db/schema.ts` |
 | `npm run db:migrate` / `db:seed` | Apply migrations / load demo data |
 
+## Deployment (Vercel + Supabase, Stockholm)
+
+- **Database:** Supabase project `parklet` in `eu-north-1` (Stockholm). Migrations are applied;
+  RLS is enabled on every table with no policies, so Supabase's public Data API can't read
+  anything, while the app connects as the table owner.
+- **App:** Vercel, with functions pinned to `arn1` (Stockholm) in `vercel.json`.
+- **Connection:** the Supabase ↔ Vercel integration injects `POSTGRES_URL` (transaction pooler,
+  port 6543). The client strips pooler-specific URL parameters and disables prepared statements.
+- **Vercel env:** `DOCUMENT_STORAGE=database`, `PAYMENT_PROVIDER=mock`, `NEXT_PUBLIC_DEMO=1`,
+  `APP_URL=<production URL>`.
+- **Mail:** no provider yet. Mails land in the `mail_outbox` table and are readable by admins
+  at `/admin/epost`.
+- **Demo accounts** were seeded with random passwords nobody holds (`SEED_PASSWORD=random`).
+  An admin can take one over with "Glömt lösenord" and the outbox.
+- **Future migrations:**
+  `DATABASE_URL=<Supabase session pooler URL> npm run db:migrate`
+  (the Drizzle journal on Supabase is up to date).
+
 ## Configuration
 
 See [.env.example](.env.example). Production needs a real mail provider (the dev mailer

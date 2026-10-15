@@ -48,7 +48,7 @@ export function DocumentUploader({
         </div>
         <div>
           <label htmlFor={f("file")} className="label">
-            Fil (PDF eller bild, max 10 MB)
+            Fil (PDF eller bild, max 4 MB)
           </label>
           <input
             id={f("file")}

@@ -5,7 +5,7 @@ import { createSpots } from "@/server/spots";
 
 export async function resetDb() {
   await db.execute(
-    sql`TRUNCATE bookings, availability_windows, documents, spots, host_invitations, host_account_members, host_accounts, vehicles, password_reset_tokens, sessions, users CASCADE`,
+    sql`TRUNCATE bookings, availability_windows, documents, document_blobs, mail_outbox, spots, host_invitations, host_account_members, host_accounts, vehicles, password_reset_tokens, sessions, users CASCADE`,
   );
 }
 

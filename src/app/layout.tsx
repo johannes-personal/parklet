@@ -34,6 +34,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         >
           Hoppa till innehållet
         </a>
+        {process.env.NEXT_PUBLIC_DEMO === "1" ? (
+          <p className="bg-warn-soft px-4 py-2 text-center text-sm font-medium text-warn">
+            Det här är en demo. Betalningar och BankID är simulerade – ladda inte upp riktiga dokument eller personuppgifter.
+          </p>
+        ) : null}
         <header className="sticky top-0 z-[500] border-b border-line bg-surface/95 backdrop-blur">
           <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4">
             <Link href="/" aria-label="Parklet, till startsidan" className="shrink-0">
