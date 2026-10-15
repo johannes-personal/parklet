@@ -1,0 +1,118 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  --color-ink: #0b1220;
+  --color-ink-soft: #3b4455;
+  --color-muted: #667085;
+  --color-line: #e4e7ec;
+  --color-surface: #ffffff;
+  --color-canvas: #f6f7f9;
+
+  --color-brand: #1747d6;
+  --color-brand-strong: #0f34a8;
+  --color-brand-soft: #e8eefc;
+
+  --color-ok: #067647;
+  --color-ok-soft: #e7f6ee;
+  --color-warn: #b54708;
+  --color-warn-soft: #fef4e6;
+  --color-danger: #b42318;
+  --color-danger-soft: #fdeceb;
+
+  --radius-card: 1rem;
+}
+
+:root {
+  color-scheme: light;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+/* Visible keyboard focus everywhere; mouse users don't get rings. */
+:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--color-brand) 55%, transparent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60;
+}
+@utility btn-primary {
+  @apply btn bg-brand text-white hover:bg-brand-strong;
+}
+@utility btn-secondary {
+  @apply btn border border-line bg-surface text-ink hover:bg-canvas;
+}
+@utility btn-danger {
+  @apply btn border border-danger/30 bg-surface text-danger hover:bg-danger-soft;
+}
+@utility btn-lg {
+  @apply px-5 py-3 text-base;
+}
+@utility card {
+  @apply rounded-[var(--radius-card)] border border-line bg-surface;
+}
+@utility input {
+  @apply block w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 text-base text-ink placeholder:text-muted/80 focus:border-brand focus:ring-3 focus:ring-brand/20 focus:outline-none disabled:bg-canvas disabled:text-muted aria-invalid:border-danger;
+}
+@utility label {
+  @apply mb-1.5 block text-sm font-medium text-ink;
+}
+@utility hint {
+  @apply mt-1.5 text-sm text-muted;
+}
+@utility field-error {
+  @apply mt-1.5 text-sm font-medium text-danger;
+}
+@utility link {
+  @apply font-medium text-brand underline-offset-2 hover:underline;
+}
+
+@layer components {
+  .prose-page h2 {
+    @apply mt-8 mb-2 text-xl font-semibold;
+  }
+  .prose-page p,
+  .prose-page li {
+    @apply leading-relaxed text-ink-soft;
+  }
+  .prose-page ul {
+    @apply list-disc space-y-1 pl-5;
+  }
+  .prose-page p + p {
+    @apply mt-3;
+  }
+}
+
+/* Price pins on the map */
+.price-pin {
+  background: var(--color-surface);
+  color: var(--color-ink);
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  padding: 3px 9px;
+  font: 600 13px/1.2 var(--font-sans);
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgb(16 24 40 / 0.18);
+  transform: translate(-50%, -50%);
+  display: inline-block;
+}
+.price-pin.is-active {
+  background: var(--color-ink);
+  color: #fff;
+  border-color: var(--color-ink);
+}
+.leaflet-container {
+  font-family: var(--font-sans);
+}

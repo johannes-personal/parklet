@@ -1,0 +1,1 @@
+ALTER TABLE "spots" ADD COLUMN "schedule" jsonb DEFAULT '{"mode":"always"}'::jsonb NOT NULL;
