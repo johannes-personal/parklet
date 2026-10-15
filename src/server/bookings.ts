@@ -79,6 +79,11 @@ export async function createBooking(input: {
 
   try {
     const bookingId = await db.transaction(async (tx) => {
+      // Serialize bookings per spot. Concurrent inserts checking the exclusion constraint
+      // otherwise wait on each other's uncommitted rows and can deadlock instead of one
+      // winning. NO KEY UPDATE doesn't block foreign-key checks against the spot.
+      await tx.execute(sql`select 1 from ${spots} where ${spots.id} = ${spot.id} for no key update`);
+
       // Release stale holds on this spot so the exclusion constraint only sees live ones.
       await tx
         .update(bookings)
