@@ -1,3 +1,4 @@
+import { appUrl } from "@/lib/app-url";
 import "server-only";
 import { and, asc, eq, gt, isNull } from "drizzle-orm";
 import { db } from "@/db";
@@ -116,7 +117,7 @@ export async function inviteAdmin(account: HostAccount, invitedBy: { id: string;
     invitedBy: invitedBy.id,
     expiresAt: new Date(Date.now() + 7 * 24 * 3600 * 1000),
   });
-  const url = `${process.env.APP_URL ?? "http://localhost:3000"}/inbjudan/${token}`;
+  const url = `${appUrl()}/inbjudan/${token}`;
   await sendMail({
     to: email,
     subject: `${invitedBy.name} har bjudit in dig att administrera ${account.name} på Parklet`,

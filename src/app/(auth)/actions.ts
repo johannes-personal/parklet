@@ -1,5 +1,6 @@
 "use server";
 
+import { appUrl } from "@/lib/app-url";
 import { and, eq, gt, isNull } from "drizzle-orm";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
@@ -85,7 +86,7 @@ export async function requestResetAction(_prev: FormState, formData: FormData): 
     await sendMail({
       to: email,
       subject: "Välj ett nytt lösenord för Parklet",
-      text: `Hej!\n\nKlicka på länken för att välja ett nytt lösenord (gäller i en timme):\n${process.env.APP_URL ?? "http://localhost:3000"}/aterstall-losenord/${token}\n\nHar du inte bett om detta kan du ignorera mejlet.`,
+      text: `Hej!\n\nKlicka på länken för att välja ett nytt lösenord (gäller i en timme):\n${appUrl()}/aterstall-losenord/${token}\n\nHar du inte bett om detta kan du ignorera mejlet.`,
     });
   }
   // Same answer whether or not the account exists, so the form cannot be used to probe for users.

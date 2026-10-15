@@ -3,13 +3,12 @@ import { Suspense } from "react";
 import { SiteFooter } from "@/components/site-footer";
 import { AccountNav, AccountNavFallback } from "@/components/account-nav";
 import { Logo } from "@/components/logo";
+import { appUrl } from "@/lib/app-url";
 import Link from "next/link";
 import "./globals.css";
 
-const appUrl = process.env.APP_URL ?? "http://localhost:3000";
-
 export const metadata: Metadata = {
-  metadataBase: new URL(appUrl),
+  metadataBase: new URL(appUrl()),
   title: {
     default: "Parklet – hyr och hyr ut parkeringsplatser",
     template: "%s · Parklet",

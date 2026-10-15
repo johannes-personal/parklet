@@ -1,3 +1,4 @@
+import { appUrl } from "@/lib/app-url";
 import "server-only";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
@@ -202,7 +203,7 @@ export async function requestLandlordApproval(accountId: string, spotId: string,
       `Hej${spot.landlordName ? " " + spot.landlordName : ""}!\n\n` +
       `${requestedBy} (uthyrarkonto "${account.name}") vill hyra ut parkeringsplatsen på ${spot.address}, ${spot.city} via Parklet ` +
       `när den inte används, och behöver godkännande från ${who}.\n\n` +
-      `Granska och godkänn eller neka här:\n${process.env.APP_URL ?? "http://localhost:3000"}/godkannande/${token}\n\n` +
+      `Granska och godkänn eller neka här:\n${appUrl()}/godkannande/${token}\n\n` +
       `Om föreningen kräver att tillfälliga hyresgästers bilar registreras kan ni ange det i formuläret.\n`,
   });
   return { ok: true as const };

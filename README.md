@@ -59,8 +59,8 @@ follow approval, invitation and reset links locally.
 - **App:** Vercel, with functions pinned to `arn1` (Stockholm) in `vercel.json`.
 - **Connection:** the Supabase ↔ Vercel integration injects `POSTGRES_URL` (transaction pooler,
   port 6543). The client strips pooler-specific URL parameters and disables prepared statements.
-- **Vercel env:** `DOCUMENT_STORAGE=database`, `PAYMENT_PROVIDER=mock`, `NEXT_PUBLIC_DEMO=1`,
-  `APP_URL=<production URL>`.
+- **Vercel env:** `DOCUMENT_STORAGE=database`, `NEXT_PUBLIC_DEMO=1`. Links use `APP_URL` if
+  set, otherwise Vercel's production or deployment URL.
 - **Mail:** no provider yet. Mails land in the `mail_outbox` table and are readable by admins
   at `/admin/epost`.
 - **Demo accounts** were seeded with random passwords nobody holds (`SEED_PASSWORD=random`).
@@ -71,6 +71,6 @@ follow approval, invitation and reset links locally.
 
 ## Configuration
 
-See [.env.example](.env.example). Production needs a real mail provider (the dev mailer
-refuses to run in production unless `MAIL_OUTBOX` is set), a commercial map tile provider,
-and the payment and e-ID integrations described in `docs/03-mvp.md`.
+See [.env.example](.env.example). Before a real launch, production needs a mail provider
+(today mails only go to the admin outbox), a commercial map tile provider, and the payment
+and e-ID integrations described in `docs/03-mvp.md`.
