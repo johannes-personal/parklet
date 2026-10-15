@@ -33,16 +33,19 @@ test("driver books, pays, sees instructions and cancels", async ({ page }) => {
   await expect(page.getByText("Bokningen är avbokad")).toBeVisible();
 });
 
-test("a slot cannot be booked twice", async ({ browser }) => {
-  const from = localAt(4, 9);
-  const to = localAt(4, 11);
+test("a slot cannot be booked twice", async ({ browser }, testInfo) => {
+  // A retry uses another day, in case the failed attempt left a hold on the slot.
+  const from = localAt(4 + testInfo.retry, 9);
+  const to = localAt(4 + testInfo.retry, 11);
   const url = `/sok?q=Malm%C3%B6&lat=55.605&lng=13.0038&from=${from}&to=${to}`;
 
   const a = await (await browser.newContext()).newPage();
   await login(a, "forare@parklet.test");
   await a.goto(url);
   await a.getByText("Uppfart Västra Hamnen").click();
-  await expect(a.getByRole("heading", { name: "Uppfart Västra Hamnen" })).toBeVisible();
+  // The result card has the same heading, so wait for the spot page itself.
+  await expect(a).toHaveURL(/\/plats\//);
+  await expect(a.getByRole("heading", { level: 1, name: "Uppfart Västra Hamnen" })).toBeVisible();
   const spotUrl = new URL(a.url()).pathname + new URL(a.url()).search;
   await a.getByRole("button", { name: "Fortsätt till betalning" }).click();
   await expect(a.getByRole("heading", { name: "Betala bokningen" })).toBeVisible();
