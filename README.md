@@ -53,6 +53,8 @@ follow approval, invitation and reset links locally.
 
 ## Deployment (Vercel + Supabase, Stockholm)
 
+Live demo: **https://parklet-rebuild.vercel.app**
+
 - **Database:** Supabase project `parklet` in `eu-north-1` (Stockholm). Migrations are applied;
   RLS is enabled on every table with no policies, so Supabase's public Data API can't read
   anything, while the app connects as the table owner.
