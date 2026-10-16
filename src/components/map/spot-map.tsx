@@ -44,7 +44,7 @@ export function SpotMap({
         markers.current.set(s.id, mk);
       }
       if (center) {
-        L.circleMarker([center.lat, center.lng], { radius: 7, color: "#1747d6", fillColor: "#1747d6", fillOpacity: 0.9, weight: 3 }).addTo(m);
+        L.circleMarker([center.lat, center.lng], { radius: 7, color: "#ffffff", fillColor: "#93c5fd", fillOpacity: 0.9, weight: 3 }).addTo(m);
       }
       const points = spots.map((s) => L.latLng(s.lat, s.lng));
       if (center) points.push(L.latLng(center.lat, center.lng));

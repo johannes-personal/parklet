@@ -20,10 +20,10 @@ const trust = [
 export default function HomePage() {
   return (
     <>
-      <section className="border-b border-line bg-surface">
+      <section>
         <div className="mx-auto grid w-full max-w-6xl gap-10 px-4 py-12 md:grid-cols-[1.1fr_1fr] md:py-20">
           <div className="flex flex-col justify-center">
-            <p className="text-sm font-semibold tracking-wide text-brand uppercase">Parkering, delad</p>
+            <p className="text-sm font-semibold tracking-wide text-accent uppercase">Parkering, delad</p>
             <h1 className="mt-3 text-4xl font-extrabold tracking-tight text-balance sm:text-5xl">Hitta en ledig plats. Eller hyr ut din egen.</h1>
             <p className="mt-4 max-w-xl text-lg text-ink-soft">
               Tusentals parkeringsplatser står tomma varje dag hos privatpersoner, föreningar och företag. Parklet gör dem bokningsbara – per
@@ -35,7 +35,7 @@ export default function HomePage() {
               </Link>
             </div>
           </div>
-          <div className="card p-5 shadow-sm sm:p-6">
+          <div className="card p-5 shadow-xl sm:p-7">
             <h2 className="mb-4 text-lg font-semibold">Sök parkering</h2>
             <SearchForm />
           </div>
@@ -57,7 +57,7 @@ export default function HomePage() {
         </ol>
       </section>
 
-      <section className="bg-surface py-14" aria-labelledby="trust">
+      <section className="py-14" aria-labelledby="trust">
         <div className="mx-auto w-full max-w-6xl px-4">
           <h2 id="trust" className="text-2xl font-bold">
             Tryggt för båda parter

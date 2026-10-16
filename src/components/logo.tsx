@@ -1,10 +1,10 @@
+/** "Parklet." wordmark: white, fading into light blue towards the full stop, as on parklet.se. */
 export function Logo({ className = "" }: { className?: string }) {
   return (
-    <span className={`inline-flex items-center gap-2 text-xl font-extrabold tracking-tight text-ink ${className}`}>
-      <span aria-hidden className="grid size-8 place-items-center rounded-lg bg-brand text-base font-black text-white">
-        P
-      </span>
-      Parklet
+    <span
+      className={`inline-block bg-linear-to-br from-white from-45% to-accent bg-clip-text text-[1.75rem] leading-none font-bold tracking-tight text-transparent ${className}`}
+    >
+      Parklet.
     </span>
   );
 }
