@@ -1,0 +1,172 @@
+import { expect, test } from "@playwright/test";
+import path from "node:path";
+import { lastMailLink, localAt, login, logout } from "./helpers";
+
+const fixture = (name: string) => path.resolve("e2e/fixtures", name);
+
+test("a new host onboards, proves the right to rent via BRF approval, and gets approved", async ({ page }) => {
+  const email = `host-${Date.now()}@example.com`;
+
+  // Register
+  await page.goto("/registrera?next=/uthyrare");
+  await page.getByLabel("För- och efternamn").fill("Lisa Uthyrare");
+  await page.getByLabel("E-post").fill(email);
+  await page.getByLabel("Lösenord", { exact: true }).fill("ett riktigt bra lösenord");
+  await page.getByRole("checkbox", { name: /godkänner/ }).check();
+  await page.getByRole("button", { name: "Skapa konto" }).click();
+
+  // Host account as private person
+  await expect(page.getByRole("heading", { name: "Bli uthyrare" })).toBeVisible();
+  await page.getByRole("radio", { name: /Privatperson/ }).check();
+  await page.getByRole("button", { name: "Skapa uthyrarkonto" }).click();
+  await expect(page.getByRole("heading", { name: "Innan du kan ta emot bokningar" })).toBeVisible();
+
+  // BankID (mock) and payouts (mock)
+  await page.getByRole("link", { name: "Legitimera dig" }).click();
+  await page.getByRole("button", { name: "Legitimera (testläge)" }).click();
+  await page.getByRole("button", { name: "Koppla utbetalningskonto (testläge)" }).click();
+  await expect(page.getByText("Utbetalningskontot är kopplat.")).toBeVisible();
+  const accountUrl = new URL(page.url()).pathname;
+
+  // Create a spot rented from a BRF
+  await page.getByRole("link", { name: "Lägg upp en plats" }).first().click();
+  await page.getByLabel("Adress", { exact: true }).fill("Vegagatan 12");
+  await page.getByLabel("Ort").fill("Göteborg");
+  await page.getByTestId("location-picker").click(); // places the pin
+  await page.getByLabel("Rubrik").fill("Plats i Linnéstaden");
+  await page.getByRole("radio", { name: /Jag hyr platsen/ }).check();
+  await page.getByRole("radio", { name: "Bostadsrättsföreningen" }).check();
+  await page.getByLabel("Föreningens namn").fill("Brf Vegan");
+  await page.getByLabel("E-post till styrelsen").fill("styrelsen.vegan@example.com");
+  await page.getByLabel("Pris per timme (kr)").fill("20");
+  await page.getByRole("button", { name: "Spara och fortsätt till underlag" }).click();
+  await expect(page.getByText("Platsen är sparad.")).toBeVisible();
+
+  // Submitting without documents is refused
+  await page.getByRole("button", { name: "Skicka in för granskning" }).click();
+  await expect(page.getByText(/Det saknas underlag/).first()).toBeVisible();
+
+  // Upload the rental contract
+  await page.getByLabel("Typ av dokument").selectOption("rental_contract");
+  await page.getByLabel(/^Fil/).setInputFiles(fixture("hyresavtal.pdf"));
+  await page.getByRole("button", { name: "Ladda upp" }).click();
+  await expect(page.getByText("hyresavtal.pdf är uppladdad.")).toBeVisible();
+
+  // Ask the BRF for approval and answer as the board
+  await page.getByRole("button", { name: "Skicka godkännandeförfrågan" }).click();
+  await expect(page.getByText("Förfrågan är skickad")).toBeVisible();
+  const spotUrl = new URL(page.url()).pathname;
+  await logout(page);
+
+  await page.goto(lastMailLink("/godkannande/"));
+  await expect(page.getByRole("heading", { name: "Får parkeringsplatsen hyras ut via Parklet?" })).toBeVisible();
+  await page.getByLabel("Ditt namn").fill("Per Styrelse");
+  await page.getByLabel("Din roll").fill("Ordförande");
+  await page.getByRole("checkbox", { name: /måste registreras/ }).check();
+  await page.getByRole("checkbox", { name: /intygar/ }).check();
+  await page.getByRole("button", { name: "Godkänn uthyrning" }).click();
+  await expect(page.getByText("Uthyrningen är godkänd")).toBeVisible();
+
+  // Host submits for review
+  await login(page, email, "ett riktigt bra lösenord");
+  await page.goto(spotUrl);
+  await expect(page.getByText("Godkänt av Per Styrelse (Ordförande)")).toBeVisible();
+  await page.getByRole("button", { name: "Skicka in för granskning" }).click();
+  await expect(page.getByText(/^Inskickad/)).toBeVisible();
+  await expect(page.getByText("Granskas av Parklet")).toBeVisible();
+  await logout(page);
+
+  // Not in search before review
+  await page.goto("/sok?q=G%C3%B6teborg&lat=57.7089&lng=11.9746");
+  await expect(page.getByText("Plats i Linnéstaden")).toHaveCount(0);
+
+  // Admin approves
+  await login(page, "admin@parklet.test");
+  await page.goto("/admin");
+  await page.getByRole("link", { name: /Plats i Linnéstaden/ }).click();
+  await expect(page.getByText("Godkänt via länk av Per Styrelse")).toBeVisible();
+  await page.getByRole("button", { name: "Godkänn" }).click();
+  await expect(page).toHaveURL(/\/admin$/);
+  await logout(page);
+
+  // Now bookable; the BRF's registration rule is enforced
+  await login(page, "forare@parklet.test");
+  await page.goto(spotUrl.replace(/.*platser\//, "/plats/"));
+  await expect(page.getByText("Krävs av föreningen.")).toBeVisible();
+  const form = page.getByRole("form", { name: "Boka platsen" });
+  await form.getByLabel("Från").fill(localAt(3, 10));
+  await form.getByLabel("Till").fill(localAt(3, 12));
+  await page.getByRole("button", { name: "Fortsätt till betalning" }).click();
+  await page.getByRole("button", { name: /Betala .* \(testläge\)/ }).click();
+  await expect(page.getByText("Väntar på att uthyraren registrerar bilen")).toBeVisible();
+  const bookingUrl = new URL(page.url()).pathname;
+  await logout(page);
+
+  // Host registers the car
+  await login(page, email, "ett riktigt bra lösenord");
+  await page.goto(accountUrl);
+  await expect(page.getByRole("heading", { name: "Bilar att registrera" })).toBeVisible();
+  await expect(page.getByText("ABC123", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Markera som registrerad" }).click();
+  await expect(page.getByRole("heading", { name: "Bilar att registrera" })).toHaveCount(0);
+  await logout(page);
+
+  await login(page, "forare@parklet.test");
+  await page.goto(bookingUrl);
+  await expect(page.getByText(/^Registrerad/)).toBeVisible();
+});
+
+test("an association verifies itself and invites another administrator", async ({ page }) => {
+  await login(page, "anna@parklet.test");
+  await page.goto("/uthyrare/nytt");
+  await page.getByRole("radio", { name: /Bostadsrättsförening/ }).check();
+  await page.getByText("Uppgifter om organisationen").click();
+  await page.getByLabel("Organisationens namn").fill("Brf Testgården");
+  await page.getByLabel("Organisationsnummer").fill("123456-7890"); // invalid checksum
+  await page.getByLabel("Din roll").fill("Kassör");
+  await page.getByRole("checkbox", { name: /intygar/ }).check();
+  await page.getByRole("button", { name: "Skapa uthyrarkonto" }).click();
+  await expect(page.getByText("Ange ett giltigt organisationsnummer")).toBeVisible();
+
+  await page.getByLabel("Organisationsnummer").fill("769600-1234");
+  await page.getByRole("checkbox", { name: /intygar/ }).check();
+  await page.getByRole("button", { name: "Skapa uthyrarkonto" }).click();
+  await expect(page.getByRole("heading", { name: "Brf Testgården" })).toBeVisible();
+
+  await page.getByLabel("Typ av dokument").selectOption("org_registration");
+  await page.getByLabel(/^Fil/).setInputFiles(fixture("hyresavtal.pdf"));
+  await page.getByRole("button", { name: "Ladda upp" }).click();
+  await expect(page.getByText("är uppladdad")).toBeVisible();
+  await page.getByLabel("Typ av dokument").selectOption("board_minutes");
+  await page.getByLabel(/^Fil/).setInputFiles(fixture("hyresavtal.pdf"));
+  await page.getByRole("button", { name: "Ladda upp" }).click();
+  await page.getByRole("button", { name: "Skicka in för verifiering" }).click();
+  await expect(page.getByText("Underlagen granskas av Parklet.")).toBeVisible();
+
+  await page.getByPlaceholder("namn@exempel.se").fill("erik@parklet.test");
+  await page.getByRole("button", { name: "Bjud in" }).click();
+  await expect(page.getByText("Inbjudan skickad till erik@parklet.test")).toBeVisible();
+  await logout(page);
+
+  await login(page, "erik@parklet.test");
+  await page.goto(lastMailLink("/inbjudan/"));
+  await page.getByRole("button", { name: "Acceptera inbjudan" }).click();
+  await expect(page.getByRole("heading", { name: "Brf Testgården" })).toBeVisible();
+});
+
+test("uploads are checked by content, not by file name", async ({ page }) => {
+  await login(page, "ny@parklet.test");
+  await page.goto("/uthyrare");
+  await page.getByRole("link", { name: "Lägg upp en plats" }).first().click();
+  await page.getByLabel("Adress", { exact: true }).fill("Storgatan 1");
+  await page.getByLabel("Ort").fill("Uppsala");
+  await page.getByTestId("location-picker").click();
+  await page.getByLabel("Rubrik").fill("Test av uppladdning");
+  await page.getByRole("radio", { name: /äger platsen/ }).check();
+  await page.getByLabel("Pris per timme (kr)").fill("10");
+  await page.getByRole("button", { name: "Spara och fortsätt till underlag" }).click();
+  await page.getByLabel("Typ av dokument").selectOption("ownership_proof");
+  await page.getByLabel(/^Fil/).setInputFiles({ name: "lagfart.pdf", mimeType: "application/pdf", buffer: Buffer.from("<script>alert(1)</script>") });
+  await page.getByRole("button", { name: "Ladda upp" }).click();
+  await expect(page.getByText(/Ladda upp en PDF eller en bild/).first()).toBeVisible();
+});
