@@ -38,7 +38,7 @@ const faq = [
 export default function HostLandingPage() {
   return (
     <>
-      <section className="border-b border-line bg-surface">
+      <section>
         <div className="mx-auto w-full max-w-4xl px-4 py-14 text-center sm:py-20">
           <h1 className="text-4xl font-extrabold tracking-tight text-balance sm:text-5xl">Tjäna pengar på platsen som ändå står tom</h1>
           <p className="mx-auto mt-4 max-w-2xl text-lg text-ink-soft">
@@ -65,7 +65,7 @@ export default function HostLandingPage() {
         </ol>
       </section>
 
-      <section id="foreningar" className="scroll-mt-20 bg-surface py-14">
+      <section id="foreningar" className="scroll-mt-20 py-14">
         <div className="mx-auto w-full max-w-4xl px-4">
           <h2 className="text-2xl font-bold">För bostadsrättsföreningar och fastighetsägare</h2>
           <ul className="mt-6 grid gap-4 sm:grid-cols-2">

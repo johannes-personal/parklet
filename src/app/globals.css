@@ -1,18 +1,30 @@
 @import "tailwindcss";
 
+/*
+ * Visual language follows parklet.se: Tailwind's zinc greys, black primary
+ * buttons, white rounded-2xl cards on a dark map-coloured page, and a floating
+ * black header. Pages are dark; anything inside `.card` (or `theme-light`) is
+ * light. Both themes redefine the same tokens, so components only use tokens.
+ */
 @theme {
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-sans: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
 
-  --color-ink: #0b1220;
-  --color-ink-soft: #3b4455;
-  --color-muted: #667085;
-  --color-line: #e4e7ec;
+  /* Light (card) values; the dark page overrides them on <body>. */
+  --color-ink: #18181b;
+  --color-ink-soft: #3f3f46;
+  --color-muted: #71717a;
+  --color-line: #e4e4e7;
+  --color-line-strong: #d4d4d8;
   --color-surface: #ffffff;
-  --color-canvas: #f6f7f9;
+  --color-canvas: #f4f4f5;
 
-  --color-brand: #1747d6;
-  --color-brand-strong: #0f34a8;
-  --color-brand-soft: #e8eefc;
+  --color-brand: #000000;
+  --color-brand-strong: #18181b;
+  --color-brand-soft: #f4f4f5;
+  --color-on-brand: #ffffff;
+  --color-accent: #93c5fd;
+
+  --color-page: #262626;
 
   --color-ok: #067647;
   --color-ok-soft: #e7f6ee;
@@ -24,47 +36,88 @@
   --radius-card: 1rem;
 }
 
-:root {
+@utility theme-dark {
+  --color-ink: #ffffff;
+  --color-ink-soft: #d4d4d8;
+  --color-muted: #a1a1aa;
+  --color-line: rgb(255 255 255 / 0.12);
+  --color-line-strong: rgb(255 255 255 / 0.22);
+  --color-surface: #1c1c1c;
+  --color-canvas: rgb(255 255 255 / 0.07);
+  --color-brand: #ffffff;
+  --color-brand-strong: #e4e4e7;
+  --color-brand-soft: rgb(255 255 255 / 0.1);
+  --color-on-brand: #000000;
+  --color-ok: #6ce9a6;
+  --color-ok-soft: rgb(18 183 106 / 0.16);
+  --color-warn: #fec84b;
+  --color-warn-soft: rgb(247 144 9 / 0.16);
+  --color-danger: #fda29b;
+  --color-danger-soft: rgb(240 68 56 / 0.16);
+  color-scheme: dark;
+}
+
+@utility theme-light {
+  --color-ink: #18181b;
+  --color-ink-soft: #3f3f46;
+  --color-muted: #71717a;
+  --color-line: #e4e4e7;
+  --color-line-strong: #d4d4d8;
+  --color-surface: #ffffff;
+  --color-canvas: #f4f4f5;
+  --color-brand: #000000;
+  --color-brand-strong: #18181b;
+  --color-brand-soft: #f4f4f5;
+  --color-on-brand: #ffffff;
+  --color-ok: #067647;
+  --color-ok-soft: #e7f6ee;
+  --color-warn: #b54708;
+  --color-warn-soft: #fef4e6;
+  --color-danger: #b42318;
+  --color-danger-soft: #fdeceb;
   color-scheme: light;
+  color: var(--color-ink);
 }
 
 html {
   -webkit-text-size-adjust: 100%;
+  background: var(--color-page);
 }
 
 body {
-  background: var(--color-canvas);
+  @apply theme-dark;
+  background: var(--color-page);
   color: var(--color-ink);
   font-family: var(--font-sans);
 }
 
 /* Visible keyboard focus everywhere; mouse users don't get rings. */
 :focus-visible {
-  outline: 3px solid color-mix(in srgb, var(--color-brand) 55%, transparent);
+  outline: 2px solid var(--color-accent);
   outline-offset: 2px;
   border-radius: 6px;
 }
 
 @utility btn {
-  @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60;
+  @apply inline-flex items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-50;
 }
 @utility btn-primary {
-  @apply btn bg-brand text-white hover:bg-brand-strong;
+  @apply btn bg-brand text-on-brand shadow-sm hover:bg-brand-strong;
 }
 @utility btn-secondary {
-  @apply btn border border-line bg-surface text-ink hover:bg-canvas;
+  @apply btn bg-line text-ink hover:bg-line-strong;
 }
 @utility btn-danger {
-  @apply btn border border-danger/30 bg-surface text-danger hover:bg-danger-soft;
+  @apply btn bg-danger-soft text-danger hover:brightness-95;
 }
 @utility btn-lg {
-  @apply px-5 py-3 text-base;
+  @apply px-5 py-2.5 text-base;
 }
 @utility card {
-  @apply rounded-[var(--radius-card)] border border-line bg-surface;
+  @apply theme-light rounded-[var(--radius-card)] border border-line bg-surface shadow-sm;
 }
 @utility input {
-  @apply block w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 text-base text-ink placeholder:text-muted/80 focus:border-brand focus:ring-3 focus:ring-brand/20 focus:outline-none disabled:bg-canvas disabled:text-muted aria-invalid:border-danger;
+  @apply block h-11 w-full rounded-lg border border-line-strong bg-surface px-3 text-base text-ink placeholder:text-muted focus:border-ink-soft focus:outline-none disabled:bg-canvas disabled:text-muted aria-invalid:border-danger;
 }
 @utility label {
   @apply mb-1.5 block text-sm font-medium text-ink;
@@ -76,7 +129,14 @@ body {
   @apply mt-1.5 text-sm font-medium text-danger;
 }
 @utility link {
-  @apply font-medium text-brand underline-offset-2 hover:underline;
+  @apply font-medium text-ink underline decoration-line-strong underline-offset-2 hover:decoration-current;
+}
+
+/* Textareas and multi-line selects grow with their content rather than the fixed input height. */
+textarea.input,
+select[multiple].input {
+  height: auto;
+  padding-block: 0.625rem;
 }
 
 @layer components {
@@ -95,24 +155,37 @@ body {
   }
 }
 
+/* Dark map, like the original's: greyscale OpenStreetMap tiles, inverted. */
+.leaflet-container {
+  font-family: var(--font-sans);
+  background: #1f1f1f;
+}
+.leaflet-tile-pane {
+  filter: grayscale(1) invert(1) brightness(0.95) contrast(0.85);
+}
+.leaflet-control-attribution {
+  background: rgb(0 0 0 / 0.55) !important;
+  color: #a1a1aa;
+}
+.leaflet-control-attribution a {
+  color: #d4d4d8;
+}
+
 /* Price pins on the map */
 .price-pin {
-  background: var(--color-surface);
-  color: var(--color-ink);
-  border: 1px solid var(--color-line);
+  background: #ffffff;
+  color: #18181b;
+  border: 1px solid #e4e4e7;
   border-radius: 999px;
   padding: 3px 9px;
-  font: 600 13px/1.2 var(--font-sans);
+  font: 700 13px/1.2 var(--font-sans);
   white-space: nowrap;
-  box-shadow: 0 2px 6px rgb(16 24 40 / 0.18);
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.35);
   transform: translate(-50%, -50%);
   display: inline-block;
 }
 .price-pin.is-active {
-  background: var(--color-ink);
-  color: #fff;
-  border-color: var(--color-ink);
-}
-.leaflet-container {
-  font-family: var(--font-sans);
+  background: #000000;
+  color: #ffffff;
+  border-color: #000000;
 }

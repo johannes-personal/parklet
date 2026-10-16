@@ -20,7 +20,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#1747d6",
+  themeColor: "#000000",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -29,7 +29,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="flex min-h-full flex-col">
         <a
           href="#main"
-          className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[1000] focus:rounded-lg focus:bg-surface focus:px-4 focus:py-2 focus:shadow"
+          className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[1000] focus:rounded-lg focus:bg-white focus:text-black focus:px-4 focus:py-2 focus:shadow"
         >
           Hoppa till innehållet
         </a>
@@ -38,17 +38,14 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             Det här är en demo. Betalningar och BankID är simulerade – ladda inte upp riktiga dokument eller personuppgifter.
           </p>
         ) : null}
-        <header className="sticky top-0 z-[500] border-b border-line bg-surface/95 backdrop-blur">
-          <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4">
-            <Link href="/" aria-label="Parklet, till startsidan" className="shrink-0">
+        <header className="sticky top-0 z-[500] px-3 pt-3 sm:px-4 sm:pt-4">
+          <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 rounded-2xl bg-black px-4 text-white shadow-lg ring-1 ring-white/10 sm:px-6">
+            <Link href="/" aria-label="Parklet, till startsidan" className="flex shrink-0 items-center rounded-md transition-opacity hover:opacity-85">
               <Logo />
             </Link>
-            <nav aria-label="Huvudmeny" className="flex items-center gap-1 text-sm font-medium sm:gap-2">
-              <Link href="/sok" className="hidden rounded-lg px-3 py-2 hover:bg-canvas sm:block">
-                Hitta parkering
-              </Link>
-              <Link href="/hyr-ut" className="rounded-lg px-3 py-2 hover:bg-canvas">
-                Hyr ut din plats
+            <nav aria-label="Huvudmeny" className="flex items-center gap-4 text-sm sm:gap-6">
+              <Link href="/hyr-ut" className="hidden text-zinc-300 transition-colors hover:text-white md:inline-flex">
+                Bli uthyrare
               </Link>
               <Suspense fallback={<AccountNavFallback />}>
                 <AccountNav />
