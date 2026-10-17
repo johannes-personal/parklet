@@ -73,6 +73,11 @@ Live demo: **https://parklet-rebuild.vercel.app**
   the application is a *Regular Web Application* with *OAuth2 Code Flow* enabled and the redirect
   URL `https://parklet-rebuild.vercel.app/konto/verifiera/callback`. Without these variables
   the demo keeps the instant mock. The e2e tests run the real flow against `e2e/fake-idp.mjs`.
+- **Bolagsverket (free company register API):** set `BOLAGSVERKET_CLIENT_ID` and
+  `BOLAGSVERKET_CLIENT_SECRET` (plus `BOLAGSVERKET_ENV=test` for their test environment). New
+  association and company accounts are then checked against the register: unknown and
+  deregistered numbers are refused, the registered name is used, and admins see the result.
+  Without credentials the check is skipped. The e2e tests use `e2e/fake-bolagsverket.mjs`.
 - **Future migrations:**
   `DATABASE_URL=<Supabase session pooler URL> npm run db:migrate`
   (the Drizzle journal on Supabase is up to date).

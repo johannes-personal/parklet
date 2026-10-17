@@ -125,6 +125,12 @@ export const hostAccounts = pgTable("host_accounts", {
   orgNumber: text("org_number"),
   /** What the person who created the account says their mandate is, e.g. "Styrelseledamot". */
   signatoryRole: text("signatory_role"),
+  /** Result of the lookup at Bolagsverket when the account was created (null: not checked). */
+  registryCheckedAt: ts("registry_checked_at"),
+  registryName: text("registry_name"),
+  registryForm: text("registry_form"),
+  /** "active" | "liquidation" (deregistered organisations are refused). */
+  registryStatus: text("registry_status"),
   verificationStatus: verificationStatusEnum("verification_status").notNull().default("unverified"),
   reviewNote: text("review_note"),
   reviewedAt: ts("reviewed_at"),

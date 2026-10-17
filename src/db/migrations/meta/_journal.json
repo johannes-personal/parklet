@@ -43,6 +43,13 @@
       "when": 1792218532514,
       "tag": "0005_identity_broker",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792230703217,
+      "tag": "0006_company_registry",
+      "breakpoints": true
     }
   ]
 }

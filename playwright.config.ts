@@ -2,6 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 const PORT = 3100;
 const IDP = "http://localhost:3101";
+const REGISTRY = "http://localhost:3102";
 const E2E_DB = process.env.E2E_DATABASE_URL ?? "postgres://parklet:parklet@localhost:5432/parklet_e2e";
 export const OUTBOX = "storage/e2e-outbox.jsonl";
 
@@ -35,6 +36,12 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
     },
     {
+      // Stands in for Bolagsverket's free company register API; see e2e/fake-bolagsverket.mjs.
+      command: `node e2e/fake-bolagsverket.mjs`,
+      url: `${REGISTRY}/health`,
+      reuseExistingServer: !process.env.CI,
+    },
+    {
       command: `npx next start -p ${PORT}`,
       url: `http://localhost:${PORT}/api/health`,
       reuseExistingServer: !process.env.CI,
@@ -48,6 +55,10 @@ export default defineConfig({
         IDURA_CLIENT_SECRET: "e2e-secret",
         // A fixed test-only key (32 zero bytes); production uses its own secret.
         IDENTITY_ENCRYPTION_KEY: Buffer.alloc(32).toString("base64"),
+        BOLAGSVERKET_CLIENT_ID: "parklet-e2e",
+        BOLAGSVERKET_CLIENT_SECRET: "e2e-secret",
+        BOLAGSVERKET_TOKEN_URL: `${REGISTRY}/oauth2/token`,
+        BOLAGSVERKET_BASE_URL: `${REGISTRY}/vardefulla-datamangder/v1`,
       },
     },
   ],

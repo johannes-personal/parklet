@@ -18,6 +18,7 @@ import {
   inviteAdmin,
   submitAccountForReview,
 } from "@/server/host-accounts";
+import { lookupOrganisation } from "@/server/company-registry";
 import { createSpots, getSpot, listSiblingSpots, requestLandlordApproval, setSpotStatus, submitSpotForReview, updateSpot } from "@/server/spots";
 import { storeDocument } from "@/server/storage";
 
@@ -50,7 +51,26 @@ export async function createAccountAction(_prev: FormState, formData: FormData):
   if (formData.get("confirm") !== "on") errors.confirm = "Du behöver intyga att du får företräda organisationen.";
   if (Object.keys(errors).length) return { fieldErrors: errors, values };
 
-  const id = await createHostAccount({ userId: user.id, kind, name, orgNumber, signatoryRole: role, identityVerified: user.identityVerified });
+  // Check the number at Bolagsverket. If the registry can't be reached, the documents are reviewed manually as before.
+  const lookup = await lookupOrganisation(orgNumber!);
+  if (lookup.result === "not_found") {
+    return { fieldErrors: { orgNumber: "Vi hittar ingen organisation med det numret hos Bolagsverket. Kontrollera numret." }, values };
+  }
+  if (lookup.result === "found" && lookup.organisation.status === "deregistered") {
+    return { fieldErrors: { orgNumber: `${lookup.organisation.name} är avregistrerad hos Bolagsverket.` }, values };
+  }
+  const registry = lookup.result === "found" ? lookup.organisation : null;
+
+  const id = await createHostAccount({
+    userId: user.id,
+    kind,
+    // The registered name, so an account can't present itself as another organisation.
+    name: registry?.name ?? name,
+    orgNumber,
+    signatoryRole: role,
+    identityVerified: user.identityVerified,
+    registry,
+  });
   redirect(`/uthyrare/${id}`);
 }
 

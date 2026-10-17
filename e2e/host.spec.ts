@@ -145,10 +145,21 @@ test("an association verifies itself and invites another administrator", async (
   await page.getByRole("button", { name: "Skapa uthyrarkonto" }).click();
   await expect(page.getByText("Ange ett giltigt organisationsnummer")).toBeVisible();
 
+  // Valid checksum, but Bolagsverket doesn't know it; then one that is deregistered.
+  await page.getByLabel("Organisationsnummer").fill("802000-5552");
+  await page.getByRole("checkbox", { name: /intygar/ }).check();
+  await page.getByRole("button", { name: "Skapa uthyrarkonto" }).click();
+  await expect(page.getByText("Vi hittar ingen organisation med det numret hos Bolagsverket.")).toBeVisible();
+  await page.getByLabel("Organisationsnummer").fill("769600-9997");
+  await page.getByRole("checkbox", { name: /intygar/ }).check();
+  await page.getByRole("button", { name: "Skapa uthyrarkonto" }).click();
+  await expect(page.getByText("Brf Nedlagd är avregistrerad hos Bolagsverket.")).toBeVisible();
+
+  // Found: the account takes the registered name rather than the typed one.
   await page.getByLabel("Organisationsnummer").fill("769600-1234");
   await page.getByRole("checkbox", { name: /intygar/ }).check();
   await page.getByRole("button", { name: "Skapa uthyrarkonto" }).click();
-  await expect(page.getByRole("heading", { name: "Brf Testgården" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Bostadsrättsföreningen Testgården" })).toBeVisible();
 
   await page.getByLabel("Typ av dokument").selectOption("org_registration");
   await page.getByLabel(/^Fil/).setInputFiles(fixture("hyresavtal.pdf"));
@@ -168,7 +179,14 @@ test("an association verifies itself and invites another administrator", async (
   await login(page, "erik@parklet.test");
   await page.goto(lastMailLink("/inbjudan/"));
   await page.getByRole("button", { name: "Acceptera inbjudan" }).click();
-  await expect(page.getByRole("heading", { name: "Brf Testgården" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Bostadsrättsföreningen Testgården" })).toBeVisible();
+
+  // The reviewer sees what Bolagsverket said.
+  await logout(page);
+  await login(page, "admin@parklet.test");
+  await page.goto("/admin");
+  await page.getByRole("link", { name: "Bostadsrättsföreningen Testgården" }).click();
+  await expect(page.getByText("Bostadsrättsföreningen Testgården · Bostadsrättsförening · aktiv")).toBeVisible();
 });
 
 test("uploads are checked by content, not by file name", async ({ page }) => {

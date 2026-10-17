@@ -45,6 +45,7 @@ export async function createHostAccount(input: {
   orgNumber: string | null;
   signatoryRole: string | null;
   identityVerified: boolean;
+  registry?: { name: string; form: string | null; status: string } | null;
 }): Promise<string> {
   return db.transaction(async (tx) => {
     const [account] = await tx
@@ -54,6 +55,9 @@ export async function createHostAccount(input: {
         name: input.name,
         orgNumber: input.orgNumber,
         signatoryRole: input.signatoryRole,
+        ...(input.registry
+          ? { registryCheckedAt: new Date(), registryName: input.registry.name, registryForm: input.registry.form, registryStatus: input.registry.status }
+          : {}),
         // Households are verified through the owner's e-ID; organisations by manual review of their documents.
         verificationStatus: input.kind === "household" && input.identityVerified ? "verified" : "unverified",
       })

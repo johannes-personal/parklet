@@ -61,8 +61,11 @@ draft ──(required documents present)──► pending_review ──(admin)�
        (see #3). The token is single-use and stored hashed.
     2. **Uploaded written approval** (`sublet_permission`).
 - **Organisations** (BRF/company) also verify the organisation itself: a valid org.nr
-  (Luhn-checked), a registration certificate, and board minutes or proof of signatory
-  authority. An admin reviews these before the account is "verified".
+  (Luhn-checked) that Bolagsverket's free register API confirms exists and isn't
+  deregistered (the registered name is used), a registration certificate, and board minutes
+  or proof of signatory authority. An admin reviews these before the account is "verified".
+  Next step: Bolagsverket's paid API can confirm that the BankID-verified person may sign for
+  the organisation, which would make the document review unnecessary in most cases.
 - **Nothing is bookable until everything holds.** Search and booking share one SQL condition
   (`bookableSql`): the spot is active, the spot is approved, the account is verified, and
   payouts are connected.
