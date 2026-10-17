@@ -1,6 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const PORT = 3100;
+const IDP = "http://localhost:3101";
 const E2E_DB = process.env.E2E_DATABASE_URL ?? "postgres://parklet:parklet@localhost:5432/parklet_e2e";
 export const OUTBOX = "storage/e2e-outbox.jsonl";
 
@@ -26,10 +27,28 @@ export default defineConfig({
     { name: "desktop", use: { ...devices["Desktop Chrome"], locale: "sv-SE" } },
     { name: "mobile", use: { ...devices["Pixel 7"], locale: "sv-SE" }, testMatch: /smoke\.spec\.ts/ },
   ],
-  webServer: {
-    command: `npx next start -p ${PORT}`,
-    url: `http://localhost:${PORT}/api/health`,
-    reuseExistingServer: !process.env.CI,
-    env: { DATABASE_URL: E2E_DB, MAIL_OUTBOX: OUTBOX, APP_URL: `http://localhost:${PORT}`, GEOCODER_URL: "http://127.0.0.1:9" },
-  },
+  webServer: [
+    {
+      // Stands in for Idura (BankID over OpenID Connect); see e2e/fake-idp.mjs.
+      command: `node e2e/fake-idp.mjs`,
+      url: `${IDP}/.well-known/openid-configuration`,
+      reuseExistingServer: !process.env.CI,
+    },
+    {
+      command: `npx next start -p ${PORT}`,
+      url: `http://localhost:${PORT}/api/health`,
+      reuseExistingServer: !process.env.CI,
+      env: {
+        DATABASE_URL: E2E_DB,
+        MAIL_OUTBOX: OUTBOX,
+        APP_URL: `http://localhost:${PORT}`,
+        GEOCODER_URL: "http://127.0.0.1:9",
+        IDURA_ISSUER: IDP,
+        IDURA_CLIENT_ID: "parklet-e2e",
+        IDURA_CLIENT_SECRET: "e2e-secret",
+        // A fixed test-only key (32 zero bytes); production uses its own secret.
+        IDENTITY_ENCRYPTION_KEY: Buffer.alloc(32).toString("base64"),
+      },
+    },
+  ],
 });

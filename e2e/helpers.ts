@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { DateTime } from "luxon";
 
 export const PASSWORD = "parklet-demo-1";
+export const E2E_DB = process.env.E2E_DATABASE_URL ?? "postgres://parklet:parklet@localhost:5432/parklet_e2e";
 
 export async function login(page: Page, email: string, password = PASSWORD) {
   await page.goto("/logga-in");

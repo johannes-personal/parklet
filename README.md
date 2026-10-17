@@ -36,7 +36,8 @@ Demo accounts (password `parklet-demo-1`):
 | `ny@parklet.test` | New host who hasn't verified or connected payouts |
 | `admin@parklet.test` | Parklet reviewer (`/admin`) |
 
-Payments, BankID and payout onboarding run in **test mode** (clearly marked in the UI).
+Payments and payout onboarding run in **test mode** (clearly marked in the UI). BankID uses
+Idura when configured (see Deployment) and an instant mock otherwise.
 Emails are printed to the server log and appended to `storage/outbox.jsonl`, so you can
 follow approval, invitation and reset links locally.
 
@@ -67,6 +68,11 @@ Live demo: **https://parklet-rebuild.vercel.app**
   at `/admin/epost`.
 - **Demo accounts** were seeded with random passwords nobody holds (`SEED_PASSWORD=random`).
   An admin can take one over with "Glömt lösenord" and the outbox.
+- **BankID (Idura):** set `IDURA_ISSUER` (`https://<your-domain>.idura.broker`),
+  `IDURA_CLIENT_ID`, `IDURA_CLIENT_SECRET` and `IDENTITY_ENCRYPTION_KEY` in Vercel. In Idura,
+  the application is a *Regular Web Application* with *OAuth2 Code Flow* enabled and the redirect
+  URL `https://parklet-rebuild.vercel.app/konto/verifiera/callback`. Without these variables
+  the demo keeps the instant mock. The e2e tests run the real flow against `e2e/fake-idp.mjs`.
 - **Future migrations:**
   `DATABASE_URL=<Supabase session pooler URL> npm run db:migrate`
   (the Drizzle journal on Supabase is up to date).

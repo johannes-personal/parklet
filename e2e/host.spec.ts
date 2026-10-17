@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import path from "node:path";
-import { lastMailLink, localAt, login, logout } from "./helpers";
+import postgres from "postgres";
+import { E2E_DB, lastMailLink, localAt, login, logout } from "./helpers";
 
 const fixture = (name: string) => path.resolve("e2e/fixtures", name);
 
@@ -21,9 +22,25 @@ test("a new host onboards, proves the right to rent via BRF approval, and gets a
   await page.getByRole("button", { name: "Skapa uthyrarkonto" }).click();
   await expect(page.getByRole("heading", { name: "Innan du kan ta emot bokningar" })).toBeVisible();
 
-  // BankID (mock) and payouts (mock)
+  // BankID through the fake Idura: cancelling first returns with a message, then approve.
   await page.getByRole("link", { name: "Legitimera dig" }).click();
-  await page.getByRole("button", { name: "Legitimera (testläge)" }).click();
+  await page.getByRole("button", { name: "Legitimera med BankID" }).click();
+  await expect(page.getByRole("heading", { name: "Fake BankID" })).toBeVisible();
+  await page.getByRole("button", { name: "Avbryt" }).click();
+  await expect(page.getByText("Legitimeringen avbröts.")).toBeVisible();
+  await page.getByRole("button", { name: "Legitimera med BankID" }).click();
+  await page.getByRole("button", { name: "Godkänn" }).click();
+  await expect(page.getByRole("heading", { name: "Innan du kan ta emot bokningar" })).toBeVisible();
+
+  // The verified name is kept and the personnummer only in encrypted form.
+  const sql = postgres(E2E_DB, { max: 1 });
+  const [stored] = await sql`select identity_provider, identity_name, personnummer_encrypted from users where email = ${email}`;
+  await sql.end();
+  expect(stored).toMatchObject({ identity_provider: "idura-sebankid", identity_name: "Lisa Uthyrare" });
+  expect(stored.personnummer_encrypted).toMatch(/^v1\./);
+  expect(stored.personnummer_encrypted).not.toContain("199001012384");
+
+  // Payouts (mock)
   await page.getByRole("button", { name: "Koppla utbetalningskonto (testläge)" }).click();
   await expect(page.getByText("Utbetalningskontot är kopplat.")).toBeVisible();
   const accountUrl = new URL(page.url()).pathname;

@@ -36,6 +36,13 @@
       "when": 1792078190676,
       "tag": "0004_row_level_security",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792218532514,
+      "tag": "0005_identity_broker",
+      "breakpoints": true
     }
   ]
 }
