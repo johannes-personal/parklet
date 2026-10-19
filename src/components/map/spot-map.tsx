@@ -1,14 +1,15 @@
 "use client";
 
-import "leaflet/dist/leaflet.css";
-import type * as Leaflet from "leaflet";
+import "maplibre-gl/dist/maplibre-gl.css";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
-import { loadLeaflet, tileAttribution, tileUrl } from "./leaflet-loader";
+import { createMap, loadMap, type MapLibre } from "./maplibre";
 
 export type MapSpot = { id: string; lat: number; lng: number; label: string; href: string; title: string };
 /** Space covered by panels floating over the map, in pixels, for phones and wider screens. */
 export type MapInsets = Record<"narrow" | "wide", { top: number; right: number; bottom: number; left: number }>;
+
+const SWEDEN = { center: [15, 62] as [number, number], zoom: 4 };
 
 /**
  * Map with price pins. Purely presentational: the list next to it is the
@@ -30,62 +31,67 @@ export function SpotMap({
   className?: string;
 }) {
   const el = useRef<HTMLDivElement>(null);
-  const map = useRef<Leaflet.Map | null>(null);
-  const markers = useRef(new Map<string, Leaflet.Marker>());
+  const map = useRef<MapLibre.Map | null>(null);
+  const markers = useRef(new Map<string, MapLibre.Marker>());
+  const centerMarker = useRef<MapLibre.Marker | null>(null);
   const router = useRouter();
   // Only re-fit the view when the set of spots or the search centre changes, not when the
   // page re-renders with the same results (e.g. opening a spot), so the user's pan and zoom stay.
   const fitted = useRef("");
-  const centerMarker = useRef<Leaflet.CircleMarker | null>(null);
+  const viewKey = `${center?.lat},${center?.lng}|${spots.map((s) => s.id).join(",")}`;
   const activeRef = useRef(activeId);
   const insetsRef = useRef(insets);
-  // Padding that keeps fitted bounds and the selected pin clear of the floating panels.
-  const padding = () => {
-    const box = el.current?.getBoundingClientRect();
-    const i = insetsRef.current?.[box && box.width >= 640 ? "wide" : "narrow"] ?? { top: 0, right: 0, bottom: 0, left: 0 };
-    return { paddingTopLeft: [i.left + 40, i.top + 40] as [number, number], paddingBottomRight: [i.right + 40, i.bottom + 40] as [number, number] };
-  };
   useEffect(() => {
     activeRef.current = activeId;
     insetsRef.current = insets;
   }, [activeId, insets]);
-  const viewKey = `${center?.lat},${center?.lng}|${spots.map((s) => s.id).join(",")}`;
 
   useEffect(() => {
     let cancelled = false;
-    loadLeaflet().then((L) => {
+    loadMap().then(({ maplibregl, style }) => {
       if (cancelled || !el.current) return;
       if (!map.current) {
-        map.current = L.map(el.current, { zoomControl: false, scrollWheelZoom: true, wheelPxPerZoomLevel: 90 });
+        const created = createMap(maplibregl, { container: el.current, style, ...SWEDEN });
+        if (!created) return;
+        map.current = created;
         // Bottom right: the top corners are under the floating header and panels on the search page.
-        L.control.zoom({ position: "bottomright", zoomInTitle: "Zooma in", zoomOutTitle: "Zooma ut" }).addTo(map.current);
-        L.tileLayer(tileUrl, { attribution: tileAttribution, maxZoom: 19 }).addTo(map.current);
+        created.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
+        // Panels and sheets change the map's size without a window resize.
+        const ro = new ResizeObserver(() => created.resize());
+        ro.observe(el.current);
+        created.once("remove", () => ro.disconnect());
       }
       const m = map.current;
       markers.current.forEach((mk) => mk.remove());
       markers.current.clear();
       for (const s of spots) {
-        const active = s.id === activeRef.current;
-        const icon = L.divIcon({ className: "", html: `<span class="price-pin${active ? " is-active" : ""}">${escapeHtml(s.label)}</span>`, iconSize: [0, 0] });
-        const mk = L.marker([s.lat, s.lng], { icon, title: s.title, keyboard: false, zIndexOffset: active ? 1000 : 0 })
-          .addTo(m)
-          .on("click", () => {
-            if (s.href) router.push(s.href, { scroll: false });
-          });
-        markers.current.set(s.id, mk);
+        const node = document.createElement("span");
+        node.className = s.id === activeRef.current ? "price-pin is-active" : "price-pin";
+        node.textContent = s.label;
+        node.title = s.title;
+        node.addEventListener("click", (e) => {
+          e.stopPropagation();
+          if (s.href) router.push(s.href, { scroll: false });
+        });
+        markers.current.set(s.id, new maplibregl.Marker({ element: node }).setLngLat([s.lng, s.lat]).addTo(m));
       }
       centerMarker.current?.remove();
-      centerMarker.current = center
-        ? L.circleMarker([center.lat, center.lng], { radius: 7, color: "#ffffff", fillColor: "#93c5fd", fillOpacity: 0.9, weight: 3 }).addTo(m)
-        : null;
+      centerMarker.current = null;
+      if (center) {
+        const dot = document.createElement("span");
+        dot.className = "search-center";
+        centerMarker.current = new maplibregl.Marker({ element: dot }).setLngLat([center.lng, center.lat]).addTo(m);
+      }
+
       if (fitted.current === viewKey) return;
       fitted.current = viewKey;
-      const points = spots.map((s) => L.latLng(s.lat, s.lng));
-      if (center) points.push(L.latLng(center.lat, center.lng));
-      m.invalidateSize();
-      if (points.length > 1) m.fitBounds(L.latLngBounds(points), { ...padding(), maxZoom: 16 });
-      else if (points.length === 1) m.setView(points[0], 15);
-      else m.setView([62, 15], 5); // Sweden
+      const points: [number, number][] = spots.map((s) => [s.lng, s.lat]);
+      if (center) points.push([center.lng, center.lat]);
+      if (points.length > 1) {
+        const bounds = points.reduce((b, p) => b.extend(p), new maplibregl.LngLatBounds(points[0], points[0]));
+        m.fitBounds(bounds, { padding: padding(el.current, insetsRef.current), maxZoom: 15.5, duration: 0 });
+      } else if (points.length === 1) m.jumpTo({ center: points[0], zoom: 14.5 });
+      else m.jumpTo(SWEDEN);
     });
     return () => {
       cancelled = true;
@@ -94,15 +100,21 @@ export function SpotMap({
 
   useEffect(() => {
     markers.current.forEach((mk, id) => {
-      const node = mk.getElement()?.querySelector(".price-pin");
-      node?.classList.toggle("is-active", id === activeId);
-      if (id === activeId) mk.setZIndexOffset(1000);
-      else mk.setZIndexOffset(0);
+      const node = mk.getElement();
+      node.classList.toggle("is-active", id === activeId);
+      node.style.zIndex = id === activeId ? "2" : "";
     });
-    // Bring the selected spot into view if it is off the map.
+    // Bring the selected spot into view if it is behind a panel or off the map.
+    const m = map.current;
     const active = activeId ? markers.current.get(activeId) : null;
-    if (active && map.current) map.current.panInside(active.getLatLng(), padding());
-  }, [activeId, spots]);
+    if (!m || !active) return;
+    const p = m.project(active.getLngLat());
+    const pad = padding(el.current, insets);
+    const box = m.getContainer();
+    if (p.x < pad.left || p.y < pad.top || p.x > box.clientWidth - pad.right || p.y > box.clientHeight - pad.bottom) {
+      m.easeTo({ center: active.getLngLat(), padding: pad, duration: 400 });
+    }
+  }, [activeId, spots, insets]);
 
   useEffect(
     () => () => {
@@ -112,9 +124,11 @@ export function SpotMap({
     [],
   );
 
-  return <div ref={el} className={`z-0 h-full min-h-72 w-full bg-canvas ${className}`} aria-label="Karta över parkeringsplatser" role="region" />;
+  return <div ref={el} className={`z-0 h-full min-h-72 w-full bg-[#292929] ${className}`} aria-label="Karta över parkeringsplatser" role="region" />;
 }
 
-function escapeHtml(s: string) {
-  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+/** Keeps fitted bounds and the selected pin clear of the floating panels. */
+function padding(el: HTMLElement | null, insets: MapInsets | undefined): Required<MapLibre.PaddingOptions> {
+  const i = insets?.[(el?.clientWidth ?? 0) >= 640 ? "wide" : "narrow"] ?? { top: 0, right: 0, bottom: 0, left: 0 };
+  return { top: i.top + 40, right: i.right + 40, bottom: i.bottom + 40, left: i.left + 40 };
 }

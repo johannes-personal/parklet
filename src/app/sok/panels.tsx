@@ -41,6 +41,7 @@ export function SpotPanel({ title, closeHref, children }: { title: string; close
   return (
     <aside
       aria-label={title}
+      data-spot-panel
       className="card pointer-events-auto absolute inset-x-2 top-20 bottom-2 z-10 flex flex-col overflow-hidden shadow-2xl sm:inset-x-auto sm:top-24 sm:right-4 sm:bottom-4 sm:left-[26rem] lg:left-auto lg:w-[26rem]"
     >
       <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line px-4 py-2">

@@ -49,6 +49,7 @@ test("a new host onboards, proves the right to rent via BRF approval, and gets a
   await page.getByRole("link", { name: "Lägg upp en plats" }).first().click();
   await page.getByLabel("Adress", { exact: true }).fill("Vegagatan 12");
   await page.getByLabel("Ort").fill("Göteborg");
+  await page.getByTestId("location-picker").locator("canvas").waitFor();
   await page.getByTestId("location-picker").click(); // places the pin
   await page.getByLabel("Rubrik").fill("Plats i Linnéstaden");
   await page.getByRole("radio", { name: /Jag hyr platsen/ }).check();
@@ -201,6 +202,7 @@ test("uploads are checked by content, not by file name", async ({ page }) => {
   await page.getByRole("link", { name: "Lägg upp en plats" }).first().click();
   await page.getByLabel("Adress", { exact: true }).fill("Storgatan 1");
   await page.getByLabel("Ort").fill("Uppsala");
+  await page.getByTestId("location-picker").locator("canvas").waitFor();
   await page.getByTestId("location-picker").click();
   await page.getByLabel("Rubrik").fill("Test av uppladdning");
   await page.getByRole("radio", { name: /äger platsen/ }).check();

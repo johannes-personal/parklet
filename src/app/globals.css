@@ -329,20 +329,49 @@ body:has([data-map-page]) .site-footer {
   display: none;
 }
 
-/* Dark map, like the original's: greyscale OpenStreetMap tiles, inverted. */
-.leaflet-container {
+/* Interactive maps (MapLibre, OpenFreeMap's tiles in Parklet's dark style). */
+.maplibregl-map {
   font-family: var(--font-sans);
-  background: #1f1f1f;
 }
-.leaflet-tile-pane {
-  filter: grayscale(1) invert(1) brightness(0.95) contrast(0.85);
-}
-.leaflet-control-attribution {
-  background: rgb(0 0 0 / 0.55) !important;
+/* Map credits, light on dark (more specific than maplibre-gl.css, which loads later). */
+.maplibregl-map .maplibregl-ctrl-attrib {
+  background: rgb(0 0 0 / 0.6);
   color: #a1a1aa;
 }
-.leaflet-control-attribution a {
+.maplibregl-map .maplibregl-ctrl-attrib a {
   color: #d4d4d8;
+}
+.maplibregl-ctrl-attrib-button {
+  filter: invert(1);
+}
+/* On the search page, keep the zoom buttons and map credits clear of the floating panels. */
+[data-map-page] .maplibregl-ctrl-bottom-right {
+  bottom: 9rem;
+}
+@media (min-width: 640px) {
+  [data-map-page] .maplibregl-ctrl-bottom-right {
+    bottom: 0;
+  }
+  /* Between the list and an open spot there is no room for them until the wide layout. */
+  [data-map-page]:has([data-spot-panel]) .maplibregl-ctrl-bottom-right {
+    display: none;
+  }
+}
+@media (min-width: 1024px) {
+  [data-map-page]:has([data-spot-panel]) .maplibregl-ctrl-bottom-right {
+    display: block;
+    right: 27rem;
+  }
+}
+
+/* The searched address. */
+.search-center {
+  width: 16px;
+  height: 16px;
+  border: 3px solid #ffffff;
+  border-radius: 999px;
+  background: #93c5fd;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.5);
 }
 
 /* Price pins on the map */
@@ -355,8 +384,8 @@ body:has([data-map-page]) .site-footer {
   font: 700 13px/1.2 var(--font-sans);
   white-space: nowrap;
   box-shadow: 0 2px 6px rgb(0 0 0 / 0.35);
-  transform: translate(-50%, -50%);
   display: inline-block;
+  cursor: pointer;
 }
 .price-pin.is-active {
   background: #000000;

@@ -79,6 +79,11 @@ Live demo: **https://parklet-rebuild.vercel.app**
   association and company accounts are then checked against the register: unknown and
   deregistered numbers are refused, the registered name is used, and admins see the result.
   Without credentials the check is skipped. The e2e tests use `e2e/fake-bolagsverket.mjs`.
+- **Reminders:** Supabase's pg_cron calls `/api/cron/paminnelser` every 10 minutes (job
+  `parklet-reminders`, via pg_net). It authenticates with the `cron` row in `app_secrets`, a
+  token generated inside the database, so there is no secret to copy into Vercel.
+- **Maps:** MapLibre with OpenFreeMap's vector tiles, recoloured by `src/lib/map-style.ts`.
+  MapLibre itself is served from `public/maplibre/` (copied on `npm install`).
 - **Future migrations:**
   `DATABASE_URL=<Supabase session pooler URL> npm run db:migrate`
   (the Drizzle journal on Supabase is up to date).
@@ -86,5 +91,5 @@ Live demo: **https://parklet-rebuild.vercel.app**
 ## Configuration
 
 See [.env.example](.env.example). Before a real launch, production needs Resend set up with
-a verified sending domain, a commercial map tile provider, and the payment
+a verified sending domain, and the payment
 and e-ID integrations described in `docs/03-mvp.md`.

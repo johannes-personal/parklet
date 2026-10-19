@@ -390,6 +390,17 @@ export const bookings = pgTable(
   ],
 );
 
+/**
+ * Secrets the database shares with the app, e.g. the token the database's own
+ * scheduler (pg_cron) sends to /api/cron/paminnelser. Generated inside the
+ * database, so it never has to be copied anywhere.
+ */
+export const appSecrets = pgTable("app_secrets", {
+  name: text("name").primaryKey(),
+  value: text("value").notNull(),
+  createdAt: createdAt(),
+});
+
 /** In-app notifications (the bell in the header). Most are also sent by e-mail. */
 export const notifications = pgTable(
   "notifications",

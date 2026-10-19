@@ -57,6 +57,13 @@
       "when": 1792409773843,
       "tag": "0007_notifications",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792411346531,
+      "tag": "0008_app_secrets",
+      "breakpoints": true
     }
   ]
 }
