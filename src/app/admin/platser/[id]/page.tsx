@@ -15,6 +15,14 @@ export const metadata: Metadata = { title: "Granska plats", robots: { index: fal
 
 type P = PageProps<"/admin/platser/[id]">;
 
+const LANDLORD_APPROVAL_TEXT = {
+  not_needed: "Behövs inte",
+  missing: "Saknas – ingen förfrågan skickad och inget godkännande uppladdat",
+  requested: "Förfrågan skickad, väntar på svar",
+  approved: "Godkänt",
+  declined: "Nekat av hyresvärden/föreningen",
+} as const;
+
 export default function AdminSpotPage(props: P) {
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-10">
@@ -57,7 +65,9 @@ async function Content({ params, searchParams }: P) {
               ? "Behövs inte"
               : spot.landlordApproval === "approved"
                 ? `Godkänt via länk av ${spot.landlordApprovedByName} (${spot.landlordApprovedByRole}), ${spot.landlordRespondedAt ? formatDateTime(spot.landlordRespondedAt) : ""}`
-                : spot.landlordApproval,
+                : docs.some((d) => d.kind === "sublet_permission")
+                  ? "Skriftligt godkännande uppladdat (se dokument)"
+                  : LANDLORD_APPROVAL_TEXT[spot.landlordApproval],
           ],
           ["Kräver registrering av bil", spot.requiresVehicleRegistration ? `Ja. ${spot.vehicleRegistrationNote}` : "Nej"],
         ].map(([k, v]) => (

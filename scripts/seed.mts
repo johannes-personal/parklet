@@ -4,11 +4,34 @@
  */
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
-import { bookings, hostAccountMembers, hostAccounts, spots, users, vehicles } from "@/db/schema";
+import { bookings, documents, hostAccountMembers, hostAccounts, spots, users, vehicles } from "@/db/schema";
 import { hashPassword } from "@/lib/auth/password";
 import { calculatePrice } from "@/lib/pricing";
 import type { Schedule } from "@/lib/schedule";
 import { createSpots } from "@/server/spots";
+import { storeDocument } from "@/server/storage";
+
+/** A one-page PDF with a line of text, standing in for an uploaded document. */
+function demoPdf(text: string): Buffer {
+  const content = `BT /F1 18 Tf 72 760 Td (${text.replace(/[()\\]/g, "")}) Tj ET`;
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
+    `<< /Length ${content.length} >>\nstream\n${content}\nendstream`,
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+  ];
+  let pdf = "%PDF-1.4\n";
+  const offsets = objects.map((body, i) => {
+    const at = Buffer.byteLength(pdf, "latin1");
+    pdf += `${i + 1} 0 obj\n${body}\nendobj\n`;
+    return at;
+  });
+  const xref = Buffer.byteLength(pdf, "latin1");
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.map((o) => `${String(o).padStart(10, "0")} 00000 n \n`).join("")}`;
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return Buffer.from(pdf, "latin1");
+}
 
 if (process.env.NODE_ENV === "production") throw new Error("Refusing to seed in production");
 
@@ -132,9 +155,23 @@ for (const s of S) {
         submittedAt: now,
         reviewedAt: s.review ? null : now,
         reviewedBy: s.review ? null : admin.id,
-        ...(s.rents && !s.review ? { landlordApproval: "approved" as const, landlordApprovedByName: "Lena Sjö", landlordApprovedByRole: "Ordförande", landlordRespondedAt: now } : {}),
+        // Every rented spot, including those still waiting for review, has its landlord's approval.
+        ...(s.rents ? { landlordApproval: "approved" as const, landlordApprovedByName: "Lena Sjö", landlordApprovedByRole: "Ordförande", landlordRespondedAt: now } : {}),
       })
       .where(sql`${spots.id} = ${id}`);
+    if (s.review) {
+      // Spots waiting for review have the documents the host had to upload, so the admin review is complete.
+      const file = await storeDocument(demoPdf(s.rents ? "Hyresavtal för parkeringsplats (demo)" : "Lagfartsbevis (demo)"));
+      if ("error" in file) throw new Error(file.error);
+      await db.insert(documents).values({
+        hostAccountId: s.acc.id,
+        spotId: id,
+        uploadedBy: s.by,
+        kind: s.rents ? "rental_contract" : "ownership_proof",
+        filename: s.rents ? "hyresavtal.pdf" : "lagfart.pdf",
+        ...file,
+      });
+    }
     if (!s.review) created.push({ id, hour: s.hour * 100, day: s.day ? s.day * 100 : null, always: s.schedule.mode === "always", reg: s.reg ?? false });
   }
 }
