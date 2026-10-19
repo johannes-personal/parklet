@@ -366,6 +366,9 @@ export const bookings = pgTable(
     vehicleReg: text("vehicle_reg").notNull(),
     vehicleRegistration: vehicleRegistrationEnum("vehicle_registration").notNull().default("not_required"),
     vehicleRegisteredAt: ts("vehicle_registered_at"),
+    /** Registration follow-up (src/server/reminders.ts): the host's reminder, and the driver's warning at the start time. */
+    vehicleReminderSentAt: ts("vehicle_reminder_sent_at"),
+    vehicleOverdueNotifiedAt: ts("vehicle_overdue_notified_at"),
     baseOre: integer("base_ore").notNull(),
     feeOre: integer("fee_ore").notNull(),
     totalOre: integer("total_ore").notNull(),
@@ -385,6 +388,25 @@ export const bookings = pgTable(
     // a custom migration (drizzle-kit cannot express EXCLUDE constraints):
     // see src/db/migrations/0001_no_double_booking.sql
   ],
+);
+
+/** In-app notifications (the bell in the header). Most are also sent by e-mail. */
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    title: text("title").notNull(),
+    body: text("body").notNull().default(""),
+    /** In-app path the notification links to. */
+    href: text("href").notNull(),
+    createdAt: createdAt(),
+    readAt: ts("read_at"),
+  },
+  (t) => [index("notifications_user_idx").on(t.userId, t.createdAt)],
 );
 
 export type User = typeof users.$inferSelect;

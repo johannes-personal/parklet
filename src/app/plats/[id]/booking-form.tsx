@@ -8,7 +8,7 @@ import { formatSek } from "@/lib/money";
 import { calculatePrice } from "@/lib/pricing";
 import { formatDuration, parseLocalDateTime } from "@/lib/time";
 import { bookAction } from "./actions";
-import { useNowMin } from "@/components/use-now-min";
+import { TimeRangePicker, useNow } from "@/components/time-range-picker";
 
 type Props = {
   spotId: string;
@@ -23,6 +23,8 @@ type Props = {
   initialFrom?: string;
   initialTo?: string;
   requiresVehicleRegistration: boolean;
+  /** Where to come back to after logging in. */
+  returnTo: string;
 };
 
 export function BookingForm(p: Props) {
@@ -32,7 +34,7 @@ export function BookingForm(p: Props) {
   const [to, setTo] = useState(state?.values?.to ?? p.initialTo ?? "");
   const [vehicle, setVehicle] = useState(p.vehicles[0]?.reg ?? "");
 
-  const minValue = useNowMin();
+  const now = useNow();
   const preview = useMemo(() => {
     const start = parseLocalDateTime(from);
     const end = parseLocalDateTime(to);
@@ -40,35 +42,31 @@ export function BookingForm(p: Props) {
     if (end <= start) return { error: "Sluttiden måste vara efter starttiden." };
     const minutes = (end.getTime() - start.getTime()) / 60000;
     if (minutes < p.minDurationMinutes) return { error: `Minsta bokningstid är ${formatDuration(p.minDurationMinutes)}.` };
-    const now = parseLocalDateTime(minValue)?.getTime();
     if (p.minNoticeMinutes && now != null && start.getTime() < now + p.minNoticeMinutes * 60000) {
       return { error: `Platsen måste bokas minst ${formatDuration(p.minNoticeMinutes)} i förväg.` };
     }
     if (!isWithinWindows(p.windows, start, end)) return { error: "Platsen är inte tillgänglig hela den valda tiden." };
     if (p.busy.some((b) => new Date(b.start) < end && new Date(b.end) > start)) return { error: "Platsen är redan bokad under en del av tiden." };
     return { price: calculatePrice({ start, end, pricePerHourOre: p.pricePerHourOre, pricePerDayOre: p.pricePerDayOre }) };
-  }, [from, to, p, minValue]);
+  }, [from, to, p, now]);
 
   const useNew = vehicle === "" || p.vehicles.length === 0;
 
   return (
     <form action={action} className="space-y-4" aria-label="Boka platsen">
       <input type="hidden" name="spotId" value={p.spotId} />
+      <input type="hidden" name="returnTo" value={p.returnTo} />
       <FormAlert state={state} />
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label htmlFor={f("from")} className="label">
-            Från
-          </label>
-          <input id={f("from")} name="from" type="datetime-local" step={900} min={minValue} required className="input" value={from} onChange={(e) => setFrom(e.target.value)} />
-        </div>
-        <div>
-          <label htmlFor={f("to")} className="label">
-            Till
-          </label>
-          <input id={f("to")} name="to" type="datetime-local" step={900} min={from || minValue} required className="input" value={to} onChange={(e) => setTo(e.target.value)} />
-        </div>
-      </div>
+      <TimeRangePicker
+        from={from}
+        to={to}
+        onChange={(a, b) => {
+          setFrom(a);
+          setTo(b);
+        }}
+        minNoticeMinutes={p.minNoticeMinutes}
+        names={{ from: "from", to: "to" }}
+      />
 
       <fieldset>
         <legend className="label">Bil</legend>
@@ -91,7 +89,7 @@ export function BookingForm(p: Props) {
             <input
               id={f("newReg")}
               name="newReg"
-              className="input uppercase"
+              className="input uppercase placeholder:normal-case"
               placeholder="Registreringsnummer, t.ex. ABC123"
               autoComplete="off"
               defaultValue={state?.values?.newReg}

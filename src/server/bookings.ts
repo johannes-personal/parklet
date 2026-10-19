@@ -4,8 +4,10 @@ import { db } from "@/db";
 import { bookings, hostAccountMembers, spots, users, vehicles, type Booking, type Spot } from "@/db/schema";
 import { isWithinWindows } from "@/lib/availability";
 import { calculatePrice, durationMinutes, type PriceBreakdown } from "@/lib/pricing";
-import { formatDuration } from "@/lib/time";
+import { formatSek } from "@/lib/money";
+import { formatDateTime, formatDuration, formatRange } from "@/lib/time";
 import { isUuid } from "./ids";
+import { notifyAccount, notifyUsers } from "./notifications";
 import { getPaymentProvider } from "./payments";
 import { getSpotWithAccount, isBookable, type SpotWithWindows } from "./spots";
 
@@ -137,10 +139,46 @@ export async function confirmPayment(bookingId: string, paymentRef: string): Pro
     .set({ status: "confirmed", paymentStatus: "paid", paymentRef, confirmedAt: new Date(), holdExpiresAt: null })
     .where(and(eq(bookings.id, bookingId), eq(bookings.status, "pending_payment"), gt(bookings.holdExpiresAt, new Date())))
     .returning({ id: bookings.id });
-  if (updated.length) return { ok: true };
+  if (updated.length) {
+    await announceBooking(bookingId);
+    return { ok: true };
+  }
   const [b] = await db.select({ status: bookings.status }).from(bookings).where(eq(bookings.id, bookingId)).limit(1);
   if (b?.status === "confirmed") return { ok: true };
   return { ok: false, error: "Reservationen hann gå ut innan betalningen genomfördes. Ingen betalning har dragits. Boka igen." };
+}
+
+/** Tell the host about a new booking (and the car to register), and send the driver a confirmation. */
+async function announceBooking(bookingId: string) {
+  const [row] = await db
+    .select({ booking: bookings, spot: spots, driverName: users.name })
+    .from(bookings)
+    .innerJoin(spots, eq(spots.id, bookings.spotId))
+    .innerJoin(users, eq(users.id, bookings.driverId))
+    .where(eq(bookings.id, bookingId))
+    .limit(1);
+  if (!row) return;
+  const { booking, spot } = row;
+  const when = formatRange(booking.startsAt, booking.endsAt);
+  const register = booking.vehicleRegistration === "pending";
+  await notifyAccount(spot.hostAccountId, {
+    kind: register ? "vehicle_registration" : "booking_new",
+    title: register ? `Registrera ${booking.vehicleReg} – ny bokning av ${spot.title}` : `Ny bokning: ${spot.title}`,
+    body:
+      `${row.driverName.split(" ")[0]} har bokat ${spot.title} ${when}. Registreringsnummer: ${booking.vehicleReg}.` +
+      (register
+        ? `\n\nFöreningen kräver att bilen registreras. Registrera ${booking.vehicleReg} i föreningens parkeringssystem före ${formatDateTime(booking.startsAt)} och markera den som registrerad i Parklet, så att föraren vet att det är klart.`
+        : ""),
+    href: `/bokning/${booking.id}`,
+  });
+  await notifyUsers([booking.driverId], {
+    kind: "booking_confirmed",
+    title: `Bokningsbekräftelse: ${spot.title}`,
+    body:
+      `Din parkering är bokad och betald.\n\n${spot.title}\n${spot.address}, ${spot.city}\n${when}\nTotalt ${formatSek(booking.totalOre)}` +
+      (register ? `\n\nPlatsen kräver att bilen registreras av uthyraren. Vi meddelar dig när ${booking.vehicleReg} är registrerad.` : ""),
+    href: `/bokning/${booking.id}`,
+  });
 }
 
 function isExclusionViolation(err: unknown): boolean {
@@ -266,7 +304,9 @@ export async function cancelBooking(bookingId: string, userId: string, now = new
   if (booking.endsAt <= now) return { ok: false, error: "Bokningen har redan passerat." };
 
   const asHost = booking.viewerIsHost && booking.driverId !== userId;
-  if (!asHost && now > driverCancellationDeadline(booking, booking.spot.cancellationHours)) {
+  // While the host still hasn't registered the car, the driver can always cancel with a full refund.
+  const waitingForHost = booking.vehicleRegistration === "pending";
+  if (!asHost && !waitingForHost && now > driverCancellationDeadline(booking, booking.spot.cancellationHours)) {
     return { ok: false, error: "Det är för sent att avboka kostnadsfritt. Kontakta supporten om något har hänt." };
   }
 
@@ -280,6 +320,22 @@ export async function cancelBooking(bookingId: string, userId: string, now = new
       await getPaymentProvider().refund({ ref: booking.paymentRef, amountOre: booking.totalOre });
     }
   });
+  const when = formatRange(booking.startsAt, booking.endsAt);
+  if (asHost) {
+    await notifyUsers([booking.driverId], {
+      kind: "booking_cancelled",
+      title: `Din bokning av ${booking.spot.title} är avbokad`,
+      body: `Uthyraren har avbokat din bokning ${when}. Du får tillbaka hela beloppet, ${formatSek(booking.totalOre)}, inom några bankdagar.`,
+      href: `/bokning/${booking.id}`,
+    });
+  } else {
+    await notifyAccount(booking.spot.hostAccountId, {
+      kind: "booking_cancelled",
+      title: `Avbokning: ${booking.spot.title}`,
+      body: `${booking.driverName} har avbokat ${when}. Platsen är ledig igen.`,
+      href: `/bokning/${booking.id}`,
+    });
+  }
   return { ok: true };
 }
 
@@ -287,10 +343,19 @@ export async function cancelBooking(bookingId: string, userId: string, now = new
 export async function markVehicleRegistered(bookingId: string, userId: string) {
   const booking = await getBookingForUser(bookingId, userId);
   if (!booking || !booking.viewerIsHost) return false;
-  await db
+  const updated = await db
     .update(bookings)
     .set({ vehicleRegistration: "done", vehicleRegisteredAt: new Date() })
-    .where(and(eq(bookings.id, bookingId), eq(bookings.vehicleRegistration, "pending")));
+    .where(and(eq(bookings.id, bookingId), eq(bookings.vehicleRegistration, "pending")))
+    .returning({ id: bookings.id });
+  if (updated.length && booking.status === "confirmed") {
+    await notifyUsers([booking.driverId], {
+      kind: "vehicle_registered",
+      title: `${booking.vehicleReg} är registrerad för ${booking.spot.title}`,
+      body: `Uthyraren har registrerat din bil i föreningens system. Du kan parkera ${formatRange(booking.startsAt, booking.endsAt)}.`,
+      href: `/bokning/${booking.id}`,
+    });
+  }
   return true;
 }
 

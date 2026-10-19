@@ -324,6 +324,11 @@ body:has([data-map-pins]) .backdrop-shade::after {
   }
 }
 
+/* The search page is a full-screen map: no footer under it. */
+body:has([data-map-page]) .site-footer {
+  display: none;
+}
+
 /* Dark map, like the original's: greyscale OpenStreetMap tiles, inverted. */
 .leaflet-container {
   font-family: var(--font-sans);

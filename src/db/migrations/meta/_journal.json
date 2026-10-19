@@ -50,6 +50,13 @@
       "when": 1792230703217,
       "tag": "0006_company_registry",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792409773843,
+      "tag": "0007_notifications",
+      "breakpoints": true
     }
   ]
 }

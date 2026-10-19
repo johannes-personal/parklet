@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { DateTime } from "luxon";
 
@@ -30,4 +30,21 @@ export function lastMailLink(pathPart: string): string {
     if (m) return new URL(m[0]).pathname;
   }
   throw new Error(`No mail containing ${pathPart}`);
+}
+
+/** Set a range in the TimeRangePicker. Values are datetime-local strings ("2026-10-16T08:00"). */
+export async function pickRange(scope: Locator, from: string, to: string) {
+  for (const [which, value] of [["Start", from], ["Slut", to]] as const) {
+    const [date, time] = value.split("T");
+    const [h, m] = time.split(":").map(Number);
+    await scope.getByLabel(`${which}, dag`).selectOption(date);
+    await scope.getByLabel(`${which}, timme`).selectOption(String(h));
+    await scope.getByLabel(`${which}, minut`).selectOption(String(m));
+  }
+}
+
+/** On phones the search results start as a collapsed sheet over the map. */
+export async function openResults(page: Page) {
+  const toggle = page.getByRole("button", { name: "Visa lista" });
+  if (await toggle.isVisible()) await toggle.click();
 }
