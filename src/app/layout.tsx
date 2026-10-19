@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { SiteFooter } from "@/components/site-footer";
 import { AccountNav, AccountNavFallback } from "@/components/account-nav";
 import { Logo } from "@/components/logo";
+import { MapBackdrop } from "@/components/map-backdrop";
 import { appUrl } from "@/lib/app-url";
 import Link from "next/link";
 import "./globals.css";
@@ -27,6 +28,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="sv" className="h-full antialiased">
       <body className="flex min-h-full flex-col">
+        <MapBackdrop />
         <a
           href="#main"
           className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[1000] focus:rounded-lg focus:bg-white focus:text-black focus:px-4 focus:py-2 focus:shadow"
