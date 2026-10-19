@@ -25,7 +25,7 @@ const LANDLORD_APPROVAL_TEXT = {
 
 export default function AdminSpotPage(props: P) {
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-10">
+    <div className="mx-auto w-full max-w-3xl py-8">
       <Suspense fallback={<div className="card h-96 animate-pulse" />}>
         <Content {...props} />
       </Suspense>
@@ -46,8 +46,8 @@ async function Content({ params, searchParams }: P) {
 
   return (
     <div className="space-y-6">
-      <Link href="/admin" className="link text-sm">
-        ← Granskning
+      <Link href="/admin/platser" className="link text-sm">
+        ← Alla platser
       </Link>
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-bold">{spot.title}</h1>

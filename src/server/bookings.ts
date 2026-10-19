@@ -161,23 +161,32 @@ async function announceBooking(bookingId: string) {
   const { booking, spot } = row;
   const when = formatRange(booking.startsAt, booking.endsAt);
   const register = booking.vehicleRegistration === "pending";
+  const details: [string, string][] = [
+    ["Plats", `${spot.title}, ${spot.address}, ${spot.city}`],
+    ["Tid", when],
+    ["Bil", booking.vehicleReg],
+  ];
   await notifyAccount(spot.hostAccountId, {
     kind: register ? "vehicle_registration" : "booking_new",
     title: register ? `Registrera ${booking.vehicleReg} – ny bokning av ${spot.title}` : `Ny bokning: ${spot.title}`,
     body:
-      `${row.driverName.split(" ")[0]} har bokat ${spot.title} ${when}. Registreringsnummer: ${booking.vehicleReg}.` +
+      `${row.driverName.split(" ")[0]} har bokat ${spot.title}.` +
       (register
         ? `\n\nFöreningen kräver att bilen registreras. Registrera ${booking.vehicleReg} i föreningens parkeringssystem före ${formatDateTime(booking.startsAt)} och markera den som registrerad i Parklet, så att föraren vet att det är klart.`
         : ""),
+    details: [...details, ["Din intäkt", formatSek(booking.baseOre)]],
     href: `/bokning/${booking.id}`,
+    cta: register ? "Markera bilen som registrerad" : "Visa bokningen",
   });
   await notifyUsers([booking.driverId], {
     kind: "booking_confirmed",
     title: `Bokningsbekräftelse: ${spot.title}`,
     body:
-      `Din parkering är bokad och betald.\n\n${spot.title}\n${spot.address}, ${spot.city}\n${when}\nTotalt ${formatSek(booking.totalOre)}` +
+      `Din parkering är bokad och betald. Vägbeskrivning och eventuell portkod finns i bokningen.` +
       (register ? `\n\nPlatsen kräver att bilen registreras av uthyraren. Vi meddelar dig när ${booking.vehicleReg} är registrerad.` : ""),
+    details: [...details, ["Totalt betalt", formatSek(booking.totalOre)], ["Boknings-id", booking.id.slice(0, 8).toUpperCase()]],
     href: `/bokning/${booking.id}`,
+    cta: "Visa bokningen",
   });
 }
 

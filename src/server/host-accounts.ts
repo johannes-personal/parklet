@@ -4,7 +4,8 @@ import { and, asc, eq, gt, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { documents, hostAccountMembers, hostAccounts, hostInvitations, users, type HostAccount, type HostKind } from "@/db/schema";
 import { generateToken, hashToken } from "@/lib/auth/tokens";
-import { sendMail } from "./mailer";
+import { sendEmail } from "./mailer";
+import { notifyAdmins } from "./notifications";
 import { isUuid } from "./ids";
 
 export type MembershipRole = "owner" | "admin";
@@ -84,7 +85,24 @@ export async function submitAccountForReview(accountId: string): Promise<{ ok: t
   if (!docs.some((d) => d.kind === "board_minutes" || d.kind === "signatory_proof")) {
     return { ok: false, error: "Ladda upp ett styrelseprotokoll eller firmatecknarbevis som visar att du får företräda organisationen." };
   }
-  await db.update(hostAccounts).set({ verificationStatus: "pending", reviewNote: null }).where(eq(hostAccounts.id, accountId));
+  const [account] = await db
+    .update(hostAccounts)
+    .set({ verificationStatus: "pending", reviewNote: null })
+    .where(eq(hostAccounts.id, accountId))
+    .returning({ name: hostAccounts.name, orgNumber: hostAccounts.orgNumber, kind: hostAccounts.kind });
+  if (account) {
+    await notifyAdmins({
+      kind: "admin_account_submitted",
+      title: `Ny organisation att verifiera: ${account.name}`,
+      body: `${account.name} har skickat in underlag för verifiering.`,
+      details: [
+        ["Organisation", `${account.name}${account.orgNumber ? `, ${account.orgNumber}` : ""}`],
+        ["Typ", HOST_KIND_LABEL[account.kind]],
+      ],
+      href: `/admin/konton/${accountId}`,
+      cta: "Granska organisationen",
+    });
+  }
   return { ok: true };
 }
 
@@ -122,10 +140,13 @@ export async function inviteAdmin(account: HostAccount, invitedBy: { id: string;
     expiresAt: new Date(Date.now() + 7 * 24 * 3600 * 1000),
   });
   const url = `${appUrl()}/inbjudan/${token}`;
-  await sendMail({
-    to: email,
-    subject: `${invitedBy.name} har bjudit in dig att administrera ${account.name} på Parklet`,
-    text: `Hej!\n\n${invitedBy.name} vill att du blir administratör för uthyrarkontot "${account.name}" på Parklet.\n\nAcceptera inbjudan (giltig i 7 dagar):\n${url}\n`,
+  await sendEmail(email, `${invitedBy.name} har bjudit in dig att administrera ${account.name} på Parklet`, {
+    heading: `Bli administratör för ${account.name}`,
+    paragraphs: [
+      `${invitedBy.name} vill att du blir administratör för uthyrarkontot "${account.name}" på Parklet. Som administratör kan du lägga upp och ändra platser, se bokningar och registrera bilar.`,
+      "Inbjudan gäller i 7 dagar. Har du inget Parklet-konto skapar du ett när du accepterar.",
+    ],
+    button: { label: "Acceptera inbjudan", url },
   });
 }
 

@@ -19,7 +19,7 @@ type P = PageProps<"/admin/konton/[id]">;
 
 export default function AdminAccountPage(props: P) {
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-10">
+    <div className="mx-auto w-full max-w-3xl py-8">
       <Suspense fallback={<div className="card h-96 animate-pulse" />}>
         <Content {...props} />
       </Suspense>
@@ -37,8 +37,8 @@ async function Content({ params, searchParams }: P) {
   const [docs, members] = await Promise.all([listAccountDocuments(id), listMembers(id)]);
   return (
     <div className="space-y-6">
-      <Link href="/admin" className="link text-sm">
-        ← Granskning
+      <Link href="/admin/konton" className="link text-sm">
+        ← Alla uthyrare
       </Link>
       <h1 className="text-2xl font-bold">{account.name}</h1>
       <dl className="card divide-y divide-line text-sm">

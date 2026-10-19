@@ -20,6 +20,7 @@ import {
 } from "@/server/host-accounts";
 import { lookupOrganisation } from "@/server/company-registry";
 import {
+  announceSubmittedSpots,
   createSpots,
   deleteSpotDocument,
   getSpot,
@@ -208,17 +209,19 @@ export async function submitSpotAction(_prev: FormState, formData: FormData): Pr
   const accountId = String(formData.get("accountId"));
   const spotId = String(formData.get("spotId"));
   await requireMember(accountId);
-  const result = await submitSpotForReview(accountId, spotId);
+  const result = await submitSpotForReview(accountId, spotId, { announce: false });
   if (!result.ok) return { error: result.error };
-  let extra = 0;
+  const submitted = [spotId];
   if (formData.get("includeSiblings") === "on") {
     const spot = await getSpot(spotId);
     for (const s of spot ? await listSiblingSpots(spot) : []) {
       if (s.review === "draft" || s.review === "rejected") {
-        if ((await submitSpotForReview(accountId, s.id)).ok) extra++;
+        if ((await submitSpotForReview(accountId, s.id, { announce: false })).ok) submitted.push(s.id);
       }
     }
   }
+  await announceSubmittedSpots(accountId, submitted);
+  const extra = submitted.length - 1;
   revalidatePath(`/uthyrare/${accountId}/platser/${spotId}`);
   return {
     success: `${extra ? `${extra + 1} platser är` : "Platsen är"} inskickad${extra ? "e" : ""} för granskning. Vi meddelar dig när de är godkända.`,

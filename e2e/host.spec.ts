@@ -78,6 +78,7 @@ test("a new host onboards, proves the right to rent via BRF approval, and gets a
   await expect(other.getByRole("link", { name: "regler.pdf" })).toBeVisible();
   page.once("dialog", (d) => d.accept());
   await other.getByRole("button", { name: "Ta bort regler.pdf" }).click();
+  await expect(other.getByText("regler.pdf är borttagen.")).toBeVisible();
   await expect(other.getByRole("link", { name: "regler.pdf" })).toHaveCount(0);
 
   // Ask the BRF for approval and answer as the board
@@ -108,8 +109,12 @@ test("a new host onboards, proves the right to rent via BRF approval, and gets a
   await page.goto("/sok?q=G%C3%B6teborg&lat=57.7089&lng=11.9746");
   await expect(page.getByText("Plats i Linnéstaden")).toHaveCount(0);
 
-  // Admin approves
+  // Admin is notified, can find the spot in the search, and approves it
   await login(page, "admin@parklet.test");
+  await page.getByRole("button", { name: /^Notiser/ }).click();
+  await expect(page.getByRole("link", { name: /Ny plats att granska: Plats i Linnéstaden/ })).toBeVisible();
+  await page.goto("/admin/platser?q=Linn%C3%A9staden");
+  await expect(page.getByRole("link", { name: "Plats i Linnéstaden" })).toBeVisible();
   await page.goto("/admin");
   await page.getByRole("link", { name: /Plats i Linnéstaden/ }).click();
   await expect(page.getByText("Godkänt via länk av Per Styrelse")).toBeVisible();
@@ -131,7 +136,7 @@ test("a new host onboards, proves the right to rent via BRF approval, and gets a
 
   // The host sees the car to register in the bell
   await login(page, email, "ett riktigt bra lösenord");
-  await page.getByRole("button", { name: /^Notiser, \d+ att se över/ }).click();
+  await page.getByRole("button", { name: /^Notiser, \d+ nya/ }).click();
   await expect(page.getByRole("link", { name: /Registrera ABC123/ })).toBeVisible();
   await page.getByRole("link", { name: "Registrera en bil" }).click();
   await expect(page).toHaveURL(new RegExp(`${accountUrl}#bilar$`));

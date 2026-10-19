@@ -4,9 +4,17 @@ import { appendFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { db } from "@/db";
 import { mailOutbox } from "@/db/schema";
+import { appUrl } from "@/lib/app-url";
 import { isDeliverableAddress } from "@/lib/email";
+import { renderEmail, type EmailContent } from "@/lib/email-template";
 
-export type Mail = { to: string; subject: string; text: string };
+export type Mail = { to: string; subject: string; text: string; html?: string };
+
+/** Send one of Parklet's designed e-mails (src/lib/email-template.ts). */
+export async function sendEmail(to: string, subject: string, content: EmailContent) {
+  const { html, text } = renderEmail(content, { appUrl: appUrl() });
+  await sendMail({ to, subject, text, html });
+}
 
 /**
  * Every e-mail is logged and stored in the mail_outbox table, where Parklet
@@ -47,6 +55,7 @@ async function sendWithResend(mail: Mail) {
         to: [mail.to],
         subject: mail.subject,
         text: mail.text,
+        ...(mail.html ? { html: mail.html } : {}),
         ...(process.env.MAIL_REPLY_TO ? { reply_to: process.env.MAIL_REPLY_TO } : {}),
       }),
       signal: AbortSignal.timeout(8000),

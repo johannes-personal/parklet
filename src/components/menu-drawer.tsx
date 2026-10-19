@@ -17,17 +17,36 @@ export function MenuDrawer({ user }: Props) {
     ref.current?.close();
   }, [pathname]);
 
-  const links = [
-    { href: "/sok", label: "Hitta parkering" },
-    ...(user
+  // Grouped by what you are doing: parking, renting out, or reviewing.
+  const groups = [
+    {
+      title: "Parkera",
+      links: [
+        { href: "/sok", label: "Hitta parkering" },
+        ...(user
+          ? [
+              { href: "/mina-bokningar", label: "Mina bokningar" },
+              { href: "/fordon", label: "Mina fordon" },
+            ]
+          : []),
+      ],
+    },
+    {
+      title: "Hyr ut",
+      // Hosts go to their dashboard; everyone else is shown how hosting works.
+      links: [user?.isHost ? { href: "/uthyrare", label: "Uthyrning" } : { href: "/hyr-ut", label: "Hyr ut parkeringsplats" }],
+    },
+    ...(user?.isAdmin
       ? [
-          { href: "/mina-bokningar", label: "Mina bokningar" },
-          { href: "/fordon", label: "Mina fordon" },
+          {
+            title: "Administration",
+            links: [
+              { href: "/admin", label: "Granskning" },
+              { href: "/admin/platser", label: "Platser och uthyrare" },
+            ],
+          },
         ]
       : []),
-    // Hosts go to their dashboard; everyone else is shown how hosting works.
-    user?.isHost ? { href: "/uthyrare", label: "Uthyrning" } : { href: "/hyr-ut", label: "Hyr ut parkeringsplats" },
-    ...(user?.isAdmin ? [{ href: "/admin", label: "Granskning" }] : []),
   ];
 
   return (
@@ -60,22 +79,29 @@ export function MenuDrawer({ user }: Props) {
             <span aria-hidden>×</span>
             <span className="sr-only">Stäng menyn</span>
           </button>
-          <nav aria-label="Meny">
-            <ul>
-              {links.map((l) => (
-                <li key={l.href}>
-                  <Link
-                    href={l.href}
-                    onClick={() => ref.current?.close()}
-                    className="block rounded-2xl px-4 py-4 text-[1.75rem] font-medium tracking-[-0.03em] text-white/85 transition-colors hover:bg-white/8 hover:text-white"
-                  >
-                    {l.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
+          <nav aria-label="Meny" className="space-y-6">
+            {groups.map((g, i) => (
+              <section key={g.title} aria-labelledby={`meny-${i}`}>
+                <h2 id={`meny-${i}`} className="px-4 pb-1 text-xs font-semibold tracking-[0.12em] text-white/45 uppercase">
+                  {g.title}
+                </h2>
+                <ul>
+                  {g.links.map((l) => (
+                    <li key={l.href}>
+                      <Link
+                        href={l.href}
+                        onClick={() => ref.current?.close()}
+                        className="block rounded-2xl px-4 py-2.5 text-[1.625rem] font-medium tracking-[-0.03em] text-white/85 transition-colors hover:bg-white/8 hover:text-white"
+                      >
+                        {l.label}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ))}
           </nav>
-          <div className="mt-6 flex flex-wrap gap-3 px-4">
+          <div className="mt-8 flex flex-wrap gap-3 px-4">
             {user ? (
               <form action={logoutAction}>
                 <button className="btn-secondary">Logga ut</button>

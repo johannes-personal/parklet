@@ -32,9 +32,28 @@ export function loadMap() {
 /** Create a map, or null where WebGL is unavailable (very old devices, some headless browsers). */
 export function createMap(maplibregl: typeof MapLibre, options: MapLibre.MapOptions): MapLibre.Map | null {
   try {
-    return new maplibregl.Map({ attributionControl: { compact: true }, dragRotate: false, pitchWithRotate: false, touchPitch: false, ...options });
+    const map = new maplibregl.Map({ attributionControl: { compact: true }, dragRotate: false, pitchWithRotate: false, touchPitch: false, ...options });
+    collapseAttribution(map);
+    return map;
   } catch (err) {
     console.warn("map: could not start", err);
     return null;
   }
+}
+
+/**
+ * MapLibre shows the compact credits expanded until the map is first dragged;
+ * start with just the (i) button instead. The control fills in its credits when
+ * the style and sources load, and its own listeners run before ours.
+ */
+function collapseAttribution(map: MapLibre.Map) {
+  const onData = () => {
+    const el = map.getContainer().querySelector(".maplibregl-ctrl-attrib.maplibregl-compact-show");
+    if (!el) return;
+    el.classList.remove("maplibregl-compact-show");
+    map.off("styledata", onData);
+    map.off("sourcedata", onData);
+  };
+  map.on("styledata", onData);
+  map.on("sourcedata", onData);
 }

@@ -3,7 +3,7 @@ import { and, eq, gt, isNull, lte, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { bookings, spots, users } from "@/db/schema";
 import { formatDateTime, formatTime } from "@/lib/time";
-import { notifyAccount, notifyUsers } from "./notifications";
+import { notifyAccount, notifyAdmins, notifyUsers } from "./notifications";
 
 /** Hosts get a reminder this long before the start if the car still isn't registered. */
 export const REMINDER_BEFORE_START_MS = 3 * 3600_000;
@@ -61,6 +61,16 @@ export async function runRegistrationReminders(now = new Date()) {
       body: `${b.driverName} väntar på att bilen ska registreras för ${b.spot.title}. Registrera den nu och markera den i Parklet. Föraren kan avboka med full återbetalning tills dess.`,
       href: `/bokning/${id}`,
     });
+    // Support may need to step in; they see it in the bell and in the daily summary.
+    await notifyAdmins(
+      {
+        kind: "admin_vehicle_overdue",
+        title: `Bil ej registrerad vid start: ${b.spot.title}`,
+        body: `Bokningen har börjat men ${b.booking.vehicleReg} är inte markerad som registrerad.`,
+        href: `/admin/platser/${b.booking.spotId}`,
+      },
+      { email: false },
+    );
   }
   return { reminded: remind.length, overdue: overdue.length };
 }

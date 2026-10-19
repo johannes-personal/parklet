@@ -13,6 +13,11 @@ test("driver books, pays, sees instructions and cancels", async ({ page }) => {
   await expect(page).toHaveURL(/\/sok\?.*plats=/);
   // 3 h × 30 kr = 90 kr, plus a 10 % service fee of 9 kr.
   await expect(page.getByTestId("price-total")).toHaveText(/99/);
+  // The spot can be shared; the link keeps the times.
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  await panel.getByRole("button", { name: "Kopiera länk" }).click();
+  await expect(panel.getByRole("button", { name: "Kopierad!" })).toBeVisible();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toMatch(/\/plats\/[0-9a-f-]+\?from=/);
 
   await page.getByRole("button", { name: "Logga in och boka" }).click();
   await expect(page).toHaveURL(/logga-in/);

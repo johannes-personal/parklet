@@ -1,7 +1,7 @@
 "use client";
 
 import { useFieldIds } from "@/components/use-field-ids";
-import { useActionState, useRef } from "react";
+import { useActionState, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import {
   createAccountAction,
@@ -111,7 +111,12 @@ export function DocumentSlot({
 }) {
   const f = useFieldIds();
   const form = useRef<HTMLFormElement>(null);
-  const [state, action] = useActionState<FormState, FormData>(uploadDocumentAction, null);
+  // The latest of "uploaded" or "deleted" is shown, so a deletion replaces the upload's confirmation.
+  const [notice, setNotice] = useState<FormState>(null);
+  const [state, action] = useActionState<FormState, FormData>((prev, data) => {
+    setNotice(null);
+    return uploadDocumentAction(prev, data);
+  }, null);
   const done = docs.length > 0;
   return (
     <section aria-labelledby={f("title")} className="rounded-xl border border-line p-4">
@@ -138,14 +143,14 @@ export function DocumentSlot({
                     </a>
                     {d.kindLabel ? <span className="text-muted">{d.kindLabel}</span> : null}
                   </span>
-                  {canDelete ? <DeleteDocumentButton accountId={accountId} spotId={spotId} documentId={d.id} filename={d.filename} /> : null}
+                  {canDelete ? <DeleteDocumentButton accountId={accountId} spotId={spotId} documentId={d.id} filename={d.filename} onResult={setNotice} /> : null}
                 </li>
               ))}
             </ul>
           ) : null}
 
           <form ref={form} action={action} className="mt-3 space-y-3">
-            <FormAlert state={state} />
+            <FormAlert state={notice ?? state} />
             <input type="hidden" name="accountId" value={accountId} />
             <input type="hidden" name="spotId" value={spotId} />
             {kind ? <input type="hidden" name="kind" value={kind} /> : null}
@@ -204,8 +209,25 @@ function FilePickButton({ htmlFor, children }: { htmlFor: string; children: Reac
   );
 }
 
-function DeleteDocumentButton({ accountId, spotId, documentId, filename }: { accountId: string; spotId: string; documentId: string; filename: string }) {
-  const [state, action] = useActionState<FormState, FormData>(deleteDocumentAction, null);
+function DeleteDocumentButton({
+  accountId,
+  spotId,
+  documentId,
+  filename,
+  onResult,
+}: {
+  accountId: string;
+  spotId: string;
+  documentId: string;
+  filename: string;
+  /** Reported to the slot, since this row disappears once the file is gone. */
+  onResult: (state: FormState) => void;
+}) {
+  const [, action] = useActionState<FormState, FormData>(async (prev, data) => {
+    const result = await deleteDocumentAction(prev, data);
+    onResult(result?.success ? { success: `${filename} är borttagen.` } : result);
+    return result;
+  }, null);
   return (
     <form
       action={action}
@@ -217,7 +239,6 @@ function DeleteDocumentButton({ accountId, spotId, documentId, filename }: { acc
       <input type="hidden" name="accountId" value={accountId} />
       <input type="hidden" name="spotId" value={spotId} />
       <input type="hidden" name="documentId" value={documentId} />
-      {state?.error ? <span className="mr-2 text-danger">{state.error}</span> : null}
       <SubmitButton className="btn-danger px-3 py-1.5" pendingText="Tar bort…">
         Ta bort<span className="sr-only"> {filename}</span>
       </SubmitButton>
