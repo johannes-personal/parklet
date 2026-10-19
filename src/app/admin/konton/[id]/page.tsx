@@ -8,6 +8,7 @@ import { ReviewForm } from "@/app/admin/review-form";
 import { db } from "@/db";
 import { hostAccounts } from "@/db/schema";
 import { requireAdmin } from "@/lib/auth/session";
+import { formMatchesKind } from "@/lib/bolagsverket";
 import { DOCUMENT_KIND_LABEL } from "@/lib/labels";
 import { HOST_KIND_LABEL, listAccountDocuments, listMembers } from "@/server/host-accounts";
 import { isUuid } from "@/server/ids";
@@ -44,6 +45,14 @@ async function Content({ params, searchParams }: P) {
         {[
           ["Typ", HOST_KIND_LABEL[account.kind]],
           ["Organisationsnummer", account.orgNumber ?? "–"],
+          [
+            "Bolagsverket",
+            account.registryCheckedAt
+              ? `${account.registryName} · ${account.registryForm ?? "okänd form"} · ${account.registryStatus === "liquidation" ? "under avveckling/omstrukturering" : "aktiv"}${
+                  account.kind !== "household" && formMatchesKind(account.registryForm, account.kind) === false ? " · ⚠ formen stämmer inte med vald typ" : ""
+                }`
+              : "Inte kontrollerat automatiskt – kontrollera manuellt",
+          ],
           ["Uppgiven roll", account.signatoryRole ?? "–"],
           ["Administratörer", members.map((m) => `${m.name} (${m.email}, ${m.role})`).join("; ")],
           ["Status", account.verificationStatus],

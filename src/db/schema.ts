@@ -33,15 +33,19 @@ export const users = pgTable(
     passwordHash: text("password_hash").notNull(),
     isAdmin: boolean("is_admin").notNull().default(false),
     /**
-     * Set when the person has proven their identity with an e-ID (BankID /
-     * Freja). The MVP stores only the fact and a provider reference. In
-     * production, hosts' personnummer must be kept (encrypted, access
-     * restricted) because DAC7 requires reporting sellers' TIN to Skatteverket;
-     * drivers' personnummer should never be stored.
+     * Set when the person has proven their identity with an e-ID (BankID
+     * through Idura). Only hosts go through this: DAC7 requires reporting
+     * sellers' TIN (personnummer) to Skatteverket, so it is kept, encrypted
+     * with IDENTITY_ENCRYPTION_KEY. Drivers' personnummer is never stored.
      */
     identityVerifiedAt: ts("identity_verified_at"),
     identityProvider: text("identity_provider"),
+    /** The e-ID broker's stable pseudonym for the person (`sub`). */
     identityRef: text("identity_ref"),
+    /** Name as stated by the e-ID. */
+    identityName: text("identity_name"),
+    /** AES-256-GCM, see src/lib/crypto.ts. */
+    personnummerEncrypted: text("personnummer_encrypted"),
     createdAt: createdAt(),
   },
   (t) => [uniqueIndex("users_email_key").on(t.email)],
@@ -60,6 +64,22 @@ export const sessions = pgTable(
   },
   (t) => [index("sessions_user_id_idx").on(t.userId)],
 );
+
+/**
+ * In-flight e-ID logins: the OIDC state, nonce and PKCE verifier between
+ * redirecting to the broker and its callback. Rows live for ten minutes.
+ */
+export const identityRequests = pgTable("identity_requests", {
+  state: text("state").primaryKey(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  nonce: text("nonce").notNull(),
+  codeVerifier: text("code_verifier").notNull(),
+  next: text("next").notNull(),
+  expiresAt: ts("expires_at").notNull(),
+  createdAt: createdAt(),
+});
 
 export const passwordResetTokens = pgTable("password_reset_tokens", {
   id: text("id").primaryKey(),
@@ -105,6 +125,12 @@ export const hostAccounts = pgTable("host_accounts", {
   orgNumber: text("org_number"),
   /** What the person who created the account says their mandate is, e.g. "Styrelseledamot". */
   signatoryRole: text("signatory_role"),
+  /** Result of the lookup at Bolagsverket when the account was created (null: not checked). */
+  registryCheckedAt: ts("registry_checked_at"),
+  registryName: text("registry_name"),
+  registryForm: text("registry_form"),
+  /** "active" | "liquidation" (deregistered organisations are refused). */
+  registryStatus: text("registry_status"),
   verificationStatus: verificationStatusEnum("verification_status").notNull().default("unverified"),
   reviewNote: text("review_note"),
   reviewedAt: ts("reviewed_at"),

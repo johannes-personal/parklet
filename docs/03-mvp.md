@@ -15,7 +15,7 @@
 - "Mina bokningar", "Mina fordon", free cancellation inside the spot's window.
 
 **Hosts** (private person, BRF or company)
-- Host account → BankID (mock) → payout account (mock Stripe Connect) → spot → documents → review.
+- Host account → BankID (Idura over OpenID Connect; a mock when not configured) → payout account (mock Stripe Connect) → spot → documents → review.
 - Spot form: address search plus a draggable pin, type and features, schedule presets or
   custom per-weekday hours (overnight supported), hourly price with a daily cap, minimum length,
   notice period, cancellation window, access instructions, public or link-only visibility.
@@ -61,8 +61,11 @@ draft ──(required documents present)──► pending_review ──(admin)�
        (see #3). The token is single-use and stored hashed.
     2. **Uploaded written approval** (`sublet_permission`).
 - **Organisations** (BRF/company) also verify the organisation itself: a valid org.nr
-  (Luhn-checked), a registration certificate, and board minutes or proof of signatory
-  authority. An admin reviews these before the account is "verified".
+  (Luhn-checked) that Bolagsverket's free register API confirms exists and isn't
+  deregistered (the registered name is used), a registration certificate, and board minutes
+  or proof of signatory authority. An admin reviews these before the account is "verified".
+  Next step: Bolagsverket's paid API can confirm that the BankID-verified person may sign for
+  the organisation, which would make the document review unnecessary in most cases.
 - **Nothing is bookable until everything holds.** Search and booking share one SQL condition
   (`bookableSql`): the spot is active, the spot is approved, the account is verified, and
   payouts are connected.
@@ -100,7 +103,8 @@ obligations (penningtvättslagen) for checking hosts.
   for hosts and report their income to **Skatteverket** every year (deadline 31 January).
   Renting out parking counts as renting out immovable property. So hosts' personnummer has
   to be stored after all: encrypted, access-restricted, taken from BankID rather than typed.
-  Drivers' personnummer is never needed.
+  Drivers' personnummer is never needed. Implemented: the BankID login stores the verified
+  name and the personnummer encrypted with AES-256-GCM (`IDENTITY_ENCRYPTION_KEY`).
 - **VAT.** Parklet's service fee is subject to 25% Swedish VAT. Hosts that are businesses
   (companies, some associations) may themselves have to charge VAT on parking. Receipts
   must show seller, VAT and Parklet's fee separately. Confirm with an accountant.
@@ -170,7 +174,8 @@ See the [README](../README.md).
 
 ## Not in the MVP (suggested order)
 
-1. **Real integrations**: Stripe Connect plus webhook route, Criipto BankID, Postmark,
+1. **Real integrations**: Stripe Connect plus webhook route, Idura BankID in production
+   (done in test; needs a subscription and production certificate), Postmark,
    S3-compatible storage, MapTiler. Each replaces one module.
 2. **DAC7 data collection and the annual export**; receipts with VAT.
 3. **Spot photos** (host upload, moderation).

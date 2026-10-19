@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import path from "node:path";
-import { lastMailLink, localAt, login, logout } from "./helpers";
+import postgres from "postgres";
+import { E2E_DB, lastMailLink, localAt, login, logout } from "./helpers";
 
 const fixture = (name: string) => path.resolve("e2e/fixtures", name);
 
@@ -21,9 +22,25 @@ test("a new host onboards, proves the right to rent via BRF approval, and gets a
   await page.getByRole("button", { name: "Skapa uthyrarkonto" }).click();
   await expect(page.getByRole("heading", { name: "Innan du kan ta emot bokningar" })).toBeVisible();
 
-  // BankID (mock) and payouts (mock)
+  // BankID through the fake Idura: cancelling first returns with a message, then approve.
   await page.getByRole("link", { name: "Legitimera dig" }).click();
-  await page.getByRole("button", { name: "Legitimera (testläge)" }).click();
+  await page.getByRole("button", { name: "Legitimera med BankID" }).click();
+  await expect(page.getByRole("heading", { name: "Fake BankID" })).toBeVisible();
+  await page.getByRole("button", { name: "Avbryt" }).click();
+  await expect(page.getByText("Legitimeringen avbröts.")).toBeVisible();
+  await page.getByRole("button", { name: "Legitimera med BankID" }).click();
+  await page.getByRole("button", { name: "Godkänn" }).click();
+  await expect(page.getByRole("heading", { name: "Innan du kan ta emot bokningar" })).toBeVisible();
+
+  // The verified name is kept and the personnummer only in encrypted form.
+  const sql = postgres(E2E_DB, { max: 1 });
+  const [stored] = await sql`select identity_provider, identity_name, personnummer_encrypted from users where email = ${email}`;
+  await sql.end();
+  expect(stored).toMatchObject({ identity_provider: "idura-sebankid", identity_name: "Lisa Uthyrare" });
+  expect(stored.personnummer_encrypted).toMatch(/^v1\./);
+  expect(stored.personnummer_encrypted).not.toContain("199001012384");
+
+  // Payouts (mock)
   await page.getByRole("button", { name: "Koppla utbetalningskonto (testläge)" }).click();
   await expect(page.getByText("Utbetalningskontot är kopplat.")).toBeVisible();
   const accountUrl = new URL(page.url()).pathname;
@@ -128,10 +145,21 @@ test("an association verifies itself and invites another administrator", async (
   await page.getByRole("button", { name: "Skapa uthyrarkonto" }).click();
   await expect(page.getByText("Ange ett giltigt organisationsnummer")).toBeVisible();
 
+  // Valid checksum, but Bolagsverket doesn't know it; then one that is deregistered.
+  await page.getByLabel("Organisationsnummer").fill("802000-5552");
+  await page.getByRole("checkbox", { name: /intygar/ }).check();
+  await page.getByRole("button", { name: "Skapa uthyrarkonto" }).click();
+  await expect(page.getByText("Vi hittar ingen organisation med det numret hos Bolagsverket.")).toBeVisible();
+  await page.getByLabel("Organisationsnummer").fill("769600-9997");
+  await page.getByRole("checkbox", { name: /intygar/ }).check();
+  await page.getByRole("button", { name: "Skapa uthyrarkonto" }).click();
+  await expect(page.getByText("Brf Nedlagd är avregistrerad hos Bolagsverket.")).toBeVisible();
+
+  // Found: the account takes the registered name rather than the typed one.
   await page.getByLabel("Organisationsnummer").fill("769600-1234");
   await page.getByRole("checkbox", { name: /intygar/ }).check();
   await page.getByRole("button", { name: "Skapa uthyrarkonto" }).click();
-  await expect(page.getByRole("heading", { name: "Brf Testgården" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Bostadsrättsföreningen Testgården" })).toBeVisible();
 
   await page.getByLabel("Typ av dokument").selectOption("org_registration");
   await page.getByLabel(/^Fil/).setInputFiles(fixture("hyresavtal.pdf"));
@@ -151,7 +179,14 @@ test("an association verifies itself and invites another administrator", async (
   await login(page, "erik@parklet.test");
   await page.goto(lastMailLink("/inbjudan/"));
   await page.getByRole("button", { name: "Acceptera inbjudan" }).click();
-  await expect(page.getByRole("heading", { name: "Brf Testgården" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Bostadsrättsföreningen Testgården" })).toBeVisible();
+
+  // The reviewer sees what Bolagsverket said.
+  await logout(page);
+  await login(page, "admin@parklet.test");
+  await page.goto("/admin");
+  await page.getByRole("link", { name: "Bostadsrättsföreningen Testgården" }).click();
+  await expect(page.getByText("Bostadsrättsföreningen Testgården · Bostadsrättsförening · aktiv")).toBeVisible();
 });
 
 test("uploads are checked by content, not by file name", async ({ page }) => {
