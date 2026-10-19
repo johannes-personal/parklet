@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import path from "node:path";
 import postgres from "postgres";
-import { E2E_DB, lastMailLink, localAt, login, logout } from "./helpers";
+import { E2E_DB, lastMailLink, localAt, login, logout, pickRange } from "./helpers";
 
 const fixture = (name: string) => path.resolve("e2e/fixtures", name);
 
@@ -49,6 +49,7 @@ test("a new host onboards, proves the right to rent via BRF approval, and gets a
   await page.getByRole("link", { name: "Lägg upp en plats" }).first().click();
   await page.getByLabel("Adress", { exact: true }).fill("Vegagatan 12");
   await page.getByLabel("Ort").fill("Göteborg");
+  await page.getByTestId("location-picker").locator("canvas").waitFor();
   await page.getByTestId("location-picker").click(); // places the pin
   await page.getByLabel("Rubrik").fill("Plats i Linnéstaden");
   await page.getByRole("radio", { name: /Jag hyr platsen/ }).check();
@@ -111,17 +112,21 @@ test("a new host onboards, proves the right to rent via BRF approval, and gets a
   await page.goto(spotUrl.replace(/.*platser\//, "/plats/"));
   await expect(page.getByText("Krävs av föreningen.")).toBeVisible();
   const form = page.getByRole("form", { name: "Boka platsen" });
-  await form.getByLabel("Från").fill(localAt(3, 10));
-  await form.getByLabel("Till").fill(localAt(3, 12));
+  await pickRange(form, localAt(3, 10), localAt(3, 12));
   await page.getByRole("button", { name: "Fortsätt till betalning" }).click();
   await page.getByRole("button", { name: /Betala .* \(testläge\)/ }).click();
   await expect(page.getByText("Väntar på att uthyraren registrerar bilen")).toBeVisible();
   const bookingUrl = new URL(page.url()).pathname;
   await logout(page);
 
-  // Host registers the car
+  // The host sees the car to register in the bell
   await login(page, email, "ett riktigt bra lösenord");
-  await page.goto(accountUrl);
+  await page.getByRole("button", { name: /^Notiser, \d+ att se över/ }).click();
+  await expect(page.getByRole("link", { name: /Registrera ABC123/ })).toBeVisible();
+  await page.getByRole("link", { name: "Registrera en bil" }).click();
+  await expect(page).toHaveURL(new RegExp(`${accountUrl}#bilar$`));
+
+  // Host registers the car
   await expect(page.getByRole("heading", { name: "Bilar att registrera" })).toBeVisible();
   await expect(page.getByText("ABC123", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Markera som registrerad" }).click();
@@ -129,7 +134,9 @@ test("a new host onboards, proves the right to rent via BRF approval, and gets a
   await logout(page);
 
   await login(page, "forare@parklet.test");
-  await page.goto(bookingUrl);
+  await page.getByRole("button", { name: /^Notiser/ }).click();
+  await page.getByRole("link", { name: /ABC123 är registrerad/ }).click();
+  await expect(page).toHaveURL(new RegExp(`${bookingUrl}$`));
   await expect(page.getByText(/^Registrerad/)).toBeVisible();
 });
 
@@ -195,6 +202,7 @@ test("uploads are checked by content, not by file name", async ({ page }) => {
   await page.getByRole("link", { name: "Lägg upp en plats" }).first().click();
   await page.getByLabel("Adress", { exact: true }).fill("Storgatan 1");
   await page.getByLabel("Ort").fill("Uppsala");
+  await page.getByTestId("location-picker").locator("canvas").waitFor();
   await page.getByTestId("location-picker").click();
   await page.getByLabel("Rubrik").fill("Test av uppladdning");
   await page.getByRole("radio", { name: /äger platsen/ }).check();

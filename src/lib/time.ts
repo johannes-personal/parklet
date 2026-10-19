@@ -49,13 +49,6 @@ export function formatDuration(minutes: number): string {
   return parts.join(" ") || "0 min";
 }
 
-/** The next quarter hour from `now`, in Stockholm time. */
-export function nextQuarterHour(now: Date = new Date()): Date {
-  const dt = DateTime.fromJSDate(now, { zone: TZ }).startOf("minute");
-  const add = 15 - (dt.minute % 15);
-  return dt.plus({ minutes: add }).toJSDate();
-}
-
 export function addMinutes(date: Date, minutes: number): Date {
   return new Date(date.getTime() + minutes * 60_000);
 }
@@ -75,4 +68,39 @@ export function parseMinuteOfDay(value: string): number | null {
   const mm = Number(m[2]);
   if (mm > 59 || h > 24 || (h === 24 && mm !== 0)) return null;
   return h * 60 + mm;
+}
+
+/* ------------------------------------------------- date and time picker */
+
+/** Bookings start and end on whole five minutes. */
+export const STEP_MINUTES = 5;
+
+/** `date` rounded down (or up) to the five-minute step, in Stockholm time. */
+export function roundToStep(date: Date, direction: "down" | "up" = "down"): Date {
+  const dt = DateTime.fromJSDate(date, { zone: TZ }).startOf("minute");
+  const rest = dt.minute % STEP_MINUTES;
+  if (rest === 0) return dt.toJSDate();
+  return dt.plus({ minutes: direction === "down" ? -rest : STEP_MINUTES - rest }).toJSDate();
+}
+
+export type LocalParts = { date: string; hour: number; minute: number };
+
+/** "2026-10-16T08:05" → { date: "2026-10-16", hour: 8, minute: 5 } */
+export function splitLocal(value: string | null | undefined): LocalParts | null {
+  const m = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})$/.exec(value ?? "");
+  return m ? { date: m[1], hour: Number(m[2]), minute: Number(m[3]) } : null;
+}
+
+export function joinLocal({ date, hour, minute }: LocalParts): string {
+  return `${date}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+/** Days to choose from, starting today: "Idag, mån 19 okt", "Imorgon, tis 20 okt", "ons 21 okt", … */
+export function dayOptions(now: Date, count: number): { value: string; label: string }[] {
+  const today = DateTime.fromJSDate(now, { zone: TZ }).setLocale(LOCALE).startOf("day");
+  return Array.from({ length: count }, (_, i) => {
+    const d = today.plus({ days: i });
+    const label = d.toFormat("ccc d LLL");
+    return { value: d.toFormat("yyyy-MM-dd"), label: i === 0 ? `Idag, ${label}` : i === 1 ? `Imorgon, ${label}` : label };
+  });
 }

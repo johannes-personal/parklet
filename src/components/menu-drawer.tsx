@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { logoutAction } from "@/app/(auth)/actions";
 
-type Props = { user: { name: string; isAdmin: boolean } | null };
+type Props = { user: { name: string; isAdmin: boolean; isHost: boolean } | null };
 
 /** Full-height side menu, like the original's hamburger menu. A modal <dialog> handles focus and Escape. */
 export function MenuDrawer({ user }: Props) {
@@ -23,10 +23,10 @@ export function MenuDrawer({ user }: Props) {
       ? [
           { href: "/mina-bokningar", label: "Mina bokningar" },
           { href: "/fordon", label: "Mina fordon" },
-          { href: "/uthyrare", label: "Uthyrning" },
         ]
       : []),
-    { href: "/hyr-ut", label: "Hyr ut parkeringsplats" },
+    // Hosts go to their dashboard; everyone else is shown how hosting works.
+    user?.isHost ? { href: "/uthyrare", label: "Uthyrning" } : { href: "/hyr-ut", label: "Hyr ut parkeringsplats" },
     ...(user?.isAdmin ? [{ href: "/admin", label: "Granskning" }] : []),
   ];
 

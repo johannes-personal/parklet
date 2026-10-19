@@ -16,6 +16,8 @@ const eslintConfig = defineConfig([
     "playwright-report/**",
     "test-results/**",
     "storage/**",
+    // MapLibre, copied from node_modules (scripts/copy-maplibre.mjs).
+    "public/maplibre/**",
   ]),
 ]);
 

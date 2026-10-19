@@ -1,14 +1,13 @@
 "use client";
 
-import "leaflet/dist/leaflet.css";
-import type * as Leaflet from "leaflet";
+import "maplibre-gl/dist/maplibre-gl.css";
 import { useEffect, useRef, useState } from "react";
-import { loadLeaflet, tileAttribution, tileUrl } from "./leaflet-loader";
+import { createMap, loadMap, type MapLibre } from "./maplibre";
 
 /**
  * Lets a host place a pin on the exact spot. Writes `lat`/`lng` hidden inputs
- * for the surrounding form. Exposes `moveTo` through the `target` prop so an
- * address search can jump the map.
+ * for the surrounding form. Moving `target` (from an address search) jumps the
+ * map there. Zooming needs Ctrl/⌘ + scroll, so scrolling the form isn't captured.
  */
 export function LocationPicker({
   defaultValue,
@@ -20,34 +19,42 @@ export function LocationPicker({
   invalid?: boolean;
 }) {
   const el = useRef<HTMLDivElement>(null);
-  const map = useRef<Leaflet.Map | null>(null);
-  const marker = useRef<Leaflet.Marker | null>(null);
+  const map = useRef<MapLibre.Map | null>(null);
+  const place = useRef<((lng: number, lat: number) => void) | null>(null);
   const [pos, setPos] = useState<{ lat: number; lng: number } | null>(defaultValue ?? null);
 
   useEffect(() => {
     let cancelled = false;
-    loadLeaflet().then((L) => {
+    loadMap().then(({ maplibregl, style }) => {
       if (cancelled || !el.current || map.current) return;
-      const m = L.map(el.current, { scrollWheelZoom: false });
-      map.current = m;
-      L.tileLayer(tileUrl, { attribution: tileAttribution, maxZoom: 19 }).addTo(m);
       const start = defaultValue ?? { lat: 62, lng: 15 };
-      m.setView([start.lat, start.lng], defaultValue ? 17 : 5);
-      const icon = L.divIcon({ className: "", html: '<span class="price-pin is-active">P</span>', iconSize: [0, 0] });
-      const place = (lat: number, lng: number) => {
-        if (!marker.current) {
-          marker.current = L.marker([lat, lng], { icon, draggable: true }).addTo(m);
-          marker.current.on("dragend", () => {
-            const p = marker.current!.getLatLng();
+      const m = createMap(maplibregl, {
+        container: el.current,
+        style,
+        center: [start.lng, start.lat],
+        zoom: defaultValue ? 16.5 : 4,
+        cooperativeGestures: true,
+        locale: { "CooperativeGesturesHandler.WindowsHelpText": "Håll Ctrl och scrolla för att zooma", "CooperativeGesturesHandler.MacHelpText": "Håll ⌘ och scrolla för att zooma", "CooperativeGesturesHandler.MobileHelpText": "Använd två fingrar för att flytta kartan" },
+      });
+      if (!m) return;
+      map.current = m;
+      m.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
+      let marker: MapLibre.Marker | null = null;
+      place.current = (lng, lat) => {
+        if (!marker) {
+          const node = document.createElement("span");
+          node.className = "price-pin is-active";
+          node.textContent = "P";
+          marker = new maplibregl.Marker({ element: node, draggable: true }).setLngLat([lng, lat]).addTo(m);
+          marker.on("dragend", () => {
+            const p = marker!.getLngLat();
             setPos({ lat: p.lat, lng: p.lng });
           });
-        } else marker.current.setLatLng([lat, lng]);
+        } else marker.setLngLat([lng, lat]);
         setPos({ lat, lng });
       };
-      if (defaultValue) place(defaultValue.lat, defaultValue.lng);
-      m.on("click", (e: Leaflet.LeafletMouseEvent) => place(e.latlng.lat, e.latlng.lng));
-      (el.current as HTMLDivElement & { __place?: typeof place }).__place = place;
-      setTimeout(() => m.invalidateSize(), 0);
+      if (defaultValue) place.current(defaultValue.lng, defaultValue.lat);
+      m.on("click", (e) => place.current?.(e.lngLat.lng, e.lngLat.lat));
     });
     return () => {
       cancelled = true;
@@ -56,9 +63,9 @@ export function LocationPicker({
   }, []);
 
   useEffect(() => {
-    if (!target || !map.current || !el.current) return;
-    map.current.setView([target.lat, target.lng], 18);
-    (el.current as HTMLDivElement & { __place?: (a: number, b: number) => void }).__place?.(target.lat, target.lng);
+    if (!target || !map.current) return;
+    map.current.jumpTo({ center: [target.lng, target.lat], zoom: 17.5 });
+    place.current?.(target.lng, target.lat);
   }, [target]);
 
   useEffect(
@@ -74,7 +81,7 @@ export function LocationPicker({
       <div
         ref={el}
         data-testid="location-picker"
-        className={`z-0 h-72 w-full overflow-hidden rounded-xl border ${invalid ? "border-danger" : "border-line"}`}
+        className={`z-0 h-72 w-full overflow-hidden rounded-xl border bg-[#292929] ${invalid ? "border-danger" : "border-line"}`}
         role="application"
         aria-label="Karta: klicka för att placera platsen"
       />

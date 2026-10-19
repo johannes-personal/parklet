@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { decryptField, encryptField } from "@/lib/crypto";
+import { decryptField, encryptField, hasEncryptionKey } from "@/lib/crypto";
 import { normalizePersonnummer } from "@/lib/personnummer";
 
 describe("field encryption", () => {
@@ -17,6 +17,20 @@ describe("field encryption", () => {
     expect(decryptField(stored)).toBe("199001012384");
   });
 
+  it("accepts base64 or hex keys, with stray quotes or whitespace, and rejects anything else", () => {
+    const k = Buffer.alloc(32, 9);
+    for (const value of [k.toString("base64"), k.toString("hex"), ` "${k.toString("base64")}"\n`]) {
+      process.env.IDENTITY_ENCRYPTION_KEY = value;
+      expect(hasEncryptionKey()).toBe(true);
+      expect(decryptField(encryptField("x"))).toBe("x");
+    }
+    for (const value of ["", "openssl rand -base64 32", Buffer.alloc(16, 1).toString("base64"), Buffer.alloc(48, 1).toString("base64")]) {
+      process.env.IDENTITY_ENCRYPTION_KEY = value;
+      expect(hasEncryptionKey()).toBe(false);
+      expect(() => encryptField("x")).toThrow();
+    }
+  });
+
   it("rejects tampering and the wrong key", () => {
     process.env.IDENTITY_ENCRYPTION_KEY = Buffer.alloc(32, 7).toString("base64");
     const stored = encryptField("199001012384");
@@ -30,7 +44,7 @@ describe("field encryption", () => {
 
   it("requires a 32-byte key", () => {
     delete process.env.IDENTITY_ENCRYPTION_KEY;
-    expect(() => encryptField("x")).toThrow(/not set/);
+    expect(() => encryptField("x")).toThrow(/32 bytes/);
     process.env.IDENTITY_ENCRYPTION_KEY = Buffer.alloc(16).toString("base64");
     expect(() => encryptField("x")).toThrow(/32 bytes/);
   });

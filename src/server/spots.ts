@@ -9,6 +9,7 @@ import { generateToken, hashToken } from "@/lib/auth/tokens";
 import type { SpotInput } from "@/lib/validation";
 import { isUuid } from "./ids";
 import { sendMail } from "./mailer";
+import { notifyAccount } from "./notifications";
 
 export { isUuid };
 
@@ -241,6 +242,15 @@ export async function respondToLandlordApproval(
       ...(input.approve ? {} : { review: sql`case when ${spots.review} = 'approved' then 'rejected'::spot_review else ${spots.review} end` }),
     })
     .where(eq(spots.id, found.spot.id));
+  const who = input.role ? `${input.name} (${input.role})` : input.name;
+  await notifyAccount(found.spot.hostAccountId, {
+    kind: "landlord_response",
+    title: input.approve ? `${found.spot.title}: uthyrningen är godkänd` : `${found.spot.title}: uthyrningen nekades`,
+    body: input.approve
+      ? `${who} har godkänt att platsen hyrs ut via Parklet.${input.requiresVehicleRegistration ? " Föreningen kräver att tillfälliga hyresgästers bilar registreras." : ""} Skicka in platsen för granskning om du inte redan har gjort det.`
+      : `${who} har nekat uthyrning av platsen. Den kan inte hyras ut via Parklet.`,
+    href: `/uthyrare/${found.spot.hostAccountId}/platser/${found.spot.id}`,
+  });
   return { ok: true as const };
 }
 

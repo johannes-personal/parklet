@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import type { FormState } from "@/components/form";
-import { getCurrentUser } from "@/lib/auth/session";
+import { getCurrentUser, safeNext } from "@/lib/auth/session";
 import { parseLocalDateTime } from "@/lib/time";
 import { normalizeVehicleReg } from "@/lib/validation";
 import { createBooking } from "@/server/bookings";
@@ -17,8 +17,11 @@ export async function bookAction(_prev: FormState, formData: FormData): Promise<
 
   const user = await getCurrentUser();
   if (!user) {
-    const back = `/plats/${spotId}?from=${encodeURIComponent(fromRaw)}&to=${encodeURIComponent(toRaw)}`;
-    redirect(`/logga-in?next=${encodeURIComponent(back)}`);
+    // Back to the spot page or the search overlay it was booked from, with the chosen times.
+    const back = new URL(safeNext(formData.get("returnTo"), `/plats/${spotId}`), "http://x");
+    back.searchParams.set("from", fromRaw);
+    back.searchParams.set("to", toRaw);
+    redirect(`/logga-in?next=${encodeURIComponent(back.pathname + back.search)}`);
   }
 
   const start = parseLocalDateTime(fromRaw);

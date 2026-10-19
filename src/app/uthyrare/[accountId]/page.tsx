@@ -152,7 +152,7 @@ async function Dashboard({ params, searchParams }: P) {
       ) : null}
 
       {regTasks.length ? (
-        <section className="card border-warn/40 p-5 sm:p-6" aria-labelledby="tasks">
+        <section id="bilar" className="card scroll-mt-24 border-warn/40 p-5 sm:p-6" aria-labelledby="tasks">
           <h2 id="tasks" className="text-lg font-semibold">
             Bilar att registrera
           </h2>

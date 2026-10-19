@@ -17,7 +17,7 @@ to run for a small team.
 | Validation | **Zod** | One schema shared by forms and server |
 | Auth | Email + password (MVP), then **BankID / Freja eID** via **Criipto** or **Signicat** (OIDC); passkeys later | Swedes expect BankID. A broker gives verified name and personnummer for host verification and DAC7, and removes passwords for most users |
 | Payments | **Stripe Connect** (Express accounts, destination charges); alternatives Adyen for Platforms or Mangopay | Licensed partner holds the funds, so Parklet needs no payment institution licence. Handles KYC/AML on hosts, SCA/3-D Secure, cards, Apple/Google Pay, Klarna and Swish, refunds and payouts. See `03-mvp.md` |
-| Maps | **MapLibre GL** + **MapTiler** or **Stadia** tiles (MVP: Leaflet + OSM tiles for development) | No vendor lock-in, EU providers, predictable pricing. OSM's public tiles are not allowed for production traffic |
+| Maps | **MapLibre GL** + **OpenFreeMap** vector tiles (MapTiler or Stadia if an SLA is needed) | No vendor lock-in, no key, commercial use allowed; one dark style for the interactive maps and the background. OSM's public tiles are not allowed for production traffic |
 | Geocoding | **Photon** (self-hosted, OSM) or **Mapbox Search** / **Lantmäteriet** | Swedish addresses, server-side proxy for caching and rate limiting |
 | Document storage | **S3-compatible bucket in the EU** (Supabase Storage, Cloudflare R2 EU jurisdiction, or Scaleway), private, encrypted, with lifecycle rules | Ownership proofs and rental contracts are sensitive personal data |
 | Email | **Postmark** or **Resend** | Transactional deliverability, templates, bounce handling |

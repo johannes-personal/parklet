@@ -50,3 +50,6 @@ next-env.d.ts
 /test-results/
 /playwright-report/
 /blob-report/
+
+# Copied from node_modules by scripts/copy-maplibre.mjs
+/public/maplibre/

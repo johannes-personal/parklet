@@ -29,7 +29,8 @@ async function BookingDetails({ params, searchParams }: PageProps<"/bokning/[id]
   const isDriver = b.driverId === user.id;
   const active = b.status === "confirmed" && b.endsAt > new Date();
   const deadline = driverCancellationDeadline(b, b.spot.cancellationHours);
-  const canCancelFree = isDriver && active && new Date() < deadline;
+  const waitingForHost = b.vehicleRegistration === "pending";
+  const canCancelFree = isDriver && active && (waitingForHost || new Date() < deadline);
   const maps = `https://www.google.com/maps/dir/?api=1&destination=${b.spot.lat},${b.spot.lng}`;
 
   return (
@@ -62,7 +63,10 @@ async function BookingDetails({ params, searchParams }: PageProps<"/bokning/[id]
             {b.vehicleRegistration === "done" ? (
               <span className="font-medium text-ok">Registrerad {b.vehicleRegisteredAt ? formatDateTime(b.vehicleRegisteredAt) : ""}</span>
             ) : (
-              <span className="font-medium text-warn">Väntar på att uthyraren registrerar bilen</span>
+              <span className="font-medium text-warn">
+                Väntar på att uthyraren registrerar bilen
+                {isDriver && b.startsAt <= new Date() ? " – parkera inte förrän den är registrerad, annars riskerar du en kontrollavgift" : ""}
+              </span>
             )}
             {b.spot.vehicleRegistrationNote ? <span className="block text-sm text-muted">{b.spot.vehicleRegistrationNote}</span> : null}
             {b.viewerIsHost && b.vehicleRegistration === "pending" && b.status === "confirmed" ? (
@@ -104,7 +108,11 @@ async function BookingDetails({ params, searchParams }: PageProps<"/bokning/[id]
         <section className="mt-6">
           {canCancelFree ? (
             <>
-              <p className="mb-3 text-sm text-ink-soft">Kostnadsfri avbokning fram till {formatDateTime(deadline)}.</p>
+              <p className="mb-3 text-sm text-ink-soft">
+                {waitingForHost && new Date() >= deadline
+                  ? "Bilen är inte registrerad än, så du kan avboka kostnadsfritt tills uthyraren har registrerat den."
+                  : `Kostnadsfri avbokning fram till ${formatDateTime(deadline)}${waitingForHost ? ", och så länge bilen inte är registrerad" : ""}.`}
+              </p>
               <CancelButton bookingId={b.id} />
             </>
           ) : b.viewerIsHost ? (

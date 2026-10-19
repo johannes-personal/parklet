@@ -46,9 +46,6 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
               <Logo />
             </Link>
             <nav aria-label="Huvudmeny" className="flex items-center gap-4 text-sm sm:gap-6">
-              <Link href="/hyr-ut" className="hidden text-zinc-300 transition-colors hover:text-white md:inline-flex">
-                Bli uthyrare
-              </Link>
               <Suspense fallback={<AccountNavFallback />}>
                 <AccountNav />
               </Suspense>

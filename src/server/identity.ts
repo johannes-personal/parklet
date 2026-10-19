@@ -5,7 +5,7 @@ import * as oidc from "openid-client";
 import { db } from "@/db";
 import { hostAccountMembers, hostAccounts, identityRequests, users } from "@/db/schema";
 import { appUrl } from "@/lib/app-url";
-import { encryptField } from "@/lib/crypto";
+import { encryptField, hasEncryptionKey } from "@/lib/crypto";
 import { normalizePersonnummer } from "@/lib/personnummer";
 
 /**
@@ -26,11 +26,27 @@ const BANKID_ACR = "urn:grn:authn:se:bankid";
 export type IdentityMode = "idura" | "mock" | "unavailable";
 
 export function identityMode(): IdentityMode {
-  const { IDURA_ISSUER, IDURA_CLIENT_ID, IDURA_CLIENT_SECRET, IDENTITY_ENCRYPTION_KEY } = process.env;
+  const { IDURA_ISSUER, IDURA_CLIENT_ID, IDURA_CLIENT_SECRET } = process.env;
   // Half-configured is an error, not a reason to fall back to the mock.
-  if (IDURA_ISSUER) return IDURA_CLIENT_ID && IDURA_CLIENT_SECRET && IDENTITY_ENCRYPTION_KEY ? "idura" : "unavailable";
+  if (IDURA_ISSUER) {
+    if (IDURA_CLIENT_ID && IDURA_CLIENT_SECRET && hasEncryptionKey()) return "idura";
+    warnMisconfigured();
+    return "unavailable";
+  }
   if (process.env.NODE_ENV !== "production" || process.env.NEXT_PUBLIC_DEMO === "1") return "mock";
   return "unavailable";
+}
+
+let warned = false;
+function warnMisconfigured() {
+  if (warned) return;
+  warned = true;
+  const missing = [
+    !process.env.IDURA_CLIENT_ID && "IDURA_CLIENT_ID",
+    !process.env.IDURA_CLIENT_SECRET && "IDURA_CLIENT_SECRET",
+    !hasEncryptionKey() && "IDENTITY_ENCRYPTION_KEY (missing, or not 32 bytes base64/hex)",
+  ].filter(Boolean);
+  console.error(`identity: BankID is switched off until these are fixed: ${missing.join(", ")}`);
 }
 
 let configPromise: Promise<oidc.Configuration> | null = null;

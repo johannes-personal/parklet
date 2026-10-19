@@ -1,12 +1,16 @@
 import { expect, test } from "@playwright/test";
-import { localAt, login } from "./helpers";
+import { localAt, login, openResults } from "./helpers";
 
 test("driver books, pays, sees instructions and cancels", async ({ page }) => {
   const from = localAt(3, 10);
   const to = localAt(3, 13);
   await page.goto(`/sok?q=G%C3%B6teborg&lat=57.7089&lng=11.9746&from=${from}&to=${to}`);
+  await openResults(page);
   await page.getByText("Carport nära Liseberg").click();
-  await expect(page.getByRole("heading", { name: "Carport nära Liseberg" })).toBeVisible();
+  // The spot opens in a panel over the map, without leaving the search.
+  const panel = page.getByRole("complementary", { name: "Carport nära Liseberg" });
+  await expect(panel.getByRole("heading", { name: "Carport nära Liseberg" })).toBeVisible();
+  await expect(page).toHaveURL(/\/sok\?.*plats=/);
   // 3 h × 30 kr = 90 kr, plus a 10 % service fee of 9 kr.
   await expect(page.getByTestId("price-total")).toHaveText(/99/);
 
@@ -16,9 +20,10 @@ test("driver books, pays, sees instructions and cancels", async ({ page }) => {
   await page.getByLabel("Lösenord", { exact: true }).fill("parklet-demo-1");
   await page.getByRole("button", { name: "Logga in" }).click();
 
-  // Back on the spot with the times kept.
+  // Back on the spot, still over the search map, with the times kept.
+  await expect(page).toHaveURL(/\/sok\?.*plats=/);
   const form = page.getByRole("form", { name: "Boka platsen" });
-  await expect(form.getByLabel("Från")).toHaveValue(from);
+  await expect(form.locator('input[name="from"]')).toHaveValue(from);
   await form.getByRole("button", { name: "Fortsätt till betalning" }).click();
   await expect(page.getByRole("heading", { name: "Betala bokningen" })).toBeVisible();
   await page.getByRole("button", { name: /Betala .* \(testläge\)/ }).click();
@@ -42,10 +47,10 @@ test("a slot cannot be booked twice", async ({ browser }, testInfo) => {
   const a = await (await browser.newContext()).newPage();
   await login(a, "forare@parklet.test");
   await a.goto(url);
+  await openResults(a);
   await a.getByText("Uppfart Västra Hamnen").click();
-  // The result card has the same heading, so wait for the spot page itself.
-  await expect(a).toHaveURL(/\/plats\//);
-  await expect(a.getByRole("heading", { level: 1, name: "Uppfart Västra Hamnen" })).toBeVisible();
+  await expect(a).toHaveURL(/plats=/);
+  await expect(a.getByRole("complementary", { name: "Uppfart Västra Hamnen" })).toBeVisible();
   const spotUrl = new URL(a.url()).pathname + new URL(a.url()).search;
   await a.getByRole("button", { name: "Fortsätt till betalning" }).click();
   await expect(a.getByRole("heading", { name: "Betala bokningen" })).toBeVisible();
