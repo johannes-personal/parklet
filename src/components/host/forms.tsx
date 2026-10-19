@@ -1,9 +1,11 @@
 "use client";
 
 import { useFieldIds } from "@/components/use-field-ids";
-import { useActionState } from "react";
+import { useActionState, useRef } from "react";
+import { useFormStatus } from "react-dom";
 import {
   createAccountAction,
+  deleteDocumentAction,
   inviteAdminAction,
   requestApprovalAction,
   submitAccountAction,
@@ -67,6 +69,157 @@ export function DocumentUploader({
       ) : null}
       <SubmitButton className="btn-secondary" pendingText="Laddar upp…">
         Ladda upp
+      </SubmitButton>
+    </form>
+  );
+}
+
+export type SlotDocument = { id: string; filename: string; kindLabel?: string };
+
+/**
+ * One document a spot needs (or "Övriga dokument" with a type selector):
+ * what has been uploaded, with delete buttons, and an upload that starts as
+ * soon as a file is chosen.
+ */
+export function DocumentSlot({
+  accountId,
+  spotId,
+  title,
+  description,
+  required,
+  kind,
+  kinds,
+  docs,
+  canDelete,
+  siblings = 0,
+  note,
+}: {
+  accountId: string;
+  spotId: string;
+  title: string;
+  description?: string;
+  required: boolean;
+  /** Replaces "(obligatoriskt)"/"(valfritt)" after the title. */
+  note?: string;
+  /** The document type of this slot, or… */
+  kind?: string;
+  /** …the types to choose from (for "Övriga dokument"). */
+  kinds?: { value: string; label: string }[];
+  docs: SlotDocument[];
+  canDelete: boolean;
+  siblings?: number;
+}) {
+  const f = useFieldIds();
+  const form = useRef<HTMLFormElement>(null);
+  const [state, action] = useActionState<FormState, FormData>(uploadDocumentAction, null);
+  const done = docs.length > 0;
+  return (
+    <section aria-labelledby={f("title")} className="rounded-xl border border-line p-4">
+      <div className="flex items-start gap-3">
+        <span
+          aria-hidden
+          className={`mt-0.5 grid size-5 shrink-0 place-items-center rounded-full text-xs font-bold ${done ? "bg-ok text-white" : required ? "border-2 border-ink-soft" : "border-2 border-line"}`}
+        >
+          {done ? "✓" : ""}
+        </span>
+        <div className="min-w-0 flex-1">
+          <h3 id={f("title")} className="font-semibold">
+            {title} <span className="text-sm font-normal text-muted">{note ?? (required ? "(obligatoriskt)" : "(valfritt)")}</span>
+          </h3>
+          {description ? <p className="mt-0.5 text-sm text-ink-soft">{description}</p> : null}
+
+          {docs.length ? (
+            <ul className="mt-3 divide-y divide-line rounded-lg border border-line">
+              {docs.map((d) => (
+                <li key={d.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+                  <span className="min-w-0">
+                    <a href={`/api/dokument/${d.id}`} className="link block truncate" target="_blank" rel="noreferrer">
+                      {d.filename}
+                    </a>
+                    {d.kindLabel ? <span className="text-muted">{d.kindLabel}</span> : null}
+                  </span>
+                  {canDelete ? <DeleteDocumentButton accountId={accountId} spotId={spotId} documentId={d.id} filename={d.filename} /> : null}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+
+          <form ref={form} action={action} className="mt-3 space-y-3">
+            <FormAlert state={state} />
+            <input type="hidden" name="accountId" value={accountId} />
+            <input type="hidden" name="spotId" value={spotId} />
+            {kind ? <input type="hidden" name="kind" value={kind} /> : null}
+            <div className="flex flex-wrap items-end gap-3">
+              {kinds ? (
+                <div className="min-w-48 flex-1">
+                  <label htmlFor={f("kind")} className="label">
+                    Typ av dokument
+                  </label>
+                  <select id={f("kind")} name="kind" className="input" defaultValue={kinds[0]?.value}>
+                    {kinds.map((k) => (
+                      <option key={k.value} value={k.value}>
+                        {k.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
+              <div>
+                <input
+                  id={f("file")}
+                  name="file"
+                  type="file"
+                  accept="application/pdf,image/jpeg,image/png,image/heic"
+                  // Upload as soon as a file is chosen.
+                  onChange={(e) => e.currentTarget.files?.length && form.current?.requestSubmit()}
+                  className="peer sr-only"
+                />
+                <FilePickButton htmlFor={f("file")}>{docs.length ? "Lägg till fil…" : "Välj fil…"}</FilePickButton>
+              </div>
+              <p className="basis-full text-xs text-muted sm:basis-auto sm:self-center">PDF eller bild, max 4 MB</p>
+            </div>
+            {siblings > 0 ? (
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" name="applyToSiblings" defaultChecked className="accent-brand" /> Gäller även de {siblings} andra platserna på samma adress
+              </label>
+            ) : null}
+          </form>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/** The visible button for a hidden file input; shows progress while the chosen file uploads. */
+function FilePickButton({ htmlFor, children }: { htmlFor: string; children: React.ReactNode }) {
+  const { pending } = useFormStatus();
+  return (
+    <label
+      htmlFor={htmlFor}
+      aria-disabled={pending}
+      className="btn-secondary cursor-pointer peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent aria-disabled:pointer-events-none aria-disabled:opacity-60"
+    >
+      {pending ? "Laddar upp…" : children}
+    </label>
+  );
+}
+
+function DeleteDocumentButton({ accountId, spotId, documentId, filename }: { accountId: string; spotId: string; documentId: string; filename: string }) {
+  const [state, action] = useActionState<FormState, FormData>(deleteDocumentAction, null);
+  return (
+    <form
+      action={action}
+      onSubmit={(e) => {
+        if (!confirm(`Ta bort ${filename}?`)) e.preventDefault();
+      }}
+      className="shrink-0"
+    >
+      <input type="hidden" name="accountId" value={accountId} />
+      <input type="hidden" name="spotId" value={spotId} />
+      <input type="hidden" name="documentId" value={documentId} />
+      {state?.error ? <span className="mr-2 text-danger">{state.error}</span> : null}
+      <SubmitButton className="btn-danger px-3 py-1.5" pendingText="Tar bort…">
+        Ta bort<span className="sr-only"> {filename}</span>
       </SubmitButton>
     </form>
   );

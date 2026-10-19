@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import postgres from "postgres";
 import { E2E_DB, lastMailLink, localAt, login, logout, pickRange } from "./helpers";
@@ -64,11 +65,20 @@ test("a new host onboards, proves the right to rent via BRF approval, and gets a
   await page.getByRole("button", { name: "Skicka in för granskning" }).click();
   await expect(page.getByText(/Det saknas underlag/).first()).toBeVisible();
 
-  // Upload the rental contract
-  await page.getByLabel("Typ av dokument").selectOption("rental_contract");
-  await page.getByLabel(/^Fil/).setInputFiles(fixture("hyresavtal.pdf"));
-  await page.getByRole("button", { name: "Ladda upp" }).click();
-  await expect(page.getByText("hyresavtal.pdf är uppladdad.")).toBeVisible();
+  // Upload the rental contract into its own slot (choosing the file uploads it)
+  const contract = page.getByRole("region", { name: /Hyresavtal för platsen/ });
+  await contract.getByLabel(/^Välj fil/).setInputFiles(fixture("hyresavtal.pdf"));
+  await expect(contract.getByText("hyresavtal.pdf är uppladdad.")).toBeVisible();
+  await expect(contract.getByRole("link", { name: "hyresavtal.pdf" })).toBeVisible();
+
+  // An optional document can be added with a type, and removed again
+  const other = page.getByRole("region", { name: /Övriga dokument/ });
+  await other.getByLabel("Typ av dokument").selectOption("landlord_rules");
+  await other.getByLabel(/^Välj fil/).setInputFiles({ name: "regler.pdf", mimeType: "application/pdf", buffer: readFileSync(fixture("hyresavtal.pdf")) });
+  await expect(other.getByRole("link", { name: "regler.pdf" })).toBeVisible();
+  page.once("dialog", (d) => d.accept());
+  await other.getByRole("button", { name: "Ta bort regler.pdf" }).click();
+  await expect(other.getByRole("link", { name: "regler.pdf" })).toHaveCount(0);
 
   // Ask the BRF for approval and answer as the board
   await page.getByRole("button", { name: "Skicka godkännandeförfrågan" }).click();
@@ -208,8 +218,7 @@ test("uploads are checked by content, not by file name", async ({ page }) => {
   await page.getByRole("radio", { name: /äger platsen/ }).check();
   await page.getByLabel("Pris per timme (kr)").fill("10");
   await page.getByRole("button", { name: "Spara och fortsätt till underlag" }).click();
-  await page.getByLabel("Typ av dokument").selectOption("ownership_proof");
-  await page.getByLabel(/^Fil/).setInputFiles({ name: "lagfart.pdf", mimeType: "application/pdf", buffer: Buffer.from("<script>alert(1)</script>") });
-  await page.getByRole("button", { name: "Ladda upp" }).click();
-  await expect(page.getByText(/Ladda upp en PDF eller en bild/).first()).toBeVisible();
+  const proof = page.getByRole("region", { name: /Bevis på att du äger platsen/ });
+  await proof.getByLabel(/^Välj fil/).setInputFiles({ name: "lagfart.pdf", mimeType: "application/pdf", buffer: Buffer.from("<script>alert(1)</script>") });
+  await expect(proof.getByText(/Ladda upp en PDF eller en bild/)).toBeVisible();
 });

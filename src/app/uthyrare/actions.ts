@@ -19,7 +19,16 @@ import {
   submitAccountForReview,
 } from "@/server/host-accounts";
 import { lookupOrganisation } from "@/server/company-registry";
-import { createSpots, getSpot, listSiblingSpots, requestLandlordApproval, setSpotStatus, submitSpotForReview, updateSpot } from "@/server/spots";
+import {
+  createSpots,
+  deleteSpotDocument,
+  getSpot,
+  listSiblingSpots,
+  requestLandlordApproval,
+  setSpotStatus,
+  submitSpotForReview,
+  updateSpot,
+} from "@/server/spots";
 import { storeDocument } from "@/server/storage";
 
 async function requireMember(accountId: string) {
@@ -181,12 +190,11 @@ export async function saveSpotAction(_prev: FormState, formData: FormData): Prom
   if (spotId) {
     const ok = await updateSpot(accountId, spotId, parsed.input);
     if (!ok) return { error: "Platsen finns inte." };
-    revalidatePath(`/uthyrare/${accountId}/platser/${spotId}`);
-    return { success: "Ändringarna är sparade.", values: formValues(formData) };
+    redirect(`/uthyrare/${accountId}/platser/${spotId}?sparad=1`);
   }
   const count = account.kind === "household" ? 1 : Math.min(50, Math.max(1, Number(formData.get("count") ?? 1) || 1));
   const ids = await createSpots(accountId, user.id, parsed.input, count);
-  redirect(`/uthyrare/${accountId}/platser/${ids[0]}?ny=${ids.length}#underlag`);
+  redirect(`/uthyrare/${accountId}/platser/${ids[0]}?ny=${ids.length}`);
 }
 
 export async function toggleSpotAction(formData: FormData) {
@@ -263,4 +271,14 @@ export async function uploadDocumentAction(_prev: FormState, formData: FormData)
   );
   revalidatePath(spotId ? `/uthyrare/${accountId}/platser/${spotId}` : `/uthyrare/${accountId}`);
   return { success: `${file.name} är uppladdad.` };
+}
+
+export async function deleteDocumentAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const accountId = String(formData.get("accountId"));
+  const spotId = String(formData.get("spotId"));
+  await requireMember(accountId);
+  const result = await deleteSpotDocument(accountId, spotId, String(formData.get("documentId")));
+  if (!result.ok) return { error: result.error };
+  revalidatePath(`/uthyrare/${accountId}/platser/${spotId}`);
+  return { success: "Dokumentet är borttaget." };
 }

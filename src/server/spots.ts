@@ -10,6 +10,7 @@ import type { SpotInput } from "@/lib/validation";
 import { isUuid } from "./ids";
 import { sendMail } from "./mailer";
 import { notifyAccount } from "./notifications";
+import { deleteDocumentFile } from "./storage";
 
 export { isUuid };
 
@@ -141,6 +142,28 @@ export async function listSpotDocuments(spotId: string) {
 }
 
 /* --------------------------------------------- right-to-rent requirements */
+
+/**
+ * Remove a document from a spot that hasn't been submitted (or was sent back).
+ * The stored file goes too once no other spot uses it (uploads can be shared
+ * by spots at the same address).
+ */
+export async function deleteSpotDocument(accountId: string, spotId: string, documentId: string) {
+  if (!isUuid(documentId)) return { ok: false as const, error: "Dokumentet finns inte." };
+  const spot = await getSpot(spotId);
+  if (!spot || spot.hostAccountId !== accountId) return { ok: false as const, error: "Platsen finns inte." };
+  if (spot.review === "pending_review" || spot.review === "approved") {
+    return { ok: false as const, error: "Underlagen kan inte tas bort medan platsen granskas eller är godkänd." };
+  }
+  const [deleted] = await db
+    .delete(documents)
+    .where(and(eq(documents.id, documentId), eq(documents.spotId, spotId), eq(documents.hostAccountId, accountId)))
+    .returning({ storageKey: documents.storageKey });
+  if (!deleted) return { ok: false as const, error: "Dokumentet finns inte." };
+  const [stillUsed] = await db.select({ id: documents.id }).from(documents).where(eq(documents.storageKey, deleted.storageKey)).limit(1);
+  if (!stillUsed) await deleteDocumentFile(deleted.storageKey);
+  return { ok: true as const };
+}
 
 export type Requirement = { key: string; label: string; done: boolean; hint?: string };
 

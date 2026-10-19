@@ -1,6 +1,6 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
@@ -71,4 +71,14 @@ export async function readDocument(storageKey: string): Promise<Buffer> {
   const file = path.resolve(root(), storageKey);
   if (!file.startsWith(root() + path.sep)) throw new Error("Invalid storage key");
   return readFile(file);
+}
+
+export async function deleteDocumentFile(storageKey: string): Promise<void> {
+  if (driver() === "database") {
+    await db.delete(documentBlobs).where(eq(documentBlobs.storageKey, storageKey));
+    return;
+  }
+  const file = path.resolve(root(), storageKey);
+  if (!file.startsWith(root() + path.sep)) throw new Error("Invalid storage key");
+  await rm(file, { force: true });
 }
