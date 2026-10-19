@@ -64,8 +64,9 @@ Live demo: **https://parklet-rebuild.vercel.app**
   port 6543). The client strips pooler-specific URL parameters and disables prepared statements.
 - **Vercel env:** `DOCUMENT_STORAGE=database`, `NEXT_PUBLIC_DEMO=1`. Links use `APP_URL` if
   set, otherwise Vercel's production or deployment URL.
-- **Mail:** no provider yet. Mails land in the `mail_outbox` table and are readable by admins
-  at `/admin/epost`.
+- **Mail:** every mail lands in the `mail_outbox` table, readable by admins at `/admin/epost`.
+  With `RESEND_API_KEY` and `MAIL_FROM` set, mail to real addresses is also sent through
+  [Resend](https://resend.com); the demo accounts' `@parklet.test` addresses are never sent.
 - **Demo accounts** were seeded with random passwords nobody holds (`SEED_PASSWORD=random`).
   An admin can take one over with "Glömt lösenord" and the outbox.
 - **BankID (Idura):** set `IDURA_ISSUER` (`https://<your-domain>.idura.broker`),
@@ -84,6 +85,6 @@ Live demo: **https://parklet-rebuild.vercel.app**
 
 ## Configuration
 
-See [.env.example](.env.example). Before a real launch, production needs a mail provider
-(today mails only go to the admin outbox), a commercial map tile provider, and the payment
+See [.env.example](.env.example). Before a real launch, production needs Resend set up with
+a verified sending domain, a commercial map tile provider, and the payment
 and e-ID integrations described in `docs/03-mvp.md`.
