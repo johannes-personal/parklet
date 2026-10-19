@@ -156,10 +156,10 @@ select[multiple].input {
 }
 
 /*
- * Map backdrop (components/map-backdrop.tsx). Each .backdrop-layer leans away
- * from the mouse by --depth × 6px (--backdrop-x/y come from BackdropPointer)
- * and, where scroll-driven animations are supported, drifts as the page
- * scrolls. Without that support everything simply stays put.
+ * Map backdrop (components/map-backdrop.tsx). The map layer leans away from
+ * the mouse by --depth × 6px (--backdrop-x/y come from BackdropPointer) and,
+ * where scroll-driven animations are supported, drifts as the page scrolls.
+ * Without that support it simply stays put.
  */
 .backdrop {
   position: fixed;
@@ -176,15 +176,43 @@ select[multiple].input {
   transition: transform 1.4s cubic-bezier(0.16, 1, 0.3, 1);
   will-change: transform;
 }
-/* Oversized so it can drift and lean without showing an edge. */
+/* 104vw × 118vh: oversized so it can drift and lean without showing an edge. */
 .backdrop-map {
   inset: -3vh -2vw -15vh;
 }
-.backdrop-map img {
+/*
+ * The image's own box, covering the layer (like object-fit: cover) but keeping
+ * the image's aspect ratio, so pins positioned in % stay on their streets.
+ */
+.backdrop-canvas {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  translate: -50% -50%;
+  aspect-ratio: 1920 / 1200;
+  width: max(104vw, 118vh * 1920 / 1200);
+  animation: backdrop-intro 2.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.backdrop-canvas img {
+  display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  animation: backdrop-intro 2.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.backdrop-pins {
+  display: none;
+  position: absolute;
+  inset: 0;
+}
+/* Until BackdropPinFit has hidden the pins that would cover content. */
+.backdrop-pins:not([data-fitted]),
+.backdrop-pin[data-covered] {
+  visibility: hidden;
+}
+@media (orientation: portrait) {
+  .backdrop-canvas {
+    aspect-ratio: 1000 / 1600;
+    width: max(104vw, 118vh * 1000 / 1600);
+  }
 }
 .backdrop-shade {
   position: absolute;
@@ -201,32 +229,10 @@ select[multiple].input {
   background: var(--color-page);
   opacity: 0.55;
 }
-body:has(.backdrop-pins) .backdrop-shade::after {
+body:has([data-map-pins]) .backdrop-shade::after {
   opacity: 0.2;
 }
 
-.backdrop-pins {
-  position: absolute;
-  inset: 0 0 auto;
-  z-index: -5;
-  height: 110vh;
-  overflow: clip;
-  pointer-events: none;
-}
-.backdrop-pins .backdrop-layer {
-  inset: 0;
-}
-/* On phones the hero fills the width; pins would only cover the text. */
-@media (max-width: 767px) {
-  .backdrop-pins {
-    display: none;
-  }
-}
-.backdrop-pins-far {
-  opacity: 0.5;
-  filter: blur(0.6px);
-  scale: 0.82;
-}
 .backdrop-pin {
   position: absolute;
   translate: -50% -50%;
@@ -237,7 +243,6 @@ body:has(.backdrop-pins) .backdrop-shade::after {
   font: 700 13px/1.2 var(--font-sans);
   white-space: nowrap;
   box-shadow: 0 6px 18px rgb(0 0 0 / 0.45);
-  animation: backdrop-bob 7s ease-in-out infinite alternate;
 }
 .backdrop-pin.is-p {
   display: grid;
@@ -260,27 +265,20 @@ body:has(.backdrop-pins) .backdrop-shade::after {
     scale: 1.08;
   }
 }
-@keyframes backdrop-bob {
-  to {
-    transform: translateY(-8px);
-  }
-}
 
+/*
+ * The pins are only shown where they can fade out as the hero scrolls away;
+ * otherwise they would sit behind the text further down the page. Not on
+ * phones either, where the hero fills the width.
+ */
 @supports (animation-timeline: scroll()) {
   @keyframes backdrop-drift {
     to {
       translate: 0 -12vh;
     }
   }
-  @keyframes backdrop-rush {
+  @keyframes backdrop-fade {
     to {
-      translate: 0 -45vh;
-      opacity: 0;
-    }
-  }
-  @keyframes backdrop-lag {
-    to {
-      translate: 0 40vh;
       opacity: 0;
     }
   }
@@ -293,16 +291,25 @@ body:has(.backdrop-pins) .backdrop-shade::after {
     animation: backdrop-drift linear both;
     animation-timeline: scroll(root);
   }
-  .backdrop-pins-near,
-  .backdrop-pins-far {
-    animation: backdrop-rush linear both;
+  @media (min-width: 768px) {
+    body:has([data-map-pins]) .backdrop-pins.is-wide {
+      display: block;
+    }
+    @media (orientation: portrait) {
+      body:has([data-map-pins]) .backdrop-pins.is-wide {
+        display: none;
+      }
+      body:has([data-map-pins]) .backdrop-pins.is-tall {
+        display: block;
+      }
+    }
+  }
+  .backdrop-pins {
+    animation: backdrop-fade linear both;
     animation-timeline: scroll(root);
-    animation-range: 0 100vh;
+    animation-range: 0 80vh;
   }
-  .backdrop-pins-far {
-    animation-name: backdrop-lag;
-  }
-  body:has(.backdrop-pins) .backdrop-shade::after {
+  body:has([data-map-pins]) .backdrop-shade::after {
     animation: backdrop-dim linear both;
     animation-timeline: scroll(root);
     animation-range: 0 100vh;
@@ -311,9 +318,7 @@ body:has(.backdrop-pins) .backdrop-shade::after {
 
 @media (prefers-reduced-motion: reduce) {
   .backdrop-map,
-  .backdrop-map img,
-  .backdrop-pin,
-  .backdrop-pins .backdrop-layer {
+  .backdrop-canvas {
     animation: none !important;
     transition: none !important;
   }
