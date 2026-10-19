@@ -1,4 +1,6 @@
 import type { CSSProperties } from "react";
+import { MAP_PINS, MAP_VARIANTS, mapPosition, type MapVariant } from "@/lib/map-backdrop";
+import { BackdropPinFit } from "./backdrop-pin-fit";
 import { BackdropPointer } from "./backdrop-pointer";
 
 /**
@@ -6,15 +8,38 @@ import { BackdropPointer } from "./backdrop-pointer";
  * rendered by scripts/render-map-background.mts, so no map library or tiles
  * are loaded. The map drifts with scrolling (CSS scroll-driven animation) and
  * leans slightly away from the mouse; see `.backdrop` in globals.css.
+ *
+ * On the home page (<ShowMapPins />) parking pins sit on real streets. They
+ * are placed inside the map image's own box, so they move with the map.
  */
 export function MapBackdrop() {
   return (
     <div aria-hidden className="backdrop">
       <div className="backdrop-layer backdrop-map" style={{ "--depth": 1.5 } as CSSProperties}>
-        <picture>
-          <source media="(orientation: portrait)" srcSet="/map/stockholm-tall.webp" type="image/webp" />
-          <img src="/map/stockholm-wide.webp" alt="" decoding="async" fetchPriority="low" />
-        </picture>
+        <div className="backdrop-canvas">
+          <picture>
+            <source media="(orientation: portrait)" srcSet={`/map/${MAP_VARIANTS.tall.file}.webp`} type="image/webp" />
+            <img src={`/map/${MAP_VARIANTS.wide.file}.webp`} alt="" decoding="async" fetchPriority="low" />
+          </picture>
+          {/* One set of pins per image; CSS shows the one matching the image the browser picked. */}
+          {(Object.keys(MAP_VARIANTS) as MapVariant[]).map((variant) => (
+            <div key={variant} className={`backdrop-pins is-${variant}`}>
+              {MAP_PINS.map((pin) => {
+                const { x, y } = mapPosition(variant, pin.lat, pin.lng);
+                if (x < 2 || x > 98 || y < 2 || y > 98) return null;
+                return (
+                  <span
+                    key={`${pin.lat},${pin.lng}`}
+                    className={pin.label === "P" ? "backdrop-pin is-p" : "backdrop-pin"}
+                    style={{ left: `${x}%`, top: `${y}%` }}
+                  >
+                    {pin.label}
+                  </span>
+                );
+              })}
+            </div>
+          ))}
+        </div>
       </div>
       <div className="backdrop-shade" />
       <BackdropPointer />
@@ -22,45 +47,12 @@ export function MapBackdrop() {
   );
 }
 
-// Percentages of the first screen and a bit, kept to the edges so they stay clear of the hero text and search card.
-const NEAR = [
-  { x: 6, y: 20, label: "P" },
-  { x: 93, y: 44, label: "30 kr/h" },
-  { x: 54, y: 84, label: "P" },
-  { x: 18, y: 92, label: "40 kr/h" },
-];
-const FAR = [
-  { x: 42, y: 8, label: "25 kr/h" },
-  { x: 86, y: 14, label: "P" },
-  { x: 3, y: 60, label: "18 kr/h" },
-  { x: 78, y: 80, label: "P" },
-  { x: 33, y: 52, label: "P" },
-];
-
-/**
- * Parking pins floating above the map on the home page. They sit at two
- * depths: near pins rush past faster than the page scrolls, far ones lag
- * behind it, and both fade out as the hero leaves the screen.
- */
-export function BackdropPins() {
+/** Rendered by a page to show the parking pins on the map behind it. */
+export function ShowMapPins() {
   return (
-    <div aria-hidden className="backdrop-pins">
-      {[
-        { depth: "near", pins: NEAR, lean: 5 },
-        { depth: "far", pins: FAR, lean: 2.5 },
-      ].map((group) => (
-        <div key={group.depth} className={`backdrop-layer backdrop-pins-${group.depth}`} style={{ "--depth": group.lean } as CSSProperties}>
-          {group.pins.map((p, i) => (
-            <span
-              key={i}
-              className={p.label === "P" ? "backdrop-pin is-p" : "backdrop-pin"}
-              style={{ left: `${p.x}%`, top: `${p.y}%`, animationDelay: `${i * -1.7}s` }}
-            >
-              {p.label}
-            </span>
-          ))}
-        </div>
-      ))}
-    </div>
+    <>
+      <span hidden data-map-pins />
+      <BackdropPinFit />
+    </>
   );
 }

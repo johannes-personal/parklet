@@ -36,7 +36,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           Hoppa till innehållet
         </a>
         {process.env.NEXT_PUBLIC_DEMO === "1" ? (
-          <p className="bg-warn-soft px-4 py-2 text-center text-sm font-medium text-warn">
+          <p className="bg-zinc-800 px-4 py-2 text-center text-sm font-medium text-zinc-300">
             Det här är en demo. Betalningar och BankID är simulerade – ladda inte upp riktiga dokument eller personuppgifter.
           </p>
         ) : null}

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BackdropPins } from "@/components/map-backdrop";
+import { ShowMapPins } from "@/components/map-backdrop";
 import { SearchForm } from "@/components/search-form";
 import { CITIES } from "@/lib/geo";
 
@@ -21,7 +21,7 @@ const trust = [
 export default function HomePage() {
   return (
     <>
-      <BackdropPins />
+      <ShowMapPins />
       <section>
         <div className="mx-auto grid w-full max-w-6xl gap-10 px-4 py-12 md:grid-cols-[1.1fr_1fr] md:py-20">
           <div className="flex flex-col justify-center">

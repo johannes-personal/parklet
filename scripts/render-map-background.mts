@@ -11,17 +11,13 @@
  */
 import { writeFile, mkdir } from "node:fs/promises";
 import { chromium } from "@playwright/test";
+import { MAP_CENTER, MAP_VARIANTS } from "../src/lib/map-backdrop";
 
 const MAPLIBRE = "https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js";
 const STYLE = "https://tiles.openfreemap.org/styles/dark";
-// Strömmen, between Norrmalm and Gamla stan – the same view as parklet.se.
-const CENTER: [number, number] = [18.0705, 59.3285];
+const CENTER: [number, number] = [MAP_CENTER.lng, MAP_CENTER.lat];
 const PIXEL_RATIO = 1.5;
-
-const VARIANTS = [
-  { name: "stockholm-wide", width: 1920, height: 1200, zoom: 14.1 },
-  { name: "stockholm-tall", width: 1000, height: 1600, zoom: 13.9 },
-];
+const VARIANTS = Object.values(MAP_VARIANTS).map((v) => ({ ...v, name: v.file }));
 
 // Palette sampled from parklet.se's Mapbox dark map.
 const COLORS = {
