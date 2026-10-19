@@ -206,7 +206,7 @@ async function SelectedSpot({ id, closeHref, returnTo, from, to }: { id: string;
     );
   }
   return (
-    <SpotPanel title={data.spot.title} closeHref={closeHref}>
+    <SpotPanel title={data.spot.title} closeHref={closeHref} shareHref={`/plats/${id}${from && to ? `?${new URLSearchParams({ from, to })}` : ""}`}>
       <div className="space-y-6">
         <SpotHeading spot={data.spot} level={2} />
         <div className="rounded-2xl border border-line p-4">

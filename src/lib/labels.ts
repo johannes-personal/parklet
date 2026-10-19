@@ -26,11 +26,6 @@ export const DOCUMENT_KIND_LABEL: Record<string, string> = {
   other: "Övrigt",
 };
 
-export const SPOT_DOC_OPTIONS = ["ownership_proof", "rental_contract", "sublet_permission", "landlord_rules", "other"].map((value) => ({
-  value,
-  label: DOCUMENT_KIND_LABEL[value],
-}));
-
 export const ACCOUNT_DOC_OPTIONS = ["org_registration", "board_minutes", "signatory_proof", "other"].map((value) => ({
   value,
   label: DOCUMENT_KIND_LABEL[value],

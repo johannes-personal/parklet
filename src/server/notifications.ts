@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { bookings, hostAccountMembers, hostAccounts, notifications, spots, users } from "@/db/schema";
 import { appUrl } from "@/lib/app-url";
 import type { CurrentUser } from "@/lib/auth/session";
-import { sendMail } from "./mailer";
+import { sendEmail } from "./mailer";
 
 /**
  * What hosts and drivers are told, in the header's bell and by e-mail.
@@ -16,18 +16,44 @@ import { sendMail } from "./mailer";
  *   Worked out from the current state, so they disappear once done.
  */
 
-export type NotificationInput = { kind: string; title: string; body: string; href: string };
+export type NotificationInput = {
+  kind: string;
+  title: string;
+  /** Paragraphs separated by blank lines. */
+  body: string;
+  href: string;
+  /** Extra rows for the e-mail, e.g. time and price. */
+  details?: [string, string][];
+  /** The e-mail's button label (default "Öppna i Parklet"). */
+  cta?: string;
+};
 
-/** Store a notification for each user and, unless `email: false`, send it by e-mail too. */
+/** Store a notification for each user and, unless `email: false`, send it as a designed e-mail too. */
 export async function notifyUsers(userIds: string[], n: NotificationInput, { email = true } = {}) {
   const ids = [...new Set(userIds)];
   if (ids.length === 0) return;
-  await db.insert(notifications).values(ids.map((userId) => ({ userId, ...n })));
+  await db.insert(notifications).values(ids.map((userId) => ({ userId, kind: n.kind, title: n.title, body: n.body, href: n.href })));
   if (!email) return;
   const recipients = await db.select({ email: users.email }).from(users).where(inArray(users.id, ids));
   for (const r of recipients) {
-    await sendMail({ to: r.email, subject: n.title, text: `${n.body}\n\n${appUrl()}${n.href}\n` });
+    await sendEmail(r.email, n.title, {
+      heading: n.title,
+      paragraphs: n.body.split("\n\n"),
+      details: n.details,
+      button: { label: n.cta ?? "Öppna i Parklet", url: `${appUrl()}${n.href}` },
+      footnote: "Du får det här mejlet för att du har ett konto på Parklet.",
+    });
   }
+}
+
+/** Parklet's administrators (reviewers). */
+export async function notifyAdmins(n: NotificationInput, opts?: { email?: boolean }) {
+  const admins = await db.select({ id: users.id }).from(users).where(eq(users.isAdmin, true));
+  await notifyUsers(
+    admins.map((a) => a.id),
+    n,
+    opts,
+  );
 }
 
 /** Everyone who administers a host account. */
@@ -114,4 +140,38 @@ export async function markAllRead(userId: string) {
 export async function isHost(userId: string): Promise<boolean> {
   const rows = await db.select({ id: hostAccountMembers.hostAccountId }).from(hostAccountMembers).where(eq(hostAccountMembers.userId, userId)).limit(1);
   return rows.length > 0;
+}
+
+/** Open review work for Parklet's admins. */
+export async function adminTodos(): Promise<Todo[]> {
+  const [[spotsPending], [accountsPending]] = await Promise.all([
+    db.select({ n: count() }).from(spots).where(eq(spots.review, "pending_review")),
+    db.select({ n: count() }).from(hostAccounts).where(eq(hostAccounts.verificationStatus, "pending")),
+  ]);
+  const todos: Todo[] = [];
+  if (spotsPending.n > 0) todos.push({ key: "admin:spots", title: `Granska ${spotsPending.n === 1 ? "en plats" : `${spotsPending.n} platser`}`, href: "/admin" });
+  if (accountsPending.n > 0) {
+    todos.push({ key: "admin:accounts", title: `Verifiera ${accountsPending.n === 1 ? "en organisation" : `${accountsPending.n} organisationer`}`, href: "/admin" });
+  }
+  return todos;
+}
+
+export type BellItem = { id: string; title: string; href: string; createdAt: string; read: boolean };
+export type BellData = { todos: Todo[]; items: BellItem[]; unread: number };
+
+/** Everything the header's bell shows, or null when it shouldn't be shown (people who neither host nor review and have no news). */
+export async function bellData(user: CurrentUser): Promise<BellData | null> {
+  const host = await isHost(user.id);
+  const [hostTasks, adminTasks, items, unread] = await Promise.all([
+    host ? hostTodos(user) : [],
+    user.isAdmin ? adminTodos() : [],
+    listNotifications(user.id),
+    unreadCount(user.id),
+  ]);
+  if (!host && !user.isAdmin && items.length === 0) return null;
+  return {
+    todos: [...adminTasks, ...hostTasks],
+    items: items.map((n) => ({ id: n.id, title: n.title, href: n.href, createdAt: n.createdAt.toISOString(), read: n.readAt != null })),
+    unread,
+  };
 }

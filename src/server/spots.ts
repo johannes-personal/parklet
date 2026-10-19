@@ -1,6 +1,6 @@
 import { appUrl } from "@/lib/app-url";
 import "server-only";
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { availabilityWindows, bookings, documents, hostAccounts, spots, type HostAccount, type Spot } from "@/db/schema";
 import { normalizeWindows, type AvailabilityWindow } from "@/lib/availability";
@@ -8,8 +8,9 @@ import { scheduleToWindows } from "@/lib/schedule";
 import { generateToken, hashToken } from "@/lib/auth/tokens";
 import type { SpotInput } from "@/lib/validation";
 import { isUuid } from "./ids";
-import { sendMail } from "./mailer";
-import { notifyAccount } from "./notifications";
+import { sendEmail } from "./mailer";
+import { notifyAccount, notifyAdmins } from "./notifications";
+import { deleteDocumentFile } from "./storage";
 
 export { isUuid };
 
@@ -142,6 +143,28 @@ export async function listSpotDocuments(spotId: string) {
 
 /* --------------------------------------------- right-to-rent requirements */
 
+/**
+ * Remove a document from a spot that hasn't been submitted (or was sent back).
+ * The stored file goes too once no other spot uses it (uploads can be shared
+ * by spots at the same address).
+ */
+export async function deleteSpotDocument(accountId: string, spotId: string, documentId: string) {
+  if (!isUuid(documentId)) return { ok: false as const, error: "Dokumentet finns inte." };
+  const spot = await getSpot(spotId);
+  if (!spot || spot.hostAccountId !== accountId) return { ok: false as const, error: "Platsen finns inte." };
+  if (spot.review === "pending_review" || spot.review === "approved") {
+    return { ok: false as const, error: "Underlagen kan inte tas bort medan platsen granskas eller är godkänd." };
+  }
+  const [deleted] = await db
+    .delete(documents)
+    .where(and(eq(documents.id, documentId), eq(documents.spotId, spotId), eq(documents.hostAccountId, accountId)))
+    .returning({ storageKey: documents.storageKey });
+  if (!deleted) return { ok: false as const, error: "Dokumentet finns inte." };
+  const [stillUsed] = await db.select({ id: documents.id }).from(documents).where(eq(documents.storageKey, deleted.storageKey)).limit(1);
+  if (!stillUsed) await deleteDocumentFile(deleted.storageKey);
+  return { ok: true as const };
+}
+
 export type Requirement = { key: string; label: string; done: boolean; hint?: string };
 
 /** What a host must provide for a spot before it can be submitted for review. */
@@ -172,7 +195,7 @@ export function spotRequirements(spot: Spot, docs: { kind: string }[]): Requirem
   return reqs;
 }
 
-export async function submitSpotForReview(accountId: string, spotId: string) {
+export async function submitSpotForReview(accountId: string, spotId: string, { announce = true } = {}) {
   const spot = await getSpot(spotId);
   if (!spot || spot.hostAccountId !== accountId) return { ok: false as const, error: "Platsen finns inte." };
   if (spot.landlordApproval === "declined") {
@@ -182,7 +205,30 @@ export async function submitSpotForReview(accountId: string, spotId: string) {
   if (missing.length) return { ok: false as const, error: `Det saknas underlag: ${missing.map((m) => m.label.toLowerCase()).join("; ")}.` };
   if (spot.windows.length === 0) return { ok: false as const, error: "Ange minst en tid då platsen är tillgänglig." };
   await db.update(spots).set({ review: "pending_review", submittedAt: new Date(), reviewNote: null }).where(eq(spots.id, spotId));
+  if (announce) await announceSubmittedSpots(accountId, [spotId]);
   return { ok: true as const };
+}
+
+/** Tell Parklet's admins about spots submitted together (one notification for a BRF's whole row of spots). */
+export async function announceSubmittedSpots(accountId: string, spotIds: string[]) {
+  if (spotIds.length === 0) return;
+  const rows = await db.select({ spot: spots, accountName: hostAccounts.name }).from(spots).innerJoin(hostAccounts, eq(hostAccounts.id, spots.hostAccountId)).where(inArray(spots.id, spotIds));
+  const first = rows[0];
+  if (!first) return;
+  const { spot, accountName } = first;
+  const more = rows.length > 1 ? ` (+${rows.length - 1} till på samma adress)` : "";
+  await notifyAdmins({
+    kind: "admin_spot_submitted",
+    title: `Ny plats att granska: ${spot.title}${more}`,
+    body: `${accountName} har skickat in ${rows.length > 1 ? `${rows.length} platser` : "en plats"} för granskning.`,
+    details: [
+      ["Plats", `${spot.title}, ${spot.address}, ${spot.city}`],
+      ["Uthyrare", accountName],
+      ["Grund", spot.rightBasis === "owns" ? "Äger platsen" : `Hyr av ${spot.landlordKind === "brf" ? "bostadsrättsförening" : "hyresvärd"}`],
+    ],
+    href: `/admin/platser/${spot.id}`,
+    cta: "Granska platsen",
+  });
 }
 
 /* ------------------------------------------------- landlord / BRF approval */
@@ -197,15 +243,20 @@ export async function requestLandlordApproval(accountId: string, spotId: string,
   const token = generateToken();
   await db.update(spots).set({ landlordApproval: "requested", landlordApprovalTokenHash: hashToken(token) }).where(eq(spots.id, spotId));
   const who = spot.landlordKind === "brf" ? "föreningen" : "er som hyresvärd";
-  await sendMail({
-    to: spot.landlordEmail,
-    subject: `Godkännande för uthyrning av parkeringsplats – ${spot.address}`,
-    text:
-      `Hej${spot.landlordName ? " " + spot.landlordName : ""}!\n\n` +
-      `${requestedBy} (uthyrarkonto "${account.name}") vill hyra ut parkeringsplatsen på ${spot.address}, ${spot.city} via Parklet ` +
-      `när den inte används, och behöver godkännande från ${who}.\n\n` +
-      `Granska och godkänn eller neka här:\n${appUrl()}/godkannande/${token}\n\n` +
-      `Om föreningen kräver att tillfälliga hyresgästers bilar registreras kan ni ange det i formuläret.\n`,
+  await sendEmail(spot.landlordEmail, `Godkännande för uthyrning av parkeringsplats – ${spot.address}`, {
+    heading: "Får parkeringsplatsen hyras ut via Parklet?",
+    preheader: `${requestedBy} vill hyra ut sin parkeringsplats på ${spot.address} när den inte används.`,
+    paragraphs: [
+      `Hej${spot.landlordName ? " " + spot.landlordName : ""}!`,
+      `${requestedBy} vill hyra ut parkeringsplatsen nedan via Parklet när den inte används, och behöver godkännande från ${who}.`,
+      "Ni svarar med ett klick, utan att skapa konto. Om föreningen kräver att tillfälliga hyresgästers bilar registreras kan ni ange det i formuläret.",
+    ],
+    details: [
+      ["Plats", `${spot.address}, ${spot.city}`],
+      ["Uthyrare", `${requestedBy} (konto "${account.name}")`],
+    ],
+    button: { label: "Granska och svara", url: `${appUrl()}/godkannande/${token}` },
+    footnote: "Parklet förmedlar parkering mellan privatpersoner, föreningar och företag. Uthyraren får inte hyra ut platsen via Parklet utan ert godkännande.",
   });
   return { ok: true as const };
 }
@@ -306,14 +357,6 @@ export async function reviewAccount(accountId: string, approve: boolean, note: s
   return updated.length > 0;
 }
 
-export async function listRecentlyReviewed() {
-  return db
-    .select({ id: spots.id, title: spots.title, review: spots.review, reviewedAt: spots.reviewedAt })
-    .from(spots)
-    .where(inArray(spots.review, ["approved", "rejected"]))
-    .orderBy(desc(spots.reviewedAt))
-    .limit(10);
-}
 
 /** Other spots of the same account at the same address (e.g. created together as "Plats 1…N"). */
 export async function listSiblingSpots(spot: Pick<Spot, "id" | "hostAccountId" | "address" | "city">) {

@@ -1,24 +1,28 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
-import { Badge } from "@/components/status-badge";
 import { requireAdmin } from "@/lib/auth/session";
-import { REVIEW_LABEL } from "@/lib/labels";
 import { formatDateTime } from "@/lib/time";
 import { HOST_KIND_LABEL } from "@/server/host-accounts";
-import { listRecentlyReviewed, listReviewQueue } from "@/server/spots";
+import { listReviewQueue } from "@/server/spots";
 
 export const metadata: Metadata = { title: "Granskning", robots: { index: false } };
 
 export default function AdminPage() {
   return (
-    <div className="mx-auto w-full max-w-4xl px-4 py-10">
+    <div className="w-full py-8">
       <h1 className="text-2xl font-bold">Granskning</h1>
       <p className="mt-1 text-ink-soft">Kontrollera att uthyraren har rätt att hyra ut platsen och att organisationer finns och företräds av rätt person.</p>
-      <p className="mt-2 text-sm">
-        <Link href="/admin/epost" className="link">
-          Utkorg för e-post
+      <p className="mt-1 text-sm text-ink-soft">
+        Letar du efter något annat? Sök bland alla{" "}
+        <Link href="/admin/platser" className="link">
+          platser
+        </Link>{" "}
+        och{" "}
+        <Link href="/admin/konton" className="link">
+          uthyrare
         </Link>
+        .
       </p>
       <Suspense fallback={<div className="card mt-6 h-40 animate-pulse" />}>
         <Queue />
@@ -29,7 +33,7 @@ export default function AdminPage() {
 
 async function Queue() {
   await requireAdmin();
-  const [{ pendingSpots, pendingAccounts }, recent] = await Promise.all([listReviewQueue(), listRecentlyReviewed()]);
+  const { pendingSpots, pendingAccounts } = await listReviewQueue();
   return (
     <div className="mt-8 space-y-8">
       <section>
@@ -73,21 +77,6 @@ async function Queue() {
           </ul>
         )}
       </section>
-      {recent.length ? (
-        <section>
-          <h2 className="text-lg font-semibold">Senast granskade</h2>
-          <ul className="mt-3 space-y-1 text-sm">
-            {recent.map((r) => (
-              <li key={r.id} className="flex items-center gap-2">
-                <Badge kind={REVIEW_LABEL[r.review].kind}>{REVIEW_LABEL[r.review].text}</Badge>
-                <Link href={`/admin/platser/${r.id}`} className="link">
-                  {r.title}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
     </div>
   );
 }

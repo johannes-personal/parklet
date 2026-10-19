@@ -336,6 +336,7 @@ export const mailOutbox = pgTable("mail_outbox", {
   to: text("to").notNull(),
   subject: text("subject").notNull(),
   text: text("text").notNull(),
+  html: text("html"),
   createdAt: createdAt(),
 });
 

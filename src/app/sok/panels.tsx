@@ -29,7 +29,7 @@ export function ListPanel({ summary, children }: { summary: React.ReactNode; chi
 }
 
 /** The selected spot, over the map: beside the list on wide screens, over it on phones. Escape closes it. */
-export function SpotPanel({ title, closeHref, children }: { title: string; closeHref: string; children: React.ReactNode }) {
+export function SpotPanel({ title, closeHref, shareHref, children }: { title: string; closeHref: string; shareHref?: string; children: React.ReactNode }) {
   const router = useRouter();
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -46,6 +46,8 @@ export function SpotPanel({ title, closeHref, children }: { title: string; close
     >
       <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line px-4 py-2">
         <span className="text-sm font-medium text-muted">Parkeringsplats</span>
+        <span className="ml-auto" />
+        {shareHref ? <ShareButton href={shareHref} title={title} /> : null}
         <Link href={closeHref} scroll={false} className="-mr-2 rounded-md px-2 py-1 text-2xl leading-none text-muted hover:bg-canvas hover:text-ink">
           <span aria-hidden>×</span>
           <span className="sr-only">Stäng</span>
@@ -53,5 +55,56 @@ export function SpotPanel({ title, closeHref, children }: { title: string; close
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5">{children}</div>
     </aside>
+  );
+}
+
+/**
+ * Share a spot's own page. Phones get the system share sheet; elsewhere the
+ * link is copied, with a short confirmation.
+ */
+function ShareButton({ href, title }: { href: string; title: string }) {
+  const [share, setShare] = useState(false);
+  const [copied, setCopied] = useState<"ok" | "fail" | null>(null);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- only known in the browser
+    setShare(typeof navigator.share === "function" && window.matchMedia("(pointer: coarse)").matches);
+  }, []);
+  useEffect(() => {
+    if (!copied) return;
+    const t = setTimeout(() => setCopied(null), 2500);
+    return () => clearTimeout(t);
+  }, [copied]);
+
+  async function onClick() {
+    const url = new URL(href, window.location.origin).toString();
+    if (share) {
+      try {
+        await navigator.share({ title, url });
+        return;
+      } catch (err) {
+        if ((err as Error).name === "AbortError") return;
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied("ok");
+    } catch {
+      setCopied("fail");
+    }
+  }
+
+  return (
+    <>
+      <button type="button" onClick={onClick} className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm font-medium text-ink-soft hover:bg-canvas hover:text-ink">
+        <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="size-4">
+          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+        </svg>
+        {copied === "ok" ? "Kopierad!" : share ? "Dela" : "Kopiera länk"}
+      </button>
+      <span role="status" className="sr-only">
+        {copied === "ok" ? "Länken är kopierad" : copied === "fail" ? "Kunde inte kopiera länken" : ""}
+      </span>
+    </>
   );
 }

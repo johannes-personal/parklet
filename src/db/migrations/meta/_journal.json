@@ -64,6 +64,13 @@
       "when": 1792411346531,
       "tag": "0008_app_secrets",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792415666726,
+      "tag": "0009_mail_html",
+      "breakpoints": true
     }
   ]
 }

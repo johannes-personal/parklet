@@ -12,7 +12,7 @@ import { rateLimit } from "@/lib/auth/rate-limit";
 import { endSession, safeNext, startSession } from "@/lib/auth/session";
 import { generateToken, hashToken } from "@/lib/auth/tokens";
 import { emailSchema, fieldErrors, passwordSchema, registerSchema } from "@/lib/validation";
-import { sendMail } from "@/server/mailer";
+import { sendEmail } from "@/server/mailer";
 
 async function clientIp() {
   const h = await headers();
@@ -83,10 +83,11 @@ export async function requestResetAction(_prev: FormState, formData: FormData): 
   if (user) {
     const token = generateToken();
     await db.insert(passwordResetTokens).values({ id: hashToken(token), userId: user.id, expiresAt: new Date(Date.now() + 3600_000) });
-    await sendMail({
-      to: email,
-      subject: "Välj ett nytt lösenord för Parklet",
-      text: `Hej!\n\nKlicka på länken för att välja ett nytt lösenord (gäller i en timme):\n${appUrl()}/aterstall-losenord/${token}\n\nHar du inte bett om detta kan du ignorera mejlet.`,
+    await sendEmail(email, "Välj ett nytt lösenord för Parklet", {
+      heading: "Välj ett nytt lösenord",
+      paragraphs: ["Någon, förhoppningsvis du, har bett om att få byta lösenord för ditt Parklet-konto. Länken gäller i en timme."],
+      button: { label: "Välj nytt lösenord", url: `${appUrl()}/aterstall-losenord/${token}` },
+      footnote: "Har du inte bett om detta kan du ignorera mejlet. Ditt lösenord ändras inte.",
     });
   }
   // Same answer whether or not the account exists, so the form cannot be used to probe for users.
