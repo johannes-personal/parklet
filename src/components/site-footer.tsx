@@ -53,7 +53,23 @@ export function SiteFooter() {
         ))}
       </div>
       <div className="border-t border-line">
-        <p className="mx-auto max-w-6xl px-4 py-4 text-xs text-muted">© Parklet. MVP – betalningar och e-legitimation körs i testläge.</p>
+        <div className="mx-auto flex max-w-6xl flex-wrap justify-between gap-x-6 gap-y-1 px-4 py-4 text-xs text-muted">
+          <p>© Parklet. MVP – betalningar och e-legitimation körs i testläge.</p>
+          <p>
+            Bakgrundskarta:{" "}
+            <a href="https://openfreemap.org" className="hover:text-ink hover:underline">
+              OpenFreeMap
+            </a>{" "}
+            ©{" "}
+            <a href="https://www.openmaptiles.org/" className="hover:text-ink hover:underline">
+              OpenMapTiles
+            </a>
+            , data ©{" "}
+            <a href="https://www.openstreetmap.org/copyright" className="hover:text-ink hover:underline">
+              OpenStreetMap-bidragsgivare
+            </a>
+          </p>
+        </div>
       </div>
     </footer>
   );
