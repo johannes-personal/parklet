@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { db } from "@/db";
+import { closeDb, db } from "./direct-db";
 import { bookings, hostAccounts, spots } from "@/db/schema";
 import { cancelBooking, confirmPayment, createBooking, markVehicleRegistered } from "@/server/bookings";
 import { searchSpots } from "@/server/search";
@@ -10,7 +10,7 @@ const hoursFromNow = (h: number) => new Date(Math.ceil((Date.now() + h * 3600_00
 
 beforeEach(resetDb);
 afterAll(async () => {
-  await db.$client.end();
+  await closeDb();
 });
 
 describe("booking flow against Postgres", () => {

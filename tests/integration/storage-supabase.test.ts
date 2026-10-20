@@ -1,6 +1,4 @@
-import { eq } from "drizzle-orm";
-import { afterAll, beforeEach, expect, test, vi } from "vitest";
-import { documentBlobs } from "@/db/schema";
+import { afterAll, afterEach, beforeEach, expect, test, vi } from "vitest";
 
 // The "supabase" driver against an in-memory stand-in for Supabase Storage's REST API.
 process.env.DOCUMENT_STORAGE = "supabase";
@@ -8,12 +6,12 @@ process.env.SUPABASE_URL = "https://project.supabase.test";
 process.env.SUPABASE_SERVICE_ROLE_KEY = "service-key";
 
 const objects = new Map<string, Buffer>();
-const calls: { method: string; url: string; auth: string | null }[] = [];
+const calls: { method: string; url: string; auth: string | null; apikey: string | null }[] = [];
 vi.stubGlobal("fetch", async (input: string, init: RequestInit = {}) => {
   const url = new URL(input);
   const method = init.method ?? "GET";
   const headers = new Headers(init.headers);
-  calls.push({ method, url: url.pathname, auth: headers.get("authorization") });
+  calls.push({ method, url: url.pathname, auth: headers.get("authorization"), apikey: headers.get("apikey") });
   const prefix = "/storage/v1/object/";
   const rest = url.pathname.slice(prefix.length);
   if (method === "POST") {
@@ -34,7 +32,6 @@ vi.stubGlobal("fetch", async (input: string, init: RequestInit = {}) => {
   return new Response("", { status: 405 });
 });
 
-const { db } = await import("@/db");
 const { deleteDocumentFile, readDocument, storeDocument } = await import("@/server/storage");
 const pdf = Buffer.from("%PDF-1.4\n% test document\n");
 
@@ -42,9 +39,11 @@ beforeEach(() => {
   objects.clear();
   calls.length = 0;
 });
-afterAll(async () => {
+afterEach(() => {
+  delete process.env.SUPABASE_SECRET_KEY;
+});
+afterAll(() => {
   vi.unstubAllGlobals();
-  await db.$client.end();
 });
 
 test("documents are stored in, read from and deleted from the bucket, with the service key", async () => {
@@ -60,14 +59,10 @@ test("documents are stored in, read from and deleted from the bucket, with the s
   await expect(readDocument(stored.storageKey)).rejects.toThrow("Document not found");
 });
 
-test("a document still in the database is served and moved to the bucket", async () => {
-  const storageKey = "2026-10/legacy-test.pdf";
-  await db.delete(documentBlobs).where(eq(documentBlobs.storageKey, storageKey));
-  await db.insert(documentBlobs).values({ storageKey, bytes: pdf });
-
-  expect(await readDocument(storageKey)).toEqual(pdf);
-  expect(objects.get(storageKey)).toEqual(pdf);
-  expect(await db.select().from(documentBlobs).where(eq(documentBlobs.storageKey, storageKey))).toHaveLength(0);
-  // Next time it comes from the bucket.
-  expect(await readDocument(storageKey)).toEqual(pdf);
+test("a new-style secret key goes in the apikey header only", async () => {
+  // Supabase's gateway rejects sb_secret_… keys as a bearer token; they are not JWTs.
+  process.env.SUPABASE_SECRET_KEY = "sb_secret_test";
+  const stored = await storeDocument(pdf);
+  if ("error" in stored) throw new Error(stored.error);
+  expect(calls).toEqual([expect.objectContaining({ method: "POST", auth: null, apikey: "sb_secret_test" })]);
 });

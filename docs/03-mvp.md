@@ -143,7 +143,7 @@ src/
     admin/             Review queue
     api/               geocode proxy, document download, health
   components/          UI (forms, maps, host editor)
-  db/                  Drizzle schema + SQL migrations (incl. exclusion constraint)
+  db/                  Drizzle schema, SQL migrations (incl. exclusion constraint), HTTP API layer
   lib/                 Pure logic shared by client and server: pricing, availability, time, validation
   server/              Data access and integrations (server-only)
 tests/unit             Pricing, availability, DST, schedules

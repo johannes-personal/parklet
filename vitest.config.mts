@@ -13,6 +13,7 @@ export default defineConfig({
     include: ["tests/**/*.test.ts"],
     environment: "node",
     setupFiles: ["tests/integration/setup.ts"],
+    globalSetup: ["tests/support/api-server.ts"],
     // Integration tests share one database.
     fileParallelism: false,
   },

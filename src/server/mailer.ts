@@ -2,7 +2,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { appendFile, mkdir } from "node:fs/promises";
 import path from "node:path";
-import { db } from "@/db";
+import { api, must, toDb } from "@/db/api";
 import { mailOutbox } from "@/db/schema";
 import { appUrl } from "@/lib/app-url";
 import { isDeliverableAddress } from "@/lib/email";
@@ -31,7 +31,7 @@ export async function sendEmail(to: string, subject: string, content: EmailConte
  */
 export async function sendMail(mail: Mail): Promise<void> {
   console.info(`[mail] to=${mail.to} subject="${mail.subject}"`);
-  await db.insert(mailOutbox).values(mail);
+  must(await api().from("mail_outbox").insert(toDb(mailOutbox, mail)), "sendMail");
   if (process.env.MAIL_OUTBOX) {
     const file = path.resolve(/*turbopackIgnore: true*/ process.env.MAIL_OUTBOX);
     await mkdir(path.dirname(file), { recursive: true });

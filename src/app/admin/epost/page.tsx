@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
-import { desc } from "drizzle-orm";
 import { Suspense } from "react";
-import { db } from "@/db";
+import { api, cols, must, names, parseAll } from "@/db/api";
 import { mailOutbox } from "@/db/schema";
 import { requireAdmin } from "@/lib/auth/session";
 import { formatDateTime } from "@/lib/time";
@@ -25,7 +24,10 @@ export default function OutboxPage() {
 
 async function Mails() {
   await requireAdmin();
-  const mails = await db.select().from(mailOutbox).orderBy(desc(mailOutbox.id)).limit(50);
+  const mails = parseAll(
+    mailOutbox,
+    must(await api().from("mail_outbox").select(cols(mailOutbox)).order(names(mailOutbox).id, { ascending: false }).limit(50), "OutboxPage"),
+  );
   if (mails.length === 0) return <p className="mt-6 text-sm text-muted">Inga mejl ännu.</p>;
   return (
     <ul className="mt-6 space-y-3">

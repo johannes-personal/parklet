@@ -1,11 +1,10 @@
 import type { Metadata } from "next";
-import { eq } from "drizzle-orm";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { reviewAccountAction } from "@/app/admin/actions";
 import { ReviewForm } from "@/app/admin/review-form";
-import { db } from "@/db";
+import { api, cols, must, names, parse } from "@/db/api";
 import { hostAccounts } from "@/db/schema";
 import { requireAdmin } from "@/lib/auth/session";
 import { formMatchesKind } from "@/lib/bolagsverket";
@@ -32,8 +31,9 @@ async function Content({ params, searchParams }: P) {
   const { id } = await params;
   const { fel } = await searchParams;
   if (!isUuid(id)) notFound();
-  const [account] = await db.select().from(hostAccounts).where(eq(hostAccounts.id, id)).limit(1);
-  if (!account) notFound();
+  const row = must(await api().from("host_accounts").select(cols(hostAccounts)).eq(names(hostAccounts).id, id).maybeSingle(), "AdminAccountPage");
+  if (!row) notFound();
+  const account = parse(hostAccounts, row);
   const [docs, members] = await Promise.all([listAccountDocuments(id), listMembers(id)]);
   return (
     <div className="space-y-6">

@@ -1,6 +1,5 @@
 import "server-only";
-import { and, asc, count, eq, gte, sql } from "drizzle-orm";
-import { db } from "@/db";
+import { api, cols, must, mustCount, names, parseAll } from "@/db/api";
 import { bookings, hostAccounts, spots, users } from "@/db/schema";
 import { appUrl } from "@/lib/app-url";
 import { formatSek } from "@/lib/money";
@@ -13,28 +12,32 @@ import { sendEmail } from "./mailer";
  * something to report.
  */
 export async function sendAdminDigest(now = new Date()) {
-  const since = new Date(now.getTime() - 24 * 3600_000);
-  const [pendingSpots, pendingAccounts, newSpots, newAccounts, newUsers, booked, cancelled, overdue] = await Promise.all([
-    db
-      .select({ id: spots.id, title: spots.title, submittedAt: spots.submittedAt })
-      .from(spots)
-      .where(eq(spots.review, "pending_review"))
-      .orderBy(asc(spots.submittedAt)),
-    db
-      .select({ id: hostAccounts.id, name: hostAccounts.name, createdAt: hostAccounts.createdAt })
-      .from(hostAccounts)
-      .where(eq(hostAccounts.verificationStatus, "pending"))
-      .orderBy(asc(hostAccounts.createdAt)),
-    db.select({ n: count() }).from(spots).where(gte(spots.createdAt, since)),
-    db.select({ n: count() }).from(hostAccounts).where(gte(hostAccounts.createdAt, since)),
-    db.select({ n: count() }).from(users).where(gte(users.createdAt, since)),
-    db
-      .select({ n: count(), ore: sql<number>`coalesce(sum(${bookings.totalOre}), 0)`.mapWith(Number) })
-      .from(bookings)
-      .where(and(eq(bookings.status, "confirmed"), gte(bookings.confirmedAt, since))),
-    db.select({ n: count() }).from(bookings).where(and(eq(bookings.status, "cancelled"), gte(bookings.cancelledAt, since))),
-    db.select({ n: count() }).from(bookings).where(gte(bookings.vehicleOverdueNotifiedAt, since)),
+  const since = new Date(now.getTime() - 24 * 3600_000).toISOString();
+  const S = names(spots);
+  const A = names(hostAccounts);
+  const U = names(users);
+  const B = names(bookings);
+  const head = { count: "exact", head: true } as const;
+  const [spotRows, accountRows, newSpotCount, newAccountCount, newUserCount, bookedRows, cancelledCount, overdueCount] = await Promise.all([
+    api().from("spots").select(cols(spots, ["id", "title", "submittedAt"])).eq(S.review, "pending_review").order(S.submittedAt),
+    api().from("host_accounts").select(cols(hostAccounts, ["id", "name", "createdAt"])).eq(A.verificationStatus, "pending").order(A.createdAt),
+    api().from("spots").select(S.id, head).gte(S.createdAt, since),
+    api().from("host_accounts").select(A.id, head).gte(A.createdAt, since),
+    api().from("users").select(U.id, head).gte(U.createdAt, since),
+    api().from("bookings").select(cols(bookings, ["totalOre"])).eq(B.status, "confirmed").gte(B.confirmedAt, since),
+    api().from("bookings").select(B.id, head).eq(B.status, "cancelled").gte(B.cancelledAt, since),
+    api().from("bookings").select(B.id, head).gte(B.vehicleOverdueNotifiedAt, since),
   ]);
+  const what = "sendAdminDigest";
+  const pendingSpots = parseAll<typeof spots, { id: string; title: string; submittedAt: Date | null }>(spots, must(spotRows, what));
+  const pendingAccounts = parseAll<typeof hostAccounts, { id: string; name: string; createdAt: Date }>(hostAccounts, must(accountRows, what));
+  const bookedTotals = must<{ totalOre: number }[]>(bookedRows, what);
+  const newSpots = [{ n: mustCount(newSpotCount, what) }];
+  const newAccounts = [{ n: mustCount(newAccountCount, what) }];
+  const newUsers = [{ n: mustCount(newUserCount, what) }];
+  const booked = [{ n: bookedTotals.length, ore: bookedTotals.reduce((sum, b) => sum + b.totalOre, 0) }];
+  const cancelled = [{ n: mustCount(cancelledCount, what) }];
+  const overdue = [{ n: mustCount(overdueCount, what) }];
 
   const waiting = pendingSpots.length + pendingAccounts.length;
   const happened = newSpots[0].n + newAccounts[0].n + newUsers[0].n + booked[0].n + cancelled[0].n + overdue[0].n;
@@ -61,7 +64,7 @@ export async function sendAdminDigest(now = new Date()) {
     ["Nya användare", String(newUsers[0].n)],
   ];
 
-  const admins = await db.select({ email: users.email }).from(users).where(eq(users.isAdmin, true));
+  const admins = must<{ email: string }[]>(await api().from("users").select(U.email).eq(U.isAdmin, true), what);
   for (const a of admins) {
     await sendEmail(a.email, waiting ? `Parklet: ${waiting} att granska` : "Parklet: dagens sammanfattning", {
       heading: "Dagens sammanfattning",

@@ -32,6 +32,12 @@ jobs:
       - run: npm ci
       - name: Create test databases
         run: psql postgres://parklet:parklet@localhost:5432/parklet -f scripts/init-db.sql
+      - name: Prepare the API roles
+        # As on Supabase, the roles PostgREST uses exist before the first migration.
+        run: |
+          node scripts/postgrest.mjs --prepare
+          node scripts/postgrest.mjs --prepare --db parklet_test
+          node scripts/postgrest.mjs --prepare --db parklet_e2e
       - name: Migrate
         run: |
           npm run db:migrate

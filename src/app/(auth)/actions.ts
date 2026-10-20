@@ -1,11 +1,10 @@
 "use server";
 
 import { appUrl } from "@/lib/app-url";
-import { and, eq, gt, isNull } from "drizzle-orm";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { db } from "@/db";
-import { passwordResetTokens, sessions, users } from "@/db/schema";
+import { api, ApiError, cols, must, names, rpc, toDb } from "@/db/api";
+import { passwordResetTokens, users, type User } from "@/db/schema";
 import type { FormState } from "@/components/form";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { rateLimit } from "@/lib/auth/rate-limit";
@@ -17,6 +16,14 @@ import { sendEmail } from "@/server/mailer";
 async function clientIp() {
   const h = await headers();
   return h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "local";
+}
+
+const U = names(users);
+const T = names(passwordResetTokens);
+
+async function userIdByEmail(email: string): Promise<string | null> {
+  const row = must<{ id: string } | null>(await api().from("users").select("id").eq(U.email, email).maybeSingle(), "userIdByEmail");
+  return row?.id ?? null;
 }
 
 // A real hash so that unknown e-mails take as long to reject as wrong passwords.
@@ -32,7 +39,10 @@ export async function loginAction(_prev: FormState, formData: FormData): Promise
     return { error: "För många inloggningsförsök. Vänta en stund och försök igen.", values };
   }
 
-  const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+  const user = must<Pick<User, "id" | "passwordHash"> | null>(
+    await api().from("users").select(cols(users, ["id", "passwordHash"])).eq(U.email, email).maybeSingle(),
+    "loginAction",
+  );
   const ok = await verifyPassword(password, user?.passwordHash ?? (await DUMMY_HASH));
   if (!user || !ok) return { error: "Fel e-postadress eller lösenord.", values };
 
@@ -55,15 +65,25 @@ export async function registerAction(_prev: FormState, formData: FormData): Prom
     return { error: "För många nya konton från din anslutning. Försök igen senare.", values };
   }
 
-  const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, parsed.data.email)).limit(1);
-  if (existing) {
-    return { fieldErrors: { email: "Det finns redan ett konto med den e-postadressen. Logga in eller återställ lösenordet." }, values };
+  const taken = { fieldErrors: { email: "Det finns redan ett konto med den e-postadressen. Logga in eller återställ lösenordet." }, values };
+  if (await userIdByEmail(parsed.data.email)) return taken;
+  let userId: string;
+  try {
+    const row = must<{ id: string }>(
+      await api()
+        .from("users")
+        .insert(toDb(users, { name: parsed.data.name, email: parsed.data.email, passwordHash: await hashPassword(parsed.data.password) }))
+        .select("id")
+        .single(),
+      "registerAction",
+    );
+    userId = row.id;
+  } catch (err) {
+    // Registered by a second request in the meantime.
+    if (err instanceof ApiError && err.code === "23505") return taken;
+    throw err;
   }
-  const [user] = await db
-    .insert(users)
-    .values({ name: parsed.data.name, email: parsed.data.email, passwordHash: await hashPassword(parsed.data.password) })
-    .returning({ id: users.id });
-  await startSession(user.id);
+  await startSession(userId);
   redirect(safeNext(formData.get("next"), "/"));
 }
 
@@ -79,10 +99,15 @@ export async function requestResetAction(_prev: FormState, formData: FormData): 
   const done: FormState = { success: "Om det finns ett konto med den adressen har vi skickat en länk för att välja ett nytt lösenord. Länken gäller i en timme." };
   if (!rateLimit(`reset:${email}`, 3, 60 * 60_000)) return done;
 
-  const [user] = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);
-  if (user) {
+  const userId = await userIdByEmail(email);
+  if (userId) {
     const token = generateToken();
-    await db.insert(passwordResetTokens).values({ id: hashToken(token), userId: user.id, expiresAt: new Date(Date.now() + 3600_000) });
+    must(
+      await api()
+        .from("password_reset_tokens")
+        .insert(toDb(passwordResetTokens, { id: hashToken(token), userId, expiresAt: new Date(Date.now() + 3600_000) })),
+      "requestResetAction",
+    );
     await sendEmail(email, "Välj ett nytt lösenord för Parklet", {
       heading: "Välj ett nytt lösenord",
       paragraphs: ["Någon, förhoppningsvis du, har bett om att få byta lösenord för ditt Parklet-konto. Länken gäller i en timme."],
@@ -99,20 +124,24 @@ export async function resetPasswordAction(_prev: FormState, formData: FormData):
   const parsed = passwordSchema.safeParse(formData.get("password") ?? "");
   if (!parsed.success) return { fieldErrors: { password: parsed.error.issues[0].message } };
 
-  const [row] = await db
-    .select()
-    .from(passwordResetTokens)
-    .where(and(eq(passwordResetTokens.id, hashToken(token)), isNull(passwordResetTokens.usedAt), gt(passwordResetTokens.expiresAt, new Date())))
-    .limit(1);
-  if (!row) return { error: "Länken är ogiltig eller har gått ut. Begär en ny." };
+  const invalid: FormState = { error: "Länken är ogiltig eller har gått ut. Begär en ny." };
+  const tokenId = hashToken(token);
+  // A quick check first, so an invalid link doesn't cost a password hash.
+  const valid = must<{ id: string } | null>(
+    await api()
+      .from("password_reset_tokens")
+      .select("id")
+      .eq(T.id, tokenId)
+      .is(T.usedAt, null)
+      .gt(T.expiresAt, new Date().toISOString())
+      .maybeSingle(),
+    "resetPasswordAction",
+  );
+  if (!valid) return invalid;
 
-  const passwordHash = await hashPassword(parsed.data);
-  await db.transaction(async (tx) => {
-    await tx.update(users).set({ passwordHash }).where(eq(users.id, row.userId));
-    await tx.update(passwordResetTokens).set({ usedAt: new Date() }).where(eq(passwordResetTokens.id, row.id));
-    // Sign out everywhere else.
-    await tx.delete(sessions).where(eq(sessions.userId, row.userId));
-  });
-  await startSession(row.userId);
+  // Uses the token, sets the password and signs out everywhere else, in one step.
+  const userId = await rpc<string | null>("parklet_reset_password", { p_token_id: tokenId, p_password_hash: await hashPassword(parsed.data) });
+  if (!userId) return invalid;
+  await startSession(userId);
   redirect("/");
 }

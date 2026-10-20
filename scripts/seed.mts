@@ -1,15 +1,22 @@
 /**
  * Demo data for local development. Run with `npm run db:seed`.
  * Wipes all data first — never point this at production.
+ *
+ * Plain rows go straight into DATABASE_URL; spots are created the way the app
+ * creates them, through the HTTP API, so the seed starts its own PostgREST for
+ * that database (scripts/postgrest.mjs).
  */
 import { sql } from "drizzle-orm";
-import { db } from "@/db";
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
+import * as schema from "@/db/schema";
 import { bookings, documents, hostAccountMembers, hostAccounts, spots, users, vehicles } from "@/db/schema";
 import { hashPassword } from "@/lib/auth/password";
 import { calculatePrice } from "@/lib/pricing";
 import type { Schedule } from "@/lib/schedule";
 import { createSpots } from "@/server/spots";
 import { storeDocument } from "@/server/storage";
+import { freePort, localServiceKey, startPostgrest } from "./postgrest.mjs";
 
 /** A one-page PDF with a line of text, standing in for an uploaded document. */
 function demoPdf(text: string): Buffer {
@@ -34,6 +41,20 @@ function demoPdf(text: string): Buffer {
 }
 
 if (process.env.NODE_ENV === "production") throw new Error("Refusing to seed in production");
+
+const databaseUrl = process.env.DATABASE_URL ?? "postgres://parklet:parklet@localhost:5432/parklet";
+const client = postgres(databaseUrl, { max: 1, onnotice: () => {} });
+const db = drizzle(client, { schema });
+
+// The app's data layer talks to this PostgREST only (never to one from .env, which may
+// serve another database).
+const apiPort = await freePort();
+const postgrest = await startPostgrest({ databaseUrl, port: apiPort });
+process.env.SUPABASE_REST_URL = `http://localhost:${apiPort}`;
+process.env.SUPABASE_SERVICE_ROLE_KEY = localServiceKey();
+delete process.env.SUPABASE_SECRET_KEY;
+// Documents go to local files, whatever .env says.
+delete process.env.DOCUMENT_STORAGE;
 
 await db.execute(
   sql`TRUNCATE bookings, availability_windows, documents, document_blobs, mail_outbox, spots, host_invitations, host_account_members, host_accounts, vehicles, password_reset_tokens, sessions, users CASCADE`,
@@ -212,4 +233,5 @@ console.log(`Seeded ${created.length} bookable spots. All demo users have the pa
   styrelsen@parklet.test  Brf Linnéstaden (requires vehicle registration)
   forare@parklet.test     Driver with upcoming bookings
   ny@parklet.test         New host who has not verified or connected payouts`);
-await db.$client.end();
+await client.end();
+postgrest.kill();

@@ -13,7 +13,7 @@ to run for a small team.
 | Styling | **Tailwind CSS 4** | Fast to iterate, consistent design tokens, no runtime CSS |
 | Database | **PostgreSQL 16** (managed: **Supabase** or **Neon**, EU region) | Transactions, constraints and range types. `btree_gist` exclusion constraints make double bookings impossible at the database level (see below) |
 | Geo search | Postgres + bounding-box index (MVP) → **PostGIS** at scale | The MVP runs on plain Postgres; PostGIS (`ST_DWithin`, GiST) is a drop-in upgrade, available on Supabase and Neon |
-| ORM / migrations | **Drizzle ORM + drizzle-kit** | Typed SQL with no magic, plain SQL migrations, supports custom SQL (exclusion constraints) |
+| Data access / migrations | **Supabase's HTTP API (PostgREST)** from the server with the service key; **Postgres functions** for all-or-nothing steps; **Drizzle** schema + drizzle-kit for types and migrations | No database connections from serverless functions, so no connection-pooler trouble; plain SQL migrations with custom SQL (exclusion constraints) |
 | Validation | **Zod** | One schema shared by forms and server |
 | Auth | Email + password (MVP), then **BankID / Freja eID** via **Criipto** or **Signicat** (OIDC); passkeys later | Swedes expect BankID. A broker gives verified name and personnummer for host verification and DAC7, and removes passwords for most users |
 | Payments | **Stripe Connect** (Express accounts, destination charges); alternatives Adyen for Platforms or Mangopay | Licensed partner holds the funds, so Parklet needs no payment institution licence. Handles KYC/AML on hosts, SCA/3-D Secure, cards, Apple/Google Pay, Klarna and Swish, refunds and payouts. See `03-mvp.md` |

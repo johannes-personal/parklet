@@ -1,7 +1,6 @@
 import "server-only";
 import { timingSafeEqual } from "node:crypto";
-import { eq } from "drizzle-orm";
-import { db } from "@/db";
+import { api, must, names } from "@/db/api";
 import { appSecrets } from "@/db/schema";
 
 /**
@@ -13,7 +12,8 @@ import { appSecrets } from "@/db/schema";
 export async function isCronRequest(req: Request): Promise<boolean> {
   const given = req.headers.get("authorization")?.replace(/^Bearer /, "") ?? "";
   if (!given) return false;
-  const [row] = await db.select({ value: appSecrets.value }).from(appSecrets).where(eq(appSecrets.name, "cron")).limit(1);
+  const S = names(appSecrets);
+  const row = must<{ value: string } | null>(await api().from("app_secrets").select(S.value).eq(S.name, "cron").maybeSingle(), "isCronRequest");
   return [process.env.CRON_SECRET, row?.value].some((secret) => secret && same(given, secret));
 }
 
