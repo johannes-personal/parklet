@@ -1,7 +1,7 @@
 import "server-only";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { clientOptions } from "./client-options";
+import { createClient } from "./client-options";
 import * as schema from "./schema";
 
 // DATABASE_URL locally; on Vercel the Supabase integration provides POSTGRES_URL.
@@ -24,8 +24,6 @@ function cleanUrl(value: string): string {
   return u.toString();
 }
 
-const options = clientOptions({ transactionPooler, vercel: Boolean(process.env.VERCEL) });
-
 /**
  * A query, or a whole transaction, that hasn't finished after this long is
  * taken as stuck. Nothing in Parklet comes close; postgres.js itself would
@@ -37,7 +35,7 @@ const TRANSACTION_TIMEOUT_MS = QUERY_TIMEOUT_MS * 1.5;
 type Pool = { client: postgres.Sql; db: ReturnType<typeof drizzle<typeof schema>> };
 
 function connect(): Pool {
-  const client = postgres(url, options);
+  const client = createClient(url, { transactionPooler, vercel: Boolean(process.env.VERCEL) });
   watch(client);
   return { client, db: drizzle(client, { schema }) };
 }
