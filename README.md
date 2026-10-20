@@ -61,9 +61,9 @@ Live demo: **https://parklet-rebuild.vercel.app**
   anything, while the app connects as the table owner.
 - **App:** Vercel, with functions pinned to `arn1` (Stockholm) in `vercel.json`.
 - **Connection:** the Supabase ↔ Vercel integration injects `POSTGRES_URL` (Supavisor's
-  transaction pooler, port 6543). The client strips pooler-specific URL parameters, disables
-  prepared statements and sends one query at a time per connection: pipelined queries stalled
-  indefinitely in transaction mode. See `src/db/index.ts`.
+  transaction pooler, port 6543). The client strips pooler-specific URL parameters and disables
+  prepared statements (`src/db/client-options.ts`). Session mode (port 5432) is not an option on
+  Vercel: it allows only 15 clients in total.
 - **Vercel env:** `DOCUMENT_STORAGE=database`, `NEXT_PUBLIC_DEMO=1`. Links use `APP_URL` if
   set, otherwise Vercel's production or deployment URL.
 - **Mail:** every mail lands in the `mail_outbox` table, readable by admins at `/admin/epost`.

@@ -1,6 +1,7 @@
 import "server-only";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
+import { clientOptions } from "./client-options";
 import * as schema from "./schema";
 
 // DATABASE_URL locally; on Vercel the Supabase integration provides POSTGRES_URL.
@@ -9,8 +10,7 @@ const MISSING = "DATABASE_URL (or POSTGRES_URL) is not set. Copy .env.example to
 // Builds don't touch the database, so a missing URL only fails when a query runs.
 const url = cleanUrl(rawUrl ?? "postgres://missing@127.0.0.1:1/missing");
 
-// Supabase's transaction pooler (Supavisor, port 6543) does not support
-// prepared statements. Serverless functions also keep their pools small.
+// Supabase's transaction pooler (Supavisor, port 6543); see ./client-options.ts.
 const transactionPooler = /:6543\//.test(url);
 
 /**
@@ -24,21 +24,7 @@ function cleanUrl(value: string): string {
   return u.toString();
 }
 
-const options = {
-  max: process.env.VERCEL ? 3 : 10,
-  prepare: !transactionPooler,
-  // postgres.js pipelines queries on a busy connection. Through the transaction
-  // pooler, pipelined queries stalled for good (the server showed them as
-  // "active / ClientRead"); once all of an instance's connections were stuck,
-  // every page that queried the database hung. Send one query at a time per
-  // connection there. (The option exists but is missing from the type
-  // definitions.) Session mode (port 5432) is no way out: it allows only 15
-  // clients in total, which serverless instances use up at once.
-  max_pipeline: transactionPooler ? 0 : 100,
-  // Serverless instances come and go; don't hold pooler connections while idle.
-  idle_timeout: process.env.VERCEL ? 20 : undefined,
-  onnotice: () => {},
-};
+const options = clientOptions({ transactionPooler, vercel: Boolean(process.env.VERCEL) });
 
 /**
  * A query, or a whole transaction, that hasn't finished after this long is
