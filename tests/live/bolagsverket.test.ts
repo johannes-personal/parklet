@@ -22,12 +22,11 @@ describe.skipIf(!registryConfigured())("Bolagsverket's API", () => {
     expect(formMatchesKind(lookup.organisation.form, "association")).toBe(false);
   });
 
-  it("answers for a well-formed number it doesn't know", async () => {
-    // Valid check digit, never issued as far as we know. What matters is a proper
-    // answer: "not_found" (or "found"), never "unavailable" (auth, network, or a
-    // response our parser doesn't understand).
-    const lookup = await lookupOrganisation("559999-9991");
-    expect(["not_found", "found"]).toContain(lookup.result);
+  it("says a well-formed number it doesn't know is not found", async () => {
+    // Valid check digit, not issued (checked against the API on 2026-10-20). The real API
+    // reports this per section rather than once, which the parser must recognise; read as
+    // "unavailable" it would let a mistyped number through to manual review.
+    expect(await lookupOrganisation("559999-9991")).toEqual({ result: "not_found" });
   });
 
   it("finds numbers in the formats hosts type, normalised as the app does", async () => {

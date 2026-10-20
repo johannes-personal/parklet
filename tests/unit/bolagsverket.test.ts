@@ -33,6 +33,18 @@ describe("parseOrganisationResponse", () => {
   it("distinguishes not found from an unavailable source", () => {
     expect(parseOrganisationResponse({ organisationer: [] })).toEqual({ result: "not_found" });
     expect(parseOrganisationResponse({ organisationer: [{ fel: { typ: "ORGANISATION_FINNS_EJ" } }] })).toEqual({ result: "not_found" });
+    // The real API's answer (from production, shortened): an error in every section, none at the top.
+    const fel = { typ: "ORGANISATION_FINNS_EJ", felBeskrivning: "Begärd organisation finns inte registrerad i sökbar form hos aktuell dataproducent." };
+    const real = {
+      organisationer: [
+        {
+          avregistreradOrganisation: { avregistreringsdatum: null, dataproducent: "Bolagsverket", fel },
+          avregistreringsorsak: { kod: null, klartext: null, dataproducent: "Bolagsverket", fel },
+          organisationsnamn: { organisationsnamnLista: null, dataproducent: "Bolagsverket", fel },
+        },
+      ],
+    };
+    expect(parseOrganisationResponse(real)).toEqual({ result: "not_found" });
     expect(parseOrganisationResponse({ organisationer: [{ fel: { typ: "OTILLGANGLIG_UPPGIFTSKALLA" } }] })).toEqual({
       result: "unavailable",
       reason: "OTILLGANGLIG_UPPGIFTSKALLA",
