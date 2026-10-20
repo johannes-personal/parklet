@@ -6,6 +6,7 @@ import { Pager, Select } from "@/app/admin/list-controls";
 import { Badge } from "@/components/status-badge";
 import { requireAdmin } from "@/lib/auth/session";
 import { formMatchesKind } from "@/lib/bolagsverket";
+import { VERIFICATION_LABEL } from "@/lib/labels";
 import { formatDateTime } from "@/lib/time";
 import { searchAccounts, type AccountFilters } from "@/server/admin-search";
 import { HOST_KIND_LABEL } from "@/server/host-accounts";
@@ -15,13 +16,6 @@ export const metadata: Metadata = { title: "Uthyrare – administration", robots
 type SP = Awaited<PageProps<"/admin/konton">["searchParams"]>;
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) || undefined;
 const pick = <T extends string>(v: string | undefined, allowed: readonly T[]) => (allowed.includes(v as T) ? (v as T) : undefined);
-
-const VERIFICATION = {
-  unverified: { text: "Ej verifierad", kind: "neutral" },
-  pending: { text: "Granskas", kind: "warn" },
-  verified: { text: "Verifierad", kind: "ok" },
-  rejected: { text: "Ej godkänd", kind: "danger" },
-} as const;
 
 function filtersFrom(sp: SP): AccountFilters {
   return {
@@ -77,7 +71,7 @@ async function Results({ searchParams }: { searchParams: PageProps<"/admin/konto
       </FilterForm>
 
       <nav aria-label="Verifiering" className="flex flex-wrap gap-2">
-        {[["", "Alla", all] as const, ...Object.entries(VERIFICATION).map(([v, l]) => [v, l.text, byVerification[v] ?? 0] as const)].map(([value, label, n]) => (
+        {[["", "Alla", all] as const, ...Object.entries(VERIFICATION_LABEL).map(([v, l]) => [v, l.text, byVerification[v] ?? 0] as const)].map(([value, label, n]) => (
           <Link
             key={value}
             href={href({ status: value || undefined })}
@@ -113,7 +107,7 @@ async function Results({ searchParams }: { searchParams: PageProps<"/admin/konto
             </thead>
             <tbody className="divide-y divide-line">
               {rows.map(({ account: a, spots, approved, owner }) => {
-                const v = VERIFICATION[a.verificationStatus];
+                const v = VERIFICATION_LABEL[a.verificationStatus];
                 const formMismatch = a.kind !== "household" && formMatchesKind(a.registryForm, a.kind) === false;
                 return (
                   <tr key={a.id} className="relative grid gap-1 px-4 py-3 hover:bg-canvas md:table-row md:p-0">

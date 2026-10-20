@@ -78,6 +78,13 @@
       "when": 1792490007991,
       "tag": "0010_http_api",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792494710981,
+      "tag": "0011_landlord_requires_registration",
+      "breakpoints": true
     }
   ]
 }

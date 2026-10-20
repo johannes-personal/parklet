@@ -19,6 +19,7 @@ const BRF = { kod: "BRF", klartext: "Bostadsrättsförening" };
 const REGISTRY = {
   "7696001234": organisation("Bostadsrättsföreningen Testgården", BRF),
   "7696009997": organisation("Brf Nedlagd", BRF, { avregistreradOrganisation: { avregistreringsdatum: "2020-01-01" } }),
+  "5560125790": organisation("Testbolaget Fastigheter AB", { kod: "AB", klartext: "Aktiebolag" }),
 };
 
 const json = (res, status, body) => {

@@ -1,14 +1,16 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { reviewAccountAction } from "@/app/admin/actions";
 import { ReviewForm } from "@/app/admin/review-form";
 import { api, cols, must, names, parse } from "@/db/api";
 import { hostAccounts } from "@/db/schema";
+import { Unavailable } from "@/components/unavailable";
 import { requireAdmin } from "@/lib/auth/session";
 import { formMatchesKind } from "@/lib/bolagsverket";
-import { DOCUMENT_KIND_LABEL } from "@/lib/labels";
+import { DOCUMENT_KIND_LABEL, VERIFICATION_LABEL } from "@/lib/labels";
+import { formatDateTime } from "@/lib/time";
+import { accountDecisions } from "@/server/spots";
 import { HOST_KIND_LABEL, listAccountDocuments, listMembers } from "@/server/host-accounts";
 import { isUuid } from "@/server/ids";
 
@@ -30,9 +32,14 @@ async function Content({ params, searchParams }: P) {
   await requireAdmin();
   const { id } = await params;
   const { fel } = await searchParams;
-  if (!isUuid(id)) notFound();
+  const gone = (
+    <Unavailable title="Uthyrarkontot finns inte" actions={[{ href: "/admin/konton", label: "Alla uthyrare" }]}>
+      <p>Kontot har tagits bort, eller så är länken fel.</p>
+    </Unavailable>
+  );
+  if (!isUuid(id)) return gone;
   const row = must(await api().from("host_accounts").select(cols(hostAccounts)).eq(names(hostAccounts).id, id).maybeSingle(), "AdminAccountPage");
-  if (!row) notFound();
+  if (!row) return gone;
   const account = parse(hostAccounts, row);
   const [docs, members] = await Promise.all([listAccountDocuments(id), listMembers(id)]);
   return (
@@ -55,7 +62,7 @@ async function Content({ params, searchParams }: P) {
           ],
           ["Uppgiven roll", account.signatoryRole ?? "–"],
           ["Administratörer", members.map((m) => `${m.name} (${m.email}, ${m.role})`).join("; ")],
-          ["Status", account.verificationStatus],
+          ["Status", VERIFICATION_LABEL[account.verificationStatus].text],
         ].map(([k, v]) => (
           <div key={k} className="grid gap-1 px-4 py-3 sm:grid-cols-[12rem_1fr]">
             <dt className="font-medium text-muted">{k}</dt>
@@ -80,7 +87,22 @@ async function Content({ params, searchParams }: P) {
           protokoll eller registreringsbevis.
         </p>
       </section>
-      <ReviewForm action={reviewAccountAction} idName="accountId" id={account.id} error={Boolean(fel)} />
+      <ReviewForm
+        action={reviewAccountAction}
+        idName="accountId"
+        id={account.id}
+        decisions={accountDecisions(account.verificationStatus)}
+        status={
+          {
+            unverified: "Organisationen har inte skickats in för verifiering än.",
+            pending: "Inskickad för verifiering. Väntar på ditt beslut.",
+            verified: `Verifierad${account.reviewedAt ? ` ${formatDateTime(account.reviewedAt)}` : ""}.`,
+            rejected: `Ej godkänd${account.reviewNote ? ` (${account.reviewNote.replace(/[.\s]+$/, "")})` : ""}. Väntar på att uthyraren kompletterar.`,
+          }[account.verificationStatus]
+        }
+        returnTo={account.verificationStatus === "pending" ? "/admin" : `/admin/konton/${account.id}`}
+        error={fel === "motivering" || fel === "status" ? fel : undefined}
+      />
     </div>
   );
 }

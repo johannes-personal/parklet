@@ -34,14 +34,14 @@ export async function AccountNav() {
         {user.name.split(" ")[0]}
       </Link>
       {bell ? <NotificationBell initial={bell} /> : null}
-      <MenuDrawer user={{ name: user.name, isAdmin: user.isAdmin, isHost: host }} />
+      <MenuDrawer user={{ name: user.name, isAdmin: user.isAdmin }} />
     </>
   );
 }
 
 function BecomeHostLink() {
   return (
-    <Link href="/hyr-ut" className="hidden text-zinc-300 transition-colors hover:text-white md:inline-flex">
+    <Link href="/uthyrare" className="hidden text-zinc-300 transition-colors hover:text-white md:inline-flex">
       Bli uthyrare
     </Link>
   );

@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { SpotForm } from "@/components/host/spot-form";
 import { EMPTY_SPOT } from "@/components/host/spot-form-defaults";
+import { NoAccountAccess } from "@/components/host/host-access";
 import { SpotSteps } from "@/components/host/spot-steps";
 import { requireUser } from "@/lib/auth/session";
 import { getAccountForMember } from "@/server/host-accounts";
@@ -26,7 +26,7 @@ async function Content({ params }: P) {
   const { accountId } = await params;
   const user = await requireUser(`/uthyrare/${accountId}/platser/ny`);
   const account = await getAccountForMember(accountId, user.id);
-  if (!account) notFound();
+  if (!account) return <NoAccountAccess user={user} accountId={accountId} returnTo={`/uthyrare/${accountId}/platser/ny`} />;
   return (
     <>
       <Link href={`/uthyrare/${accountId}`} className="link text-sm">

@@ -32,7 +32,7 @@ export default function HomePage() {
               timme eller dygn.
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
-              <Link href="/hyr-ut" className="btn-secondary btn-lg">
+              <Link href="/uthyrare" className="btn-secondary btn-lg">
                 Tjäna pengar på din plats
               </Link>
             </div>
@@ -81,7 +81,7 @@ export default function HomePage() {
           <p className="mt-2 text-ink-soft">
             Du bestämmer när den är ledig och vad den kostar. Vi sköter bokning, betalning och kvitton. Pengarna betalas ut till ditt konto.
           </p>
-          <Link href="/hyr-ut" className="btn-primary mt-4">
+          <Link href="/uthyrare" className="btn-primary mt-4">
             Hyr ut din plats
           </Link>
         </div>
@@ -90,7 +90,7 @@ export default function HomePage() {
           <p className="mt-2 text-ink-soft">
             Lägg upp flera platser på en gång, bjud in fler administratörer och kräv att tillfälliga hyresgästers bilar registreras.
           </p>
-          <Link href="/hyr-ut#foreningar" className="btn-secondary mt-4">
+          <Link href="/uthyrare#foreningar" className="btn-secondary mt-4">
             Läs mer för organisationer
           </Link>
         </div>

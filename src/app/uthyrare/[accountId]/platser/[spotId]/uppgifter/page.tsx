@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { SpotForm } from "@/components/host/spot-form";
 import type { SpotFormDefaults } from "@/components/host/spot-form-defaults";
+import { NoAccountAccess, SpotGone } from "@/components/host/host-access";
 import { SpotSteps } from "@/components/host/spot-steps";
 import { requireUser } from "@/lib/auth/session";
 import { oreToSekInput } from "@/lib/money";
@@ -29,8 +29,9 @@ async function Content({ params }: P) {
   const { accountId, spotId } = await params;
   const user = await requireUser(`/uthyrare/${accountId}/platser/${spotId}/uppgifter`);
   const account = await getAccountForMember(accountId, user.id);
+  if (!account) return <NoAccountAccess user={user} accountId={accountId} spotId={spotId} returnTo={`/uthyrare/${accountId}/platser/${spotId}/uppgifter`} />;
   const spot = await getSpot(spotId);
-  if (!account || !spot || spot.hostAccountId !== accountId) notFound();
+  if (!spot || spot.hostAccountId !== accountId) return <SpotGone accountId={accountId} accountName={account.name} />;
   const overview = `/uthyrare/${accountId}/platser/${spotId}`;
 
   const defaults: SpotFormDefaults = {
@@ -58,6 +59,7 @@ async function Content({ params }: P) {
     landlordEmail: spot.landlordEmail ?? "",
     requiresVehicleRegistration: spot.requiresVehicleRegistration,
     vehicleRegistrationNote: spot.vehicleRegistrationNote,
+    landlordRequiresRegistration: spot.landlordRequiresRegistration,
   };
 
   return (
@@ -71,8 +73,11 @@ async function Content({ params }: P) {
           <SpotSteps current={1} done={spot.review === "approved" ? 3 : spot.review === "pending_review" ? 2 : 1} links={{ 2: overview }} />
         </div>
       </div>
-      {spot.review === "approved" ? (
-        <p className="text-sm text-muted">Ändrar du adress eller uthyrningsgrund behöver platsen granskas igen innan den kan bokas.</p>
+      {spot.review === "approved" || spot.review === "pending_review" ? (
+        <p className="text-sm text-muted">
+          Ändrar du adress eller uthyrningsgrund behöver platsen granskas igen innan den kan bokas. Byter du förening eller hyresvärd (eller dess
+          e-post) behövs ett nytt godkännande, och platsen går tillbaka till utkast tills du skickar in den igen.
+        </p>
       ) : null}
       <SpotForm accountId={accountId} spotId={spot.id} defaults={defaults} allowMultiple={false} />
     </div>

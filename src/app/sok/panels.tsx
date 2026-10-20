@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /**
  * The results list floating over the map. On phones it is a bottom sheet that
@@ -60,9 +60,11 @@ export function SpotPanel({ title, closeHref, shareHref, children }: { title: st
 
 /**
  * Share a spot's own page. Phones get the system share sheet; elsewhere the
- * link is copied, with a short confirmation.
+ * link is copied, with a short confirmation. The link carries the times now
+ * chosen in the panel's booking form, which may differ from the search's.
  */
 function ShareButton({ href, title }: { href: string; title: string }) {
+  const button = useRef<HTMLButtonElement>(null);
   const [share, setShare] = useState(false);
   const [copied, setCopied] = useState<"ok" | "fail" | null>(null);
   useEffect(() => {
@@ -76,7 +78,15 @@ function ShareButton({ href, title }: { href: string; title: string }) {
   }, [copied]);
 
   async function onClick() {
-    const url = new URL(href, window.location.origin).toString();
+    const link = new URL(href, window.location.origin);
+    const form = button.current?.closest("[data-spot-panel]")?.querySelector<HTMLFormElement>('form[aria-label="Boka platsen"]');
+    const from = form?.querySelector<HTMLInputElement>('input[name="from"]')?.value;
+    const to = form?.querySelector<HTMLInputElement>('input[name="to"]')?.value;
+    if (from && to) {
+      link.searchParams.set("from", from);
+      link.searchParams.set("to", to);
+    }
+    const url = link.toString();
     if (share) {
       try {
         await navigator.share({ title, url });
@@ -95,7 +105,12 @@ function ShareButton({ href, title }: { href: string; title: string }) {
 
   return (
     <>
-      <button type="button" onClick={onClick} className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm font-medium text-ink-soft hover:bg-canvas hover:text-ink">
+      <button
+        ref={button}
+        type="button"
+        onClick={onClick}
+        className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm font-medium text-ink-soft hover:bg-canvas hover:text-ink"
+      >
         <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="size-4">
           <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
           <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />

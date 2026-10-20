@@ -1,10 +1,4 @@
-import type { Metadata } from "next";
 import Link from "next/link";
-
-export const metadata: Metadata = {
-  title: "Hyr ut din parkeringsplats",
-  description: "Tjäna pengar på din parkeringsplats när du inte använder den. Du bestämmer tider och pris – vi sköter bokning och betalning.",
-};
 
 const steps = [
   { title: "Skapa ett uthyrarkonto", body: "Som privatperson, bostadsrättsförening eller företag. Legitimera dig med BankID." },
@@ -35,7 +29,11 @@ const faq = [
   },
 ];
 
-export default function HostLandingPage() {
+/**
+ * How renting out works, for anyone without a host account yet: the start of
+ * /uthyrare, the one way into hosting (the old /hyr-ut redirects here).
+ */
+export function HostIntro() {
   return (
     <>
       <section>
@@ -44,7 +42,7 @@ export default function HostLandingPage() {
           <p className="mx-auto mt-4 max-w-2xl text-lg text-ink-soft">
             Du bestämmer när platsen är ledig och vad den kostar. Vi sköter bokningar, betalning, kvitton och support.
           </p>
-          <Link href="/uthyrare" className="btn-primary btn-lg mt-8">
+          <Link href="/uthyrare/nytt" className="btn-primary btn-lg mt-8">
             Kom igång
           </Link>
         </div>
@@ -70,7 +68,7 @@ export default function HostLandingPage() {
           <h2 className="text-2xl font-bold">För bostadsrättsföreningar och fastighetsägare</h2>
           <ul className="mt-6 grid gap-4 sm:grid-cols-2">
             {[
-              ["Flera platser på en gång", "Lägg upp \"Plats 1–20\" med samma villkor och samma underlag."],
+              ["Flera platser på en gång", 'Lägg upp "Plats 1–20" med samma villkor och samma underlag.'],
               ["Flera administratörer", "Bjud in fler i styrelsen eller förvaltningen."],
               ["Registrering av bilar", "Kräv att tillfälliga hyresgästers bilar registreras, med tydlig att-göra-lista."],
               ["Bara via länk", "Låt platserna vara dolda i sökningen och dela länken med boende eller grannar."],
@@ -82,8 +80,8 @@ export default function HostLandingPage() {
             ))}
           </ul>
           <p className="mt-6 text-sm text-muted">
-            Tänk på: uthyrning till icke-medlemmar kan påverka om en BRF räknas som privatbostadsföretag skattemässigt. Rådgör med er revisor
-            om ni hyr ut många platser externt.
+            Tänk på: uthyrning till icke-medlemmar kan påverka om en BRF räknas som privatbostadsföretag skattemässigt. Rådgör med er revisor om ni hyr ut många
+            platser externt.
           </p>
         </div>
       </section>

@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { SpotMap } from "@/components/map/spot-map";
+import { Unavailable } from "@/components/unavailable";
 import { loadSpotForViewer, SpotBooking, SpotFacts, SpotHeading } from "@/components/spot/spot-details";
 import { formatSek } from "@/lib/money";
+import { getSpotWithAccount } from "@/server/spots";
 
 export const metadata: Metadata = { title: "Parkeringsplats" };
 
@@ -22,7 +23,7 @@ async function SpotDetails({ params, searchParams }: P) {
   const { id } = await params;
   const sp = await searchParams;
   const data = await loadSpotForViewer(id);
-  if (!data) notFound();
+  if (!data) return <SpotUnavailable id={id} />;
   const { spot } = data;
   const from = typeof sp.from === "string" ? sp.from : undefined;
   const to = typeof sp.to === "string" ? sp.to : undefined;
@@ -60,5 +61,28 @@ async function SpotDetails({ params, searchParams }: P) {
         </aside>
       </div>
     </div>
+  );
+}
+
+/**
+ * A spot link that can't be booked: the spot is gone, or it is paused, waiting
+ * for review or its host isn't ready. Where it still exists, the driver gets a
+ * search around it (its town and position are public anyway).
+ */
+async function SpotUnavailable({ id }: { id: string }) {
+  const row = await getSpotWithAccount(id);
+  if (!row) {
+    return (
+      <Unavailable title="Platsen finns inte" actions={[{ href: "/sok", label: "Hitta parkering" }]}>
+        <p>Platsen har tagits bort, eller så är länken fel.</p>
+      </Unavailable>
+    );
+  }
+  const { spot } = row;
+  const near = new URLSearchParams({ q: spot.city, lat: String(spot.lat), lng: String(spot.lng) });
+  return (
+    <Unavailable title="Platsen kan inte bokas just nu" actions={[{ href: `/sok?${near}`, label: `Hitta parkering i närheten` }, { href: "/sok", label: "Ny sökning" }]}>
+      <p>Uthyraren har pausat platsen eller håller på att ändra den. Det finns ofta andra lediga platser i närheten.</p>
+    </Unavailable>
   );
 }

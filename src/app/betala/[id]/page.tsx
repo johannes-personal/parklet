@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+import { redirect } from "next/navigation";
+import { BookingUnavailable } from "@/components/booking-unavailable";
 import { Suspense } from "react";
 import { PayButton } from "@/app/booking-buttons";
 import { requireUser } from "@/lib/auth/session";
@@ -22,7 +23,7 @@ async function Checkout({ params }: { params: PageProps<"/betala/[id]">["params"
   const { id } = await params;
   const user = await requireUser(`/betala/${id}`);
   const b = await getBookingForUser(id, user.id);
-  if (!b || b.driverId !== user.id) notFound();
+  if (!b || b.driverId !== user.id) return <BookingUnavailable email={user.email} returnTo={`/betala/${id}`} />;
   if (b.status === "confirmed") redirect(`/bokning/${b.id}`);
   const expired = b.status !== "pending_payment" || !b.holdExpiresAt || b.holdExpiresAt < new Date();
 

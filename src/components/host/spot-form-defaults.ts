@@ -27,6 +27,8 @@ export type SpotFormDefaults = {
   landlordEmail: string;
   requiresVehicleRegistration: boolean;
   vehicleRegistrationNote: string;
+  /** The landlord or BRF required registration in its approval: the host can't turn it off. */
+  landlordRequiresRegistration?: boolean;
 };
 
 export const EMPTY_SPOT: SpotFormDefaults = {

@@ -13,8 +13,8 @@ const groups = [
   {
     title: "Uthyrare",
     links: [
-      { href: "/hyr-ut", label: "Hyr ut din plats" },
-      { href: "/hyr-ut#foreningar", label: "För föreningar och fastighetsägare" },
+      { href: "/uthyrare", label: "Hyr ut din plats" },
+      { href: "/uthyrare#foreningar", label: "För föreningar och fastighetsägare" },
       { href: "/hjalp#uthyrare", label: "Verifiering och utbetalning" },
     ],
   },

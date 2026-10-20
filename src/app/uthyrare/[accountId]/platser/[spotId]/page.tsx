@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import { DocumentSlot, RequestApprovalForm, SubmitSpotForm } from "@/components/host/forms";
+import { DocumentSlot, RequestApprovalForm, SubmitSpotForm, WithdrawSpotForm } from "@/components/host/forms";
+import { NoAccountAccess, SpotGone } from "@/components/host/host-access";
 import { SpotSteps } from "@/components/host/spot-steps";
 import { Badge } from "@/components/status-badge";
 import { describeWindows } from "@/lib/availability";
@@ -11,7 +11,7 @@ import { DOCUMENT_KIND_LABEL, REVIEW_LABEL, spotFeatures } from "@/lib/labels";
 import { formatSek } from "@/lib/money";
 import { formatDateTime } from "@/lib/time";
 import { getAccountForMember } from "@/server/host-accounts";
-import { getSpot, listSiblingSpots, listSpotDocuments, spotRequirements } from "@/server/spots";
+import { documentsEditable, documentsLockedError, getSpot, listSiblingSpots, listSpotDocuments, spotRequirements } from "@/server/spots";
 
 export const metadata: Metadata = { title: "Underlag för platsen" };
 
@@ -40,17 +40,19 @@ async function Content({ params, searchParams }: P) {
   const { ny, sparad } = await searchParams;
   const user = await requireUser(`/uthyrare/${accountId}/platser/${spotId}`);
   const account = await getAccountForMember(accountId, user.id);
+  if (!account) return <NoAccountAccess user={user} accountId={accountId} spotId={spotId} returnTo={`/uthyrare/${accountId}/platser/${spotId}`} />;
   const spot = await getSpot(spotId);
-  if (!account || !spot || spot.hostAccountId !== accountId) notFound();
+  if (!spot || spot.hostAccountId !== accountId) return <SpotGone accountId={accountId} accountName={account.name} />;
   const [docs, siblings] = await Promise.all([listSpotDocuments(spotId), listSiblingSpots(spot)]);
   const reqs = spotRequirements(spot, docs);
   const missing = reqs.filter((r) => !r.done);
   const review = REVIEW_LABEL[spot.review];
-  const editable = spot.review === "draft" || spot.review === "rejected";
+  const editable = documentsEditable(spot.review);
+  const locked = documentsLockedError(spot.review);
   const who = spot.landlordKind === "brf" ? "föreningen" : "hyresvärden";
   const base = `/uthyrare/${accountId}/platser/${spotId}`;
   const of = (kind: string) => docs.filter((d) => d.kind === kind).map((d) => ({ id: d.id, filename: d.filename }));
-  const slot = { accountId, spotId, canDelete: editable, siblings: siblings.length };
+  const slot = { accountId, spotId, canDelete: editable, canUpload: editable, siblings: siblings.filter((s) => documentsEditable(s.review)).length };
 
   return (
     <div className="space-y-6">
@@ -92,9 +94,7 @@ async function Content({ params, searchParams }: P) {
             <p className="mt-1 text-sm text-ink-soft">
               {spotFeatures(spot).join(" · ")} · {formatSek(spot.pricePerHourOre)}/tim · {describeWindows(spot.windows)}
             </p>
-            <p className="mt-1 text-sm text-ink-soft">
-              {spot.rightBasis === "owns" ? "Du äger platsen" : `Du hyr platsen av ${spot.landlordName || who}`}
-            </p>
+            <p className="mt-1 text-sm text-ink-soft">{spot.rightBasis === "owns" ? "Du äger platsen" : `Du hyr platsen av ${spot.landlordName || who}`}</p>
           </div>
           <div className="flex shrink-0 gap-2">
             <Link href={`/plats/${spot.id}`} className="btn-secondary px-3 py-1.5">
@@ -117,6 +117,16 @@ async function Content({ params, searchParams }: P) {
             Parklet granskar att du har rätt att hyra ut platsen innan den kan bokas. Underlagen visas bara för dig och Parklets granskare.
           </p>
         </div>
+
+        {locked ? (
+          <div role="note" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-canvas px-4 py-3 text-sm">
+            <p className="min-w-0 flex-1 text-ink-soft">
+              <span aria-hidden>🔒 </span>
+              {locked}
+            </p>
+            {spot.review === "pending_review" ? <WithdrawSpotForm accountId={accountId} spotId={spot.id} /> : null}
+          </div>
+        ) : null}
 
         {spot.rightBasis === "owns" ? (
           <DocumentSlot
@@ -165,6 +175,10 @@ async function Content({ params, searchParams }: P) {
                     </p>
                   ) : spot.landlordApproval === "declined" ? (
                     <p className="text-sm text-danger">{who[0].toUpperCase() + who.slice(1)} har nekat uthyrning av platsen.</p>
+                  ) : !editable ? (
+                    <p className="text-sm text-ink-soft">
+                      {spot.landlordApproval === "requested" ? `Förfrågan skickad till ${spot.landlordEmail}. Väntar på svar.` : "Ingen förfrågan skickad."}
+                    </p>
                   ) : (
                     <div className="space-y-2 text-sm">
                       {spot.landlordApproval === "requested" ? <p>Förfrågan skickad till {spot.landlordEmail}. Väntar på svar.</p> : null}
@@ -182,7 +196,7 @@ async function Content({ params, searchParams }: P) {
                   )}
                 </div>
               </div>
-              {spot.landlordApproval !== "approved" && spot.landlordApproval !== "declined" ? (
+              {spot.landlordApproval !== "approved" && spot.landlordApproval !== "declined" && (editable || of("sublet_permission").length > 0) ? (
                 <div className="mt-4">
                   <DocumentSlot
                     {...slot}

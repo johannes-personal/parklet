@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import postgres from "postgres";
-import { E2E_DB, lastMailLink, localAt, login, logout, pickRange } from "./helpers";
+import { E2E_DB, lastMailLink, localAt, login, logout, pickRange, signIn } from "./helpers";
 
 const fixture = (name: string) => path.resolve("e2e/fixtures", name);
 
@@ -16,6 +16,10 @@ test("a new host onboards, proves the right to rent via BRF approval, and gets a
   await page.getByLabel("Lösenord", { exact: true }).fill("ett riktigt bra lösenord");
   await page.getByRole("checkbox", { name: /godkänner/ }).check();
   await page.getByRole("button", { name: "Skapa konto" }).click();
+
+  // /uthyrare is the one way into hosting: without an account it explains how it works.
+  await expect(page.getByRole("heading", { name: "Tjäna pengar på platsen som ändå står tom" })).toBeVisible();
+  await page.getByRole("link", { name: "Kom igång" }).click();
 
   // Host account as private person
   await expect(page.getByRole("heading", { name: "Bli uthyrare" })).toBeVisible();
@@ -105,12 +109,14 @@ test("a new host onboards, proves the right to rent via BRF approval, and gets a
   await expect(page.getByText("Granskas av Parklet")).toBeVisible();
   await logout(page);
 
-  // Not in search before review
+  // Not in search before review (wait for the results, or the check proves nothing)
   await page.goto("/sok?q=G%C3%B6teborg&lat=57.7089&lng=11.9746");
+  await expect(page.getByTestId("search-result").first()).toBeAttached();
   await expect(page.getByText("Plats i Linnéstaden")).toHaveCount(0);
 
   // Admin is notified, can find the spot in the search, and approves it
-  await login(page, "admin@parklet.test");
+  await signIn(page, "admin@parklet.test");
+  await page.goto("/");
   await page.getByRole("button", { name: /^Notiser/ }).click();
   await expect(page.getByRole("link", { name: /Ny plats att granska: Plats i Linnéstaden/ })).toBeVisible();
   await page.goto("/admin/platser?q=Linn%C3%A9staden");
@@ -123,7 +129,7 @@ test("a new host onboards, proves the right to rent via BRF approval, and gets a
   await logout(page);
 
   // Now bookable; the BRF's registration rule is enforced
-  await login(page, "forare@parklet.test");
+  await signIn(page, "forare@parklet.test");
   await page.goto(spotUrl.replace(/.*platser\//, "/plats/"));
   await expect(page.getByText("Krävs av föreningen.")).toBeVisible();
   const form = page.getByRole("form", { name: "Boka platsen" });
@@ -135,7 +141,8 @@ test("a new host onboards, proves the right to rent via BRF approval, and gets a
   await logout(page);
 
   // The host sees the car to register in the bell
-  await login(page, email, "ett riktigt bra lösenord");
+  await signIn(page, email);
+  await page.goto("/");
   await page.getByRole("button", { name: /^Notiser, \d+ nya/ }).click();
   await expect(page.getByRole("link", { name: /Registrera ABC123/ })).toBeVisible();
   await page.getByRole("link", { name: "Registrera en bil" }).click();
@@ -148,7 +155,8 @@ test("a new host onboards, proves the right to rent via BRF approval, and gets a
   await expect(page.getByRole("heading", { name: "Bilar att registrera" })).toHaveCount(0);
   await logout(page);
 
-  await login(page, "forare@parklet.test");
+  await signIn(page, "forare@parklet.test");
+  await page.goto("/");
   await page.getByRole("button", { name: /^Notiser/ }).click();
   await page.getByRole("link", { name: /ABC123 är registrerad/ }).click();
   await expect(page).toHaveURL(new RegExp(`${bookingUrl}$`));
@@ -156,7 +164,7 @@ test("a new host onboards, proves the right to rent via BRF approval, and gets a
 });
 
 test("an association verifies itself and invites another administrator", async ({ page }) => {
-  await login(page, "anna@parklet.test");
+  await signIn(page, "anna@parklet.test");
   await page.goto("/uthyrare/nytt");
   await page.getByRole("radio", { name: /Bostadsrättsförening/ }).check();
   await page.getByText("Uppgifter om organisationen").click();
@@ -198,21 +206,21 @@ test("an association verifies itself and invites another administrator", async (
   await expect(page.getByText("Inbjudan skickad till erik@parklet.test")).toBeVisible();
   await logout(page);
 
-  await login(page, "erik@parklet.test");
+  await signIn(page, "erik@parklet.test");
   await page.goto(lastMailLink("/inbjudan/"));
   await page.getByRole("button", { name: "Acceptera inbjudan" }).click();
   await expect(page.getByRole("heading", { name: "Bostadsrättsföreningen Testgården" })).toBeVisible();
 
   // The reviewer sees what Bolagsverket said.
   await logout(page);
-  await login(page, "admin@parklet.test");
+  await signIn(page, "admin@parklet.test");
   await page.goto("/admin");
   await page.getByRole("link", { name: "Bostadsrättsföreningen Testgården" }).click();
   await expect(page.getByText("Bostadsrättsföreningen Testgården · Bostadsrättsförening · aktiv")).toBeVisible();
 });
 
 test("uploads are checked by content, not by file name", async ({ page }) => {
-  await login(page, "ny@parklet.test");
+  await signIn(page, "ny@parklet.test");
   await page.goto("/uthyrare");
   await page.getByRole("link", { name: "Lägg upp en plats" }).first().click();
   await page.getByLabel("Adress", { exact: true }).fill("Storgatan 1");
@@ -226,4 +234,20 @@ test("uploads are checked by content, not by file name", async ({ page }) => {
   const proof = page.getByRole("region", { name: /Bevis på att du äger platsen/ });
   await proof.getByLabel(/^Välj fil/).setInputFiles({ name: "lagfart.pdf", mimeType: "application/pdf", buffer: Buffer.from("<script>alert(1)</script>") });
   await expect(proof.getByText(/Ladda upp en PDF eller en bild/)).toBeVisible();
+});
+
+test("a company is checked against Bolagsverket and takes its registered name", async ({ page }) => {
+  await signIn(page, "erik@parklet.test");
+  await page.goto("/uthyrare/nytt");
+  await page.getByRole("radio", { name: /Företag eller fastighetsägare/ }).check();
+  await page.getByText("Uppgifter om organisationen").click();
+  await page.getByLabel("Organisationens namn").fill("Testbolaget");
+  await page.getByLabel("Organisationsnummer").fill("556012-5790");
+  await page.getByLabel("Din roll").fill("Förvaltare");
+  await page.getByRole("checkbox", { name: /intygar/ }).check();
+  await page.getByRole("button", { name: "Skapa uthyrarkonto" }).click();
+  await expect(page.getByRole("heading", { name: "Testbolaget Fastigheter AB" })).toBeVisible();
+  await expect(page.getByText("Org.nr 556012-5790")).toBeVisible();
+  // An organisation waits for Parklet's verification before its spots can be booked.
+  await expect(page.getByRole("heading", { name: "Innan du kan ta emot bokningar" })).toBeVisible();
 });

@@ -132,7 +132,11 @@ async function Results({ searchParams }: { searchParams: SP }) {
           </details>
           <div className="space-y-3 p-3">
             {outcome.widened && outcome.results.length > 0 ? (
-              <p className="px-1 text-sm text-warn">Inga platser inom 3 km – visar platser inom {outcome.radiusM! / 1000} km.</p>
+              <p className="px-1 text-sm text-warn">
+                {outcome.radiusM
+                  ? `Inga ${timed ? "lediga " : ""}platser inom 3 km – visar platser inom ${outcome.radiusM / 1000} km.`
+                  : `Inga ${timed ? "lediga " : ""}platser i närheten – visar de närmaste.`}
+              </p>
             ) : null}
             {!timed ? <p className="px-1 text-sm text-muted">Välj tid för att bara se platser som är lediga då och få totalpriset.</p> : null}
             {timed ? (
@@ -143,7 +147,7 @@ async function Results({ searchParams }: { searchParams: SP }) {
                 <p>Prova en annan tid, ett större område eller en närliggande stad.</p>
                 <p className="mt-2">
                   Har du själv en plats här?{" "}
-                  <Link href="/hyr-ut" className="link">
+                  <Link href="/uthyrare" className="link">
                     Hyr ut den på Parklet
                   </Link>
                   .

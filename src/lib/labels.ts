@@ -31,6 +31,13 @@ export const ACCOUNT_DOC_OPTIONS = ["org_registration", "board_minutes", "signat
   label: DOCUMENT_KIND_LABEL[value],
 }));
 
+export const VERIFICATION_LABEL = {
+  unverified: { text: "Ej verifierad", kind: "neutral" },
+  pending: { text: "Granskas", kind: "warn" },
+  verified: { text: "Verifierad", kind: "ok" },
+  rejected: { text: "Ej godkänd", kind: "danger" },
+} as const;
+
 export const REVIEW_LABEL = {
   draft: { text: "Utkast – underlag saknas", kind: "neutral" },
   pending_review: { text: "Granskas av Parklet", kind: "warn" },

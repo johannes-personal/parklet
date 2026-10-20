@@ -92,6 +92,12 @@ export async function logoutAction() {
   redirect("/");
 }
 
+/** Sign out and sign in again with another account, then come back (links meant for another account). */
+export async function switchAccountAction(formData: FormData) {
+  await endSession();
+  redirect(`/logga-in?next=${encodeURIComponent(safeNext(formData.get("next"), "/"))}`);
+}
+
 export async function requestResetAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const parsed = emailSchema.safeParse(formData.get("email") ?? "");
   if (!parsed.success) return { fieldErrors: { email: "Ange en giltig e-postadress." } };

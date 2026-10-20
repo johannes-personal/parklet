@@ -17,6 +17,10 @@ const nextConfig: NextConfig = {
       bodySizeLimit: "4.5mb",
     },
   },
+  async redirects() {
+    // How hosting works used to be a page of its own; /uthyrare is now the one way in.
+    return [{ source: "/hyr-ut", destination: "/uthyrare", permanent: true }];
+  },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

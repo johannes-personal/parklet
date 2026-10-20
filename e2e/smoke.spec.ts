@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 test("public pages render in Swedish without errors", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  for (const path of ["/", "/sok", "/sok?q=G%C3%B6teborg&lat=57.7089&lng=11.9746", "/hyr-ut", "/hjalp", "/villkor", "/integritet", "/logga-in", "/registrera", "/glomt-losenord"]) {
+  for (const path of ["/", "/sok", "/sok?q=G%C3%B6teborg&lat=57.7089&lng=11.9746", "/uthyrare", "/hjalp", "/villkor", "/integritet", "/logga-in", "/registrera", "/glomt-losenord"]) {
     const res = await page.goto(path);
     expect(res?.status(), path).toBe(200);
     await expect(page.locator("html")).toHaveAttribute("lang", "sv");
