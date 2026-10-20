@@ -26,13 +26,18 @@ function cleanUrl(value: string): string {
 
 // Reuse one pool across hot reloads in development.
 const globalForDb = globalThis as unknown as { pgClient?: ReturnType<typeof postgres> };
-const client =
-  globalForDb.pgClient ??
-  postgres(url, {
-    max: process.env.VERCEL ? 3 : 10,
-    prepare: !transactionPooler,
-    onnotice: () => {},
-  });
+const options = {
+  max: process.env.VERCEL ? 3 : 10,
+  prepare: !transactionPooler,
+  // postgres.js pipelines queries on a busy connection. Through the
+  // transaction pooler, pipelined queries can stall for good (the server shows
+  // them as "active / ClientRead"), hanging every page that runs several
+  // queries at once. Send one query at a time per connection there.
+  // (The option exists but is missing from the type definitions.)
+  max_pipeline: transactionPooler ? 0 : 100,
+  onnotice: () => {},
+};
+const client = globalForDb.pgClient ?? postgres(url, options);
 if (process.env.NODE_ENV !== "production") globalForDb.pgClient = client;
 
 const realDb = drizzle(client, { schema });
