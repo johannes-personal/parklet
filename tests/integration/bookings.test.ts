@@ -5,9 +5,11 @@ import { bookings, hostAccounts, spots } from "@/db/schema";
 import { cancelBooking, confirmPayment, createBooking, markVehicleRegistered } from "@/server/bookings";
 import { getPaymentProvider } from "@/server/payments";
 import { searchSpots } from "@/server/search";
-import { makeBookableSpot, makeUser, resetDb } from "./helpers";
+import { hoursFromNow, makeBookableSpot, makeUser, resetDb } from "./helpers";
 
-const hoursFromNow = (h: number) => new Date(Math.ceil((Date.now() + h * 3600_000) / 900_000) * 900_000);
+const TAKEN = "Tyvärr, någon annan har redan bokat platsen under den här tiden. Välj en annan tid.";
+const HOLD_EXPIRED = "Reservationen hann gå ut innan betalningen genomfördes. Ingen betalning har dragits. Boka igen.";
+const TOO_LATE = "Det är för sent att avboka kostnadsfritt. Kontakta supporten om något har hänt.";
 
 beforeEach(resetDb);
 afterAll(async () => {
@@ -27,7 +29,7 @@ describe("booking flow against Postgres", () => {
 
     // Overlapping request while the first one is only held (not yet paid) is rejected.
     const second = await createBooking({ driverId: b.id, spotId, start: hoursFromNow(26), end: hoursFromNow(28), vehicleReg: "XYZ987" });
-    expect(second).toMatchObject({ ok: false });
+    expect(second).toEqual({ ok: false, error: TAKEN });
 
     if (!first.ok) throw new Error();
     expect(await confirmPayment(first.bookingId, "ref_1")).toEqual({ ok: true });
@@ -43,6 +45,8 @@ describe("booking flow against Postgres", () => {
     const end = hoursFromNow(50);
     const results = await Promise.all(drivers.map((d) => createBooking({ driverId: d.id, spotId, start, end, vehicleReg: "ABC123" })));
     expect(results.filter((r) => r.ok)).toHaveLength(1);
+    expect(results.filter((r) => !r.ok)).toEqual(Array(4).fill({ ok: false, error: TAKEN }));
+    expect(await db.select().from(bookings).where(eq(bookings.spotId, spotId))).toHaveLength(1);
   });
 
   it("releases expired holds", async () => {
@@ -55,7 +59,7 @@ describe("booking flow against Postgres", () => {
     if (!first.ok) throw new Error(first.error);
     await db.update(bookings).set({ holdExpiresAt: sql`now() - interval '1 minute'` }).where(eq(bookings.id, first.bookingId));
 
-    expect(await confirmPayment(first.bookingId, "late")).toMatchObject({ ok: false });
+    expect(await confirmPayment(first.bookingId, "late")).toEqual({ ok: false, error: HOLD_EXPIRED });
     expect((await createBooking({ driverId: b.id, spotId, start, end, vehicleReg: "XYZ987" })).ok).toBe(true);
   });
 
@@ -88,7 +92,7 @@ describe("booking flow against Postgres", () => {
     const { spotId, host } = await makeBookableSpot({ requiresVehicleRegistration: true, minNoticeMinutes: 1440 });
     const driver = await makeUser();
     const tooSoon = await createBooking({ driverId: driver.id, spotId, start: hoursFromNow(2), end: hoursFromNow(4), vehicleReg: "ABC123" });
-    expect(tooSoon).toMatchObject({ ok: false });
+    expect(tooSoon).toEqual({ ok: false, error: "Platsen måste bokas minst 1 dygn i förväg så att bilen hinner registreras." });
 
     const ok = await createBooking({ driverId: driver.id, spotId, start: hoursFromNow(30), end: hoursFromNow(32), vehicleReg: "ABC123" });
     if (!ok.ok) throw new Error(ok.error);
@@ -107,6 +111,8 @@ describe("booking flow against Postgres", () => {
     const r = await createBooking({ driverId: driver.id, spotId, start: hoursFromNow(48), end: hoursFromNow(50), vehicleReg: "ABC123" });
     if (!r.ok) throw new Error();
     await confirmPayment(r.bookingId, "ref_refund");
+    const { totalOre } = (await db.select().from(bookings).where(eq(bookings.id, r.bookingId)))[0];
+    expect(totalOre).toBeGreaterThan(0);
 
     const refund = vi.spyOn(getPaymentProvider(), "refund").mockRejectedValueOnce(new Error("provider down"));
     await expect(cancelBooking(r.bookingId, driver.id)).rejects.toThrow("provider down");
@@ -117,6 +123,8 @@ describe("booking flow against Postgres", () => {
     [row] = await db.select().from(bookings).where(eq(bookings.id, r.bookingId));
     expect(row).toMatchObject({ status: "cancelled", paymentStatus: "refunded", cancelledBy: "driver" });
     expect(refund).toHaveBeenCalledTimes(2);
+    expect(refund).toHaveBeenNthCalledWith(1, { ref: "ref_refund", amountOre: totalOre });
+    expect(refund).toHaveBeenNthCalledWith(2, { ref: "ref_refund", amountOre: totalOre });
     refund.mockRestore();
   });
 
@@ -126,7 +134,8 @@ describe("booking flow against Postgres", () => {
     const r = await createBooking({ driverId: driver.id, spotId, start: hoursFromNow(5), end: hoursFromNow(7), vehicleReg: "ABC123" });
     if (!r.ok) throw new Error(r.error);
     await confirmPayment(r.bookingId, "ref");
-    expect(await cancelBooking(r.bookingId, driver.id)).toMatchObject({ ok: false });
+    expect(await cancelBooking(r.bookingId, driver.id)).toEqual({ ok: false, error: TOO_LATE });
+    expect((await db.select().from(bookings).where(eq(bookings.id, r.bookingId)))[0]).toMatchObject({ status: "confirmed", paymentStatus: "paid" });
     expect(await cancelBooking(r.bookingId, host.id)).toEqual({ ok: true });
     const [row] = await db.select().from(bookings).where(eq(bookings.id, r.bookingId));
     expect(row).toMatchObject({ status: "cancelled", cancelledBy: "host", paymentStatus: "refunded" });
@@ -134,8 +143,10 @@ describe("booking flow against Postgres", () => {
 
   it("does not let hosts book their own spots", async () => {
     const { spotId, host } = await makeBookableSpot();
-    expect(await createBooking({ driverId: host.id, spotId, start: hoursFromNow(5), end: hoursFromNow(7), vehicleReg: "ABC123" })).toMatchObject({
+    expect(await createBooking({ driverId: host.id, spotId, start: hoursFromNow(5), end: hoursFromNow(7), vehicleReg: "ABC123" })).toEqual({
       ok: false,
+      error: "Du kan inte boka en plats som ditt eget uthyrarkonto hyr ut.",
     });
+    expect(await db.select().from(bookings)).toHaveLength(0);
   });
 });
