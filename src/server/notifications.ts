@@ -1,7 +1,6 @@
 import "server-only";
-import { and, count, desc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
-import { db } from "@/db";
-import { bookings, hostAccountMembers, hostAccounts, notifications, spots, users } from "@/db/schema";
+import { api, cols, embed, must, mustCount, names, parse, parseAll, toDb } from "@/db/api";
+import { bookings, hostAccountMembers, hostAccounts, notifications, spots, users, type HostAccount } from "@/db/schema";
 import { appUrl } from "@/lib/app-url";
 import type { CurrentUser } from "@/lib/auth/session";
 import { sendEmail } from "./mailer";
@@ -15,6 +14,13 @@ import { sendEmail } from "./mailer";
  * - to-dos: things a host still has to do (register a car, connect payouts).
  *   Worked out from the current state, so they disappear once done.
  */
+
+const N = names(notifications);
+const U = names(users);
+const M = names(hostAccountMembers);
+const S = names(spots);
+const B = names(bookings);
+const A = names(hostAccounts);
 
 export type NotificationInput = {
   kind: string;
@@ -32,9 +38,14 @@ export type NotificationInput = {
 export async function notifyUsers(userIds: string[], n: NotificationInput, { email = true } = {}) {
   const ids = [...new Set(userIds)];
   if (ids.length === 0) return;
-  await db.insert(notifications).values(ids.map((userId) => ({ userId, kind: n.kind, title: n.title, body: n.body, href: n.href })));
+  must(
+    await api()
+      .from("notifications")
+      .insert(ids.map((userId) => toDb(notifications, { userId, kind: n.kind, title: n.title, body: n.body, href: n.href }))),
+    "notifyUsers",
+  );
   if (!email) return;
-  const recipients = await db.select({ email: users.email }).from(users).where(inArray(users.id, ids));
+  const recipients = must<{ email: string }[]>(await api().from("users").select(U.email).in(U.id, ids), "notifyUsers");
   for (const r of recipients) {
     await sendEmail(r.email, n.title, {
       heading: n.title,
@@ -48,7 +59,7 @@ export async function notifyUsers(userIds: string[], n: NotificationInput, { ema
 
 /** Parklet's administrators (reviewers). */
 export async function notifyAdmins(n: NotificationInput, opts?: { email?: boolean }) {
-  const admins = await db.select({ id: users.id }).from(users).where(eq(users.isAdmin, true));
+  const admins = must<{ id: string }[]>(await api().from("users").select(U.id).eq(U.isAdmin, true), "notifyAdmins");
   await notifyUsers(
     admins.map((a) => a.id),
     n,
@@ -58,7 +69,7 @@ export async function notifyAdmins(n: NotificationInput, opts?: { email?: boolea
 
 /** Everyone who administers a host account. */
 export async function notifyAccount(accountId: string, n: NotificationInput, opts?: { email?: boolean }) {
-  const members = await db.select({ id: hostAccountMembers.userId }).from(hostAccountMembers).where(eq(hostAccountMembers.hostAccountId, accountId));
+  const members = must<{ id: string }[]>(await api().from("host_account_members").select(`id:${M.userId}`).eq(M.hostAccountId, accountId), "notifyAccount");
   await notifyUsers(
     members.map((m) => m.id),
     n,
@@ -70,36 +81,40 @@ export type Todo = { key: string; title: string; href: string };
 
 /** Open tasks for a host, across all their accounts. Empty for users who don't host. */
 export async function hostTodos(user: CurrentUser): Promise<Todo[]> {
-  const accounts = await db
-    .select({ account: hostAccounts, role: hostAccountMembers.role })
-    .from(hostAccountMembers)
-    .innerJoin(hostAccounts, eq(hostAccounts.id, hostAccountMembers.hostAccountId))
-    .where(eq(hostAccountMembers.userId, user.id));
+  const accounts = must<{ role: "owner" | "admin"; account: unknown }[]>(
+    await api().from("host_account_members").select(`role,${embed("account", hostAccounts, undefined, { inner: true })}`).eq(M.userId, user.id),
+    "hostTodos",
+  ).map((r) => ({ role: r.role, account: parse(hostAccounts, r.account) as HostAccount }));
   if (accounts.length === 0) return [];
   const ids = accounts.map((a) => a.account.id);
   const several = accounts.length > 1;
   const suffix = (name: string) => (several ? ` (${name})` : "");
 
-  const [cars, spotRows] = await Promise.all([
-    db
-      .select({ accountId: spots.hostAccountId, n: count() })
-      .from(bookings)
-      .innerJoin(spots, eq(spots.id, bookings.spotId))
-      .where(
-        and(inArray(spots.hostAccountId, ids), eq(bookings.status, "confirmed"), eq(bookings.vehicleRegistration, "pending"), gt(bookings.endsAt, new Date())),
-      )
-      .groupBy(spots.hostAccountId),
-    db
-      .select({ id: spots.id, accountId: spots.hostAccountId, title: spots.title, review: spots.review, landlordApproval: spots.landlordApproval })
-      .from(spots)
-      .where(and(inArray(spots.hostAccountId, ids), inArray(spots.review, ["draft", "rejected"]))),
+  const [carRows, spotResult] = await Promise.all([
+    api()
+      .from("bookings")
+      .select(`id,${embed("spot", spots, ["hostAccountId"], { inner: true })}`)
+      .in(`spot.${S.hostAccountId}`, ids)
+      .eq(B.status, "confirmed")
+      .eq(B.vehicleRegistration, "pending")
+      .gt(B.endsAt, new Date().toISOString()),
+    api()
+      .from("spots")
+      .select(`${cols(spots, ["id", "title", "review", "landlordApproval"])},accountId:${S.hostAccountId}`)
+      .in(S.hostAccountId, ids)
+      .in(S.review, ["draft", "rejected"]),
   ]);
+  const carsPerAccount = new Map<string, number>();
+  for (const r of must<{ spot: { hostAccountId: string } }[]>(carRows, "hostTodos")) {
+    carsPerAccount.set(r.spot.hostAccountId, (carsPerAccount.get(r.spot.hostAccountId) ?? 0) + 1);
+  }
+  const spotRows = must<{ id: string; accountId: string; title: string; review: string; landlordApproval: string }[]>(spotResult, "hostTodos");
 
   const todos: Todo[] = [];
   const first = accounts[0].account.id;
   if (!user.identityVerified) todos.push({ key: "bankid", title: "Legitimera dig med BankID", href: `/konto/verifiera?next=/uthyrare/${first}` });
   for (const { account, role } of accounts) {
-    const n = cars.find((c) => c.accountId === account.id)?.n ?? 0;
+    const n = carsPerAccount.get(account.id) ?? 0;
     if (n > 0) {
       todos.push({ key: `cars:${account.id}`, title: `Registrera ${n === 1 ? "en bil" : `${n} bilar`}${suffix(account.name)}`, href: `/uthyrare/${account.id}#bilar` });
     }
@@ -119,35 +134,33 @@ export async function hostTodos(user: CurrentUser): Promise<Todo[]> {
 }
 
 export async function listNotifications(userId: string, limit = 8) {
-  return db.select().from(notifications).where(eq(notifications.userId, userId)).orderBy(desc(notifications.createdAt)).limit(limit);
+  return parseAll(
+    notifications,
+    must(await api().from("notifications").select(cols(notifications)).eq(N.userId, userId).order(N.createdAt, { ascending: false }).limit(limit), "listNotifications"),
+  );
 }
 
 export async function unreadCount(userId: string): Promise<number> {
-  const [row] = await db
-    .select({ n: count() })
-    .from(notifications)
-    .where(and(eq(notifications.userId, userId), isNull(notifications.readAt)));
-  return row?.n ?? 0;
+  return mustCount(await api().from("notifications").select(N.id, { count: "exact", head: true }).eq(N.userId, userId).is(N.readAt, null), "unreadCount");
 }
 
 export async function markAllRead(userId: string) {
-  await db
-    .update(notifications)
-    .set({ readAt: sql`now()` })
-    .where(and(eq(notifications.userId, userId), isNull(notifications.readAt)));
+  must(await api().from("notifications").update(toDb(notifications, { readAt: new Date() })).eq(N.userId, userId).is(N.readAt, null), "markAllRead");
 }
 
 export async function isHost(userId: string): Promise<boolean> {
-  const rows = await db.select({ id: hostAccountMembers.hostAccountId }).from(hostAccountMembers).where(eq(hostAccountMembers.userId, userId)).limit(1);
+  const rows = must(await api().from("host_account_members").select(M.hostAccountId).eq(M.userId, userId).limit(1), "isHost");
   return rows.length > 0;
 }
 
 /** Open review work for Parklet's admins. */
 export async function adminTodos(): Promise<Todo[]> {
-  const [[spotsPending], [accountsPending]] = await Promise.all([
-    db.select({ n: count() }).from(spots).where(eq(spots.review, "pending_review")),
-    db.select({ n: count() }).from(hostAccounts).where(eq(hostAccounts.verificationStatus, "pending")),
+  const [spotCount, accountCount] = await Promise.all([
+    api().from("spots").select(S.id, { count: "exact", head: true }).eq(S.review, "pending_review"),
+    api().from("host_accounts").select(A.id, { count: "exact", head: true }).eq(A.verificationStatus, "pending"),
   ]);
+  const spotsPending = { n: mustCount(spotCount, "adminTodos") };
+  const accountsPending = { n: mustCount(accountCount, "adminTodos") };
   const todos: Todo[] = [];
   if (spotsPending.n > 0) todos.push({ key: "admin:spots", title: `Granska ${spotsPending.n === 1 ? "en plats" : `${spotsPending.n} platser`}`, href: "/admin" });
   if (accountsPending.n > 0) {

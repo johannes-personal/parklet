@@ -20,10 +20,18 @@ Requirements: Node.js 22+ and PostgreSQL 14+ with the `btree_gist` extension (it
 docker compose up -d db          # or use your own Postgres
 cp .env.example .env
 npm install
+node scripts/postgrest.mjs --print-key   # put it in .env as SUPABASE_SERVICE_ROLE_KEY
+npm run db:api                   # Supabase's HTTP API for the local database (keep it running)
 npm run db:migrate
 npm run db:seed                  # demo data; prints the demo accounts
 npm run dev                      # http://localhost:3000
 ```
+
+The app reaches its data only through Supabase's HTTP API (PostgREST), as on production.
+`npm run db:api` downloads the PostgREST version Supabase runs (once, into `node_modules/.cache`)
+and creates Supabase's roles (`anon`, `authenticated`, `service_role`, `authenticator`). That
+needs a database superuser the first time, which the Docker database's `parklet` user is; with
+your own Postgres run `psql -U postgres -f scripts/api-roles.sql` once.
 
 Demo accounts (password `parklet-demo-1`):
 
@@ -47,27 +55,32 @@ follow approval, invitation and reset links locally.
 |---|---|
 | `npm run dev` / `build` / `start` | Next.js |
 | `npm run lint` / `typecheck` | ESLint, TypeScript |
-| `npm test` | Unit + integration tests (needs `parklet_test` database; set `TEST_DATABASE_URL` to override) |
+| `npm test` | Unit + integration tests (needs `parklet_test` database; set `TEST_DATABASE_URL` to override). Starts its own PostgREST |
 | `npm run test:e2e` | Playwright against a production build (`npm run build` first; uses `parklet_e2e` database) |
 | `npm run db:generate` | Generate a migration after changing `src/db/schema.ts` |
 | `npm run db:migrate` / `db:seed` | Apply migrations / load demo data |
+| `npm run db:api` | Serve the local database through PostgREST on port 3300 |
 
 ## Deployment (Vercel + Supabase, Stockholm)
 
 Live demo: **https://parklet-rebuild.vercel.app**
 
 - **Database:** Supabase project `parklet` in `eu-north-1` (Stockholm). Migrations are applied;
-  RLS is enabled on every table with no policies, so Supabase's public Data API can't read
-  anything, while the app connects as the table owner.
+  RLS is enabled on every table with no policies, so the public (`anon`) key can't read
+  anything. Parklet's functions are executable by `service_role` only.
 - **App:** Vercel, with functions pinned to `arn1` (Stockholm) in `vercel.json`.
-- **Connection:** the Supabase ↔ Vercel integration injects `POSTGRES_URL` (Supavisor's
-  transaction pooler, port 6543). The client strips pooler-specific URL parameters and disables
-  prepared statements (`src/db/client-options.ts`). Session mode (port 5432) is not an option on
-  Vercel: it allows only 15 clients in total.
+- **Data access:** over Supabase's HTTP API (PostgREST) with the service key, from the server
+  only (`src/db/api.ts`), like the other Supabase projects. No database connections from Vercel,
+  so the connection pooler (Supavisor) is out of the picture: it made requests hang (#8–#13).
+  Steps that must be all-or-nothing (bookings, spots with their opening hours, accounts with
+  their owner, invitations, password resets, landlord answers) and the admin searches are
+  Postgres functions in `src/db/migrations/0010_http_api.sql`. Reads are retried once on a
+  network or gateway error; every request has a 15 s limit. The Supabase ↔ Vercel integration
+  provides `SUPABASE_URL` and the service key (`SUPABASE_SECRET_KEY`, preferred, or the legacy
+  `SUPABASE_SERVICE_ROLE_KEY`).
 - **Documents** (ownership proofs, contracts, board minutes) are kept in the private Supabase
   Storage bucket `documents` (4 MB limit, PDF and images only, no public access), reached with the
-  service key from the Supabase integration. Documents from before the move are read from the
-  `document_blobs` table and moved to the bucket the first time they are opened.
+  service key from the Supabase integration.
 - **Vercel env:** `DOCUMENT_STORAGE=supabase`, `NEXT_PUBLIC_DEMO=1`. Links use `APP_URL` if
   set, otherwise Vercel's production or deployment URL.
 - **Mail:** every mail lands in the `mail_outbox` table, readable by admins at `/admin/epost`.
@@ -86,10 +99,9 @@ Live demo: **https://parklet-rebuild.vercel.app**
   association and company accounts are then checked against the register: unknown and
   deregistered numbers are refused, the registered name is used, and admins see the result.
   Without credentials the check is skipped. The e2e tests use `e2e/fake-bolagsverket.mjs`.
-- **Stuck queries:** the app treats a query that takes more than 20 s (a transaction: 30 s) as
-  stuck and replaces its connection pool (`src/db/index.ts`). As a second net, pg_cron job
-  `parklet-end-stuck-queries` ends app queries stuck for over 2 minutes every 5 minutes and tells
-  admins in the bell (`scripts/supabase-stuck-queries.sql`, applied by hand on Supabase).
+- **Stuck queries:** pg_cron job `parklet-end-stuck-queries` ends queries stuck for over
+  2 minutes every 5 minutes and tells admins in the bell (`scripts/supabase-stuck-queries.sql`,
+  applied by hand on Supabase). With the HTTP API it is a last safety net.
 - **Reminders:** Supabase's pg_cron calls `/api/cron/paminnelser` every 10 minutes (job
   `parklet-reminders`, via pg_net). It authenticates with the `cron` row in `app_secrets`, a
   token generated inside the database, so there is no secret to copy into Vercel.
@@ -97,7 +109,9 @@ Live demo: **https://parklet-rebuild.vercel.app**
   MapLibre itself is served from `public/maplibre/` (copied on `npm install`).
 - **Future migrations:**
   `DATABASE_URL=<Supabase session pooler URL> npm run db:migrate`
-  (the Drizzle journal on Supabase is up to date).
+  (the Drizzle journal on Supabase is up to date). Functions a migration creates must revoke
+  `EXECUTE` from `PUBLIC`, `anon` and `authenticated`, as 0010 does; `tests/integration/api.test.ts`
+  checks it.
 
 ## Configuration
 

@@ -1,6 +1,5 @@
 import "server-only";
-import { and, eq, gt, isNull, lte, sql } from "drizzle-orm";
-import { db } from "@/db";
+import { api, cols, embed, must, names, parse, toDb } from "@/db/api";
 import { bookings, spots, users } from "@/db/schema";
 import { formatDateTime, formatTime } from "@/lib/time";
 import { notifyAccount, notifyAdmins, notifyUsers } from "./notifications";
@@ -17,16 +16,22 @@ export const REMINDER_BEFORE_START_MS = 3 * 3600_000;
  * Each step claims its bookings with an UPDATE … RETURNING, so overlapping
  * runs never send the same message twice.
  */
-export async function runRegistrationReminders(now = new Date()) {
-  const pending = and(eq(bookings.status, "confirmed"), eq(bookings.vehicleRegistration, "pending"), gt(bookings.endsAt, now));
+const B = names(bookings);
 
-  const remind = await db
-    .update(bookings)
-    .set({ vehicleReminderSentAt: now })
-    .where(
-      and(pending, isNull(bookings.vehicleReminderSentAt), gt(bookings.startsAt, now), lte(bookings.startsAt, new Date(now.getTime() + REMINDER_BEFORE_START_MS))),
-    )
-    .returning({ id: bookings.id });
+export async function runRegistrationReminders(now = new Date()) {
+  const at = now.toISOString();
+  /** Confirmed bookings whose car still has to be registered, as an update that claims them. */
+  const claim = (values: Partial<typeof bookings.$inferInsert>) =>
+    api().from("bookings").update(toDb(bookings, values)).eq(B.status, "confirmed").eq(B.vehicleRegistration, "pending").gt(B.endsAt, at);
+
+  const remind = must<{ id: string }[]>(
+    await claim({ vehicleReminderSentAt: now })
+      .is(B.vehicleReminderSentAt, null)
+      .gt(B.startsAt, at)
+      .lte(B.startsAt, new Date(now.getTime() + REMINDER_BEFORE_START_MS).toISOString())
+      .select(B.id),
+    "runRegistrationReminders",
+  );
   for (const { id } of remind) {
     const b = await load(id);
     if (!b) continue;
@@ -38,11 +43,10 @@ export async function runRegistrationReminders(now = new Date()) {
     });
   }
 
-  const overdue = await db
-    .update(bookings)
-    .set({ vehicleOverdueNotifiedAt: now })
-    .where(and(pending, isNull(bookings.vehicleOverdueNotifiedAt), lte(bookings.startsAt, now)))
-    .returning({ id: bookings.id });
+  const overdue = must<{ id: string }[]>(
+    await claim({ vehicleOverdueNotifiedAt: now }).is(B.vehicleOverdueNotifiedAt, null).lte(B.startsAt, at).select(B.id),
+    "runRegistrationReminders",
+  );
   for (const { id } of overdue) {
     const b = await load(id);
     if (!b) continue;
@@ -76,14 +80,17 @@ export async function runRegistrationReminders(now = new Date()) {
 }
 
 async function load(id: string) {
-  const [row] = await db
-    .select({ booking: bookings, spot: { title: spots.title, hostAccountId: spots.hostAccountId }, driverName: sql<string>`split_part(${users.name}, ' ', 1)` })
-    .from(bookings)
-    .innerJoin(spots, eq(spots.id, bookings.spotId))
-    .innerJoin(users, eq(users.id, bookings.driverId))
-    .where(eq(bookings.id, id))
-    .limit(1);
-  return row ?? null;
+  const row = must<(Record<string, unknown> & { spot: { title: string; hostAccountId: string }; driver: { name: string } }) | null>(
+    await api()
+      .from("bookings")
+      .select(`${cols(bookings)},${embed("spot", spots, ["title", "hostAccountId"], { inner: true })},${embed("driver", users, ["name"], { inner: true })}`)
+      .eq(B.id, id)
+      .maybeSingle(),
+    "runRegistrationReminders",
+  );
+  if (!row) return null;
+  // Only the first name is shared with the host.
+  return { booking: parse(bookings, row), spot: row.spot, driverName: row.driver.name.split(" ")[0] };
 }
 
 let lastRun = 0;

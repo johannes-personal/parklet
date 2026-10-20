@@ -1,7 +1,6 @@
 import "server-only";
-import { and, asc, count, eq, gte, sql } from "drizzle-orm";
-import { db } from "@/db";
-import { bookings, hostAccounts, spots, users } from "@/db/schema";
+import { api, must, names, rpc } from "@/db/api";
+import { users } from "@/db/schema";
 import { appUrl } from "@/lib/app-url";
 import { formatSek } from "@/lib/money";
 import { formatDateTime } from "@/lib/time";
@@ -13,55 +12,49 @@ import { sendEmail } from "./mailer";
  * something to report.
  */
 export async function sendAdminDigest(now = new Date()) {
-  const since = new Date(now.getTime() - 24 * 3600_000);
-  const [pendingSpots, pendingAccounts, newSpots, newAccounts, newUsers, booked, cancelled, overdue] = await Promise.all([
-    db
-      .select({ id: spots.id, title: spots.title, submittedAt: spots.submittedAt })
-      .from(spots)
-      .where(eq(spots.review, "pending_review"))
-      .orderBy(asc(spots.submittedAt)),
-    db
-      .select({ id: hostAccounts.id, name: hostAccounts.name, createdAt: hostAccounts.createdAt })
-      .from(hostAccounts)
-      .where(eq(hostAccounts.verificationStatus, "pending"))
-      .orderBy(asc(hostAccounts.createdAt)),
-    db.select({ n: count() }).from(spots).where(gte(spots.createdAt, since)),
-    db.select({ n: count() }).from(hostAccounts).where(gte(hostAccounts.createdAt, since)),
-    db.select({ n: count() }).from(users).where(gte(users.createdAt, since)),
-    db
-      .select({ n: count(), ore: sql<number>`coalesce(sum(${bookings.totalOre}), 0)`.mapWith(Number) })
-      .from(bookings)
-      .where(and(eq(bookings.status, "confirmed"), gte(bookings.confirmedAt, since))),
-    db.select({ n: count() }).from(bookings).where(and(eq(bookings.status, "cancelled"), gte(bookings.cancelledAt, since))),
-    db.select({ n: count() }).from(bookings).where(gte(bookings.vehicleOverdueNotifiedAt, since)),
-  ]);
+  const since = new Date(now.getTime() - 24 * 3600_000).toISOString();
+  const d = await rpc<{
+    pending_spots: { id: string; title: string }[];
+    pending_spot_count: number;
+    pending_accounts: { id: string; name: string }[];
+    pending_account_count: number;
+    oldest_waiting: string | null;
+    new_spots: number;
+    new_accounts: number;
+    new_users: number;
+    booked: number;
+    booked_ore: number;
+    cancelled: number;
+    overdue: number;
+  }>("parklet_admin_digest", { p_since: since });
 
-  const waiting = pendingSpots.length + pendingAccounts.length;
-  const happened = newSpots[0].n + newAccounts[0].n + newUsers[0].n + booked[0].n + cancelled[0].n + overdue[0].n;
+  const waiting = d.pending_spot_count + d.pending_account_count;
+  const happened = d.new_spots + d.new_accounts + d.new_users + d.booked + d.cancelled + d.overdue;
   if (waiting === 0 && happened === 0) return { sent: 0 };
 
-  const oldest = [...pendingSpots.map((s) => s.submittedAt), ...pendingAccounts.map((a) => a.createdAt)]
-    .filter((d): d is Date => d != null)
-    .sort((a, b) => a.getTime() - b.getTime())[0];
+  const oldest = d.oldest_waiting ? new Date(d.oldest_waiting) : null;
   const paragraphs = [
     waiting
-      ? `${pendingSpots.length} ${pendingSpots.length === 1 ? "plats" : "platser"} och ${pendingAccounts.length} ${pendingAccounts.length === 1 ? "organisation" : "organisationer"} väntar på granskning${oldest ? `, den äldsta sedan ${formatDateTime(oldest)}` : ""}.`
+      ? `${d.pending_spot_count} ${d.pending_spot_count === 1 ? "plats" : "platser"} och ${d.pending_account_count} ${d.pending_account_count === 1 ? "organisation" : "organisationer"} väntar på granskning${oldest ? `, den äldsta sedan ${formatDateTime(oldest)}` : ""}.`
       : "Inget väntar på granskning.",
-    ...(pendingSpots.length
-      ? [`Platser:\n${pendingSpots.slice(0, 8).map((s) => `• ${s.title} – ${appUrl()}/admin/platser/${s.id}`).join("\n")}${pendingSpots.length > 8 ? `\n… och ${pendingSpots.length - 8} till` : ""}`]
+    ...(d.pending_spots.length
+      ? [`Platser:\n${d.pending_spots.map((s) => `• ${s.title} – ${appUrl()}/admin/platser/${s.id}`).join("\n")}${d.pending_spot_count > d.pending_spots.length ? `\n… och ${d.pending_spot_count - d.pending_spots.length} till` : ""}`]
       : []),
-    ...(pendingAccounts.length ? [`Organisationer:\n${pendingAccounts.slice(0, 8).map((a) => `• ${a.name} – ${appUrl()}/admin/konton/${a.id}`).join("\n")}`] : []),
+    ...(d.pending_accounts.length
+      ? [`Organisationer:\n${d.pending_accounts.map((a) => `• ${a.name} – ${appUrl()}/admin/konton/${a.id}`).join("\n")}${d.pending_account_count > d.pending_accounts.length ? `\n… och ${d.pending_account_count - d.pending_accounts.length} till` : ""}`]
+      : []),
   ];
   const details: [string, string][] = [
-    ["Nya bokningar", booked[0].n ? `${booked[0].n} (${formatSek(booked[0].ore)})` : "0"],
-    ["Avbokningar", String(cancelled[0].n)],
-    ["Bilar ej registrerade vid start", String(overdue[0].n)],
-    ["Nya platser", String(newSpots[0].n)],
-    ["Nya uthyrarkonton", String(newAccounts[0].n)],
-    ["Nya användare", String(newUsers[0].n)],
+    ["Nya bokningar", d.booked ? `${d.booked} (${formatSek(Number(d.booked_ore))})` : "0"],
+    ["Avbokningar", String(d.cancelled)],
+    ["Bilar ej registrerade vid start", String(d.overdue)],
+    ["Nya platser", String(d.new_spots)],
+    ["Nya uthyrarkonton", String(d.new_accounts)],
+    ["Nya användare", String(d.new_users)],
   ];
 
-  const admins = await db.select({ email: users.email }).from(users).where(eq(users.isAdmin, true));
+  const U = names(users);
+  const admins = must<{ email: string }[]>(await api().from("users").select(U.email).eq(U.isAdmin, true), "sendAdminDigest");
   for (const a of admins) {
     await sendEmail(a.email, waiting ? `Parklet: ${waiting} att granska` : "Parklet: dagens sammanfattning", {
       heading: "Dagens sammanfattning",

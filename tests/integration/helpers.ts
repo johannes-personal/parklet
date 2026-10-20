@@ -1,4 +1,4 @@
-import { db } from "@/db";
+import { db } from "./direct-db";
 import { hostAccountMembers, hostAccounts, spots, users } from "@/db/schema";
 import { sql } from "drizzle-orm";
 import { createSpots } from "@/server/spots";

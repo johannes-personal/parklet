@@ -1,8 +1,7 @@
 import { appUrl } from "@/lib/app-url";
 import "server-only";
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
-import { db } from "@/db";
-import { availabilityWindows, bookings, documents, hostAccounts, spots, type HostAccount, type Spot } from "@/db/schema";
+import { api, cols, embed, must, names, parse, parseAll, rpc, toDb } from "@/db/api";
+import { availabilityWindows, documents, hostAccounts, spots, type DocumentRow, type HostAccount, type Spot } from "@/db/schema";
 import { normalizeWindows, type AvailabilityWindow } from "@/lib/availability";
 import { scheduleToWindows } from "@/lib/schedule";
 import { generateToken, hashToken } from "@/lib/auth/tokens";
@@ -16,33 +15,48 @@ export { isUuid };
 
 export type SpotWithWindows = Spot & { windows: AvailabilityWindow[] };
 
-/** SQL condition for a spot that drivers can book. Kept in one place so search and booking agree. */
-export const bookableSql = sql`${spots.status} = 'active' AND ${spots.review} = 'approved' AND ${hostAccounts.verificationStatus} = 'verified' AND ${hostAccounts.payoutStatus} = 'active'`;
+const S = names(spots);
+const A = names(hostAccounts);
+const D = names(documents);
+
+/** Bookable: what search (src/server/search.ts) filters on, as an API query on spots with the account embedded as `account`. */
+export const BOOKABLE_FILTERS = [
+  [S.status, "active"],
+  [S.review, "approved"],
+  [`account.${A.verificationStatus}`, "verified"],
+  [`account.${A.payoutStatus}`, "active"],
+] as const;
 
 export function isBookable(spot: Pick<Spot, "status" | "review">, account: Pick<HostAccount, "verificationStatus" | "payoutStatus">) {
   return spot.status === "active" && spot.review === "approved" && account.verificationStatus === "verified" && account.payoutStatus === "active";
 }
 
+const WINDOWS = embed("windows", availabilityWindows, ["weekday", "startMinute", "endMinute"]);
+
+/** Opening hours in the order the app expects (the API sorts embedded rows only by request). */
+function sortedWindows(rows: AvailabilityWindow[] | undefined): AvailabilityWindow[] {
+  return [...(rows ?? [])].sort((a, b) => a.weekday - b.weekday || a.startMinute - b.startMinute);
+}
+
 export async function getSpot(id: string): Promise<SpotWithWindows | null> {
   if (!isUuid(id)) return null;
-  const [spot] = await db.select().from(spots).where(eq(spots.id, id)).limit(1);
-  if (!spot) return null;
-  return { ...spot, windows: await getWindows(id) };
+  const row = must(await api().from("spots").select(`${cols(spots)},${WINDOWS}`).eq(S.id, id).maybeSingle(), "getSpot");
+  if (!row) return null;
+  const spot = parse(spots, row) as Spot & { windows?: AvailabilityWindow[] };
+  return { ...spot, windows: sortedWindows(spot.windows) };
 }
 
 export async function getSpotWithAccount(id: string) {
   if (!isUuid(id)) return null;
-  const [row] = await db.select({ spot: spots, account: hostAccounts }).from(spots).innerJoin(hostAccounts, eq(hostAccounts.id, spots.hostAccountId)).where(eq(spots.id, id)).limit(1);
+  const row = must(
+    await api().from("spots").select(`${cols(spots)},${WINDOWS},${embed("account", hostAccounts, undefined, { inner: true })}`).eq(S.id, id).maybeSingle(),
+    "getSpotWithAccount",
+  ) as (Record<string, unknown> & { account: unknown }) | null;
   if (!row) return null;
-  return { spot: { ...row.spot, windows: await getWindows(id) }, account: row.account };
-}
-
-async function getWindows(spotId: string): Promise<AvailabilityWindow[]> {
-  return db
-    .select({ weekday: availabilityWindows.weekday, startMinute: availabilityWindows.startMinute, endMinute: availabilityWindows.endMinute })
-    .from(availabilityWindows)
-    .where(eq(availabilityWindows.spotId, spotId))
-    .orderBy(asc(availabilityWindows.weekday), asc(availabilityWindows.startMinute));
+  const spot = parse(spots, row) as Spot & { windows?: AvailabilityWindow[]; account?: unknown };
+  const { account, windows, ...rest } = spot;
+  void account;
+  return { spot: { ...rest, windows: sortedWindows(windows) } as SpotWithWindows, account: parse(hostAccounts, row.account) as HostAccount };
 }
 
 /** Fields whose change invalidates an earlier right-to-rent approval. */
@@ -64,27 +78,23 @@ export async function createSpots(
   input: SpotInput,
   count = 1,
 ): Promise<string[]> {
-  const windows = scheduleToWindows(input.schedule);
-  return db.transaction(async (tx) => {
-    const ids: string[] = [];
-    for (let i = 1; i <= count; i++) {
-      const [row] = await tx
-        .insert(spots)
-        .values({
-          ...input,
-          ...rightFields(input),
-          title: count > 1 ? `${input.title} – Plats ${i}` : input.title,
-          hostAccountId: accountId,
-          createdBy: userId,
-          landlordApproval: input.rightBasis === "rents" ? "missing" : "not_needed",
-          review: "draft",
-        })
-        .returning({ id: spots.id });
-      ids.push(row.id);
-      await replaceWindows(tx, row.id, windows);
-    }
-    return ids;
-  });
+  const rows = Array.from({ length: count }, (_, i) =>
+    toDb(spots, {
+      ...input,
+      ...rightFields(input),
+      title: count > 1 ? `${input.title} – Plats ${i + 1}` : input.title,
+      hostAccountId: accountId,
+      createdBy: userId,
+      landlordApproval: input.rightBasis === "rents" ? "missing" : "not_needed",
+      review: "draft",
+    }),
+  );
+  // One step: all the spots and their opening hours, or nothing.
+  return rpc<string[]>("parklet_create_spots", { p_rows: rows, p_windows: windowRows(scheduleToWindows(input.schedule)) });
+}
+
+function windowRows(windows: AvailabilityWindow[]) {
+  return normalizeWindows(windows).map((w) => ({ weekday: w.weekday, start_minute: w.startMinute, end_minute: w.endMinute }));
 }
 
 export async function updateSpot(accountId: string, spotId: string, input: SpotInput) {
@@ -95,50 +105,40 @@ export async function updateSpot(accountId: string, spotId: string, input: SpotI
   const reviewedChanged = REVIEWED_FIELDS.some((f) => existing[f] !== next[f]);
   const landlordChanged = existing.landlordEmail !== next.landlordEmail || existing.rightBasis !== next.rightBasis;
 
-  await db.transaction(async (tx) => {
-    await tx
-      .update(spots)
-      .set({
-        ...next,
-        updatedAt: new Date(),
-        // A moved spot or a new legal basis must be verified again before it can be booked.
-        ...(reviewedChanged && existing.review !== "draft" ? { review: "pending_review" as const, submittedAt: new Date() } : {}),
-        ...(landlordChanged
-          ? {
-              landlordApproval: next.rightBasis === "rents" ? ("missing" as const) : ("not_needed" as const),
-              landlordApprovalTokenHash: null,
-              landlordApprovedByName: null,
-              landlordApprovedByRole: null,
-              landlordRespondedAt: null,
-            }
-          : {}),
-      })
-      .where(eq(spots.id, spotId));
-    await replaceWindows(tx, spotId, windows);
+  // One step: the spot and its opening hours.
+  return rpc<boolean>("parklet_update_spot", {
+    p_account_id: accountId,
+    p_spot_id: spotId,
+    p_patch: toDb(spots, {
+      ...next,
+      updatedAt: new Date(),
+      // A moved spot or a new legal basis must be verified again before it can be booked.
+      ...(reviewedChanged && existing.review !== "draft" ? { review: "pending_review" as const, submittedAt: new Date() } : {}),
+      ...(landlordChanged
+        ? {
+            landlordApproval: next.rightBasis === "rents" ? ("missing" as const) : ("not_needed" as const),
+            landlordApprovalTokenHash: null,
+            landlordApprovedByName: null,
+            landlordApprovedByRole: null,
+            landlordRespondedAt: null,
+          }
+        : {}),
+    }),
+    p_windows: windowRows(windows),
   });
-  return true;
 }
 
 export async function setSpotStatus(accountId: string, spotId: string, status: "active" | "paused") {
   if (!isUuid(spotId)) return false;
-  const updated = await db
-    .update(spots)
-    .set({ status, updatedAt: new Date() })
-    .where(and(eq(spots.id, spotId), eq(spots.hostAccountId, accountId)))
-    .returning({ id: spots.id });
+  const updated = must(
+    await api().from("spots").update(toDb(spots, { status, updatedAt: new Date() })).eq(S.id, spotId).eq(S.hostAccountId, accountId).select(S.id),
+    "setSpotStatus",
+  );
   return updated.length > 0;
 }
 
-type TxLike = Pick<typeof db, "insert" | "delete">;
-
-async function replaceWindows(tx: TxLike, spotId: string, windows: AvailabilityWindow[]) {
-  await tx.delete(availabilityWindows).where(eq(availabilityWindows.spotId, spotId));
-  const normalized = normalizeWindows(windows);
-  if (normalized.length) await tx.insert(availabilityWindows).values(normalized.map((w) => ({ ...w, spotId })));
-}
-
-export async function listSpotDocuments(spotId: string) {
-  return db.select().from(documents).where(eq(documents.spotId, spotId)).orderBy(asc(documents.createdAt));
+export async function listSpotDocuments(spotId: string): Promise<DocumentRow[]> {
+  return parseAll(documents, must(await api().from("documents").select(cols(documents)).eq(D.spotId, spotId).order(D.createdAt), "listSpotDocuments"));
 }
 
 /* --------------------------------------------- right-to-rent requirements */
@@ -155,13 +155,13 @@ export async function deleteSpotDocument(accountId: string, spotId: string, docu
   if (spot.review === "pending_review" || spot.review === "approved") {
     return { ok: false as const, error: "Underlagen kan inte tas bort medan platsen granskas eller är godkänd." };
   }
-  const [deleted] = await db
-    .delete(documents)
-    .where(and(eq(documents.id, documentId), eq(documents.spotId, spotId), eq(documents.hostAccountId, accountId)))
-    .returning({ storageKey: documents.storageKey });
+  const [deleted] = must(
+    await api().from("documents").delete().eq(D.id, documentId).eq(D.spotId, spotId).eq(D.hostAccountId, accountId).select(cols(documents, ["storageKey"])),
+    "deleteSpotDocument",
+  ) as { storageKey: string }[];
   if (!deleted) return { ok: false as const, error: "Dokumentet finns inte." };
-  const [stillUsed] = await db.select({ id: documents.id }).from(documents).where(eq(documents.storageKey, deleted.storageKey)).limit(1);
-  if (!stillUsed) await deleteDocumentFile(deleted.storageKey);
+  const stillUsed = must(await api().from("documents").select(D.id).eq(D.storageKey, deleted.storageKey).limit(1), "deleteSpotDocument");
+  if (stillUsed.length === 0) await deleteDocumentFile(deleted.storageKey);
   return { ok: true as const };
 }
 
@@ -204,7 +204,7 @@ export async function submitSpotForReview(accountId: string, spotId: string, { a
   const missing = spotRequirements(spot, await listSpotDocuments(spotId)).filter((r) => !r.done);
   if (missing.length) return { ok: false as const, error: `Det saknas underlag: ${missing.map((m) => m.label.toLowerCase()).join("; ")}.` };
   if (spot.windows.length === 0) return { ok: false as const, error: "Ange minst en tid då platsen är tillgänglig." };
-  await db.update(spots).set({ review: "pending_review", submittedAt: new Date(), reviewNote: null }).where(eq(spots.id, spotId));
+  must(await api().from("spots").update(toDb(spots, { review: "pending_review", submittedAt: new Date(), reviewNote: null })).eq(S.id, spotId), "submitSpotForReview");
   if (announce) await announceSubmittedSpots(accountId, [spotId]);
   return { ok: true as const };
 }
@@ -212,10 +212,14 @@ export async function submitSpotForReview(accountId: string, spotId: string, { a
 /** Tell Parklet's admins about spots submitted together (one notification for a BRF's whole row of spots). */
 export async function announceSubmittedSpots(accountId: string, spotIds: string[]) {
   if (spotIds.length === 0) return;
-  const rows = await db.select({ spot: spots, accountName: hostAccounts.name }).from(spots).innerJoin(hostAccounts, eq(hostAccounts.id, spots.hostAccountId)).where(inArray(spots.id, spotIds));
+  const rows = must(
+    await api().from("spots").select(`${cols(spots)},${embed("account", hostAccounts, ["name"], { inner: true })}`).in(S.id, spotIds),
+    "announceSubmittedSpots",
+  ) as (Record<string, unknown> & { account: { name: string } })[];
   const first = rows[0];
   if (!first) return;
-  const { spot, accountName } = first;
+  const spot = parse(spots, first);
+  const accountName = first.account.name;
   const more = rows.length > 1 ? ` (+${rows.length - 1} till på samma adress)` : "";
   await notifyAdmins({
     kind: "admin_spot_submitted",
@@ -241,7 +245,7 @@ export async function requestLandlordApproval(accountId: string, spotId: string,
     return { ok: false as const, error: "Ange föreningens eller hyresvärdens e-postadress först." };
   }
   const token = generateToken();
-  await db.update(spots).set({ landlordApproval: "requested", landlordApprovalTokenHash: hashToken(token) }).where(eq(spots.id, spotId));
+  must(await api().from("spots").update(toDb(spots, { landlordApproval: "requested", landlordApprovalTokenHash: hashToken(token) })).eq(S.id, spotId), "requestLandlordApproval");
   const who = spot.landlordKind === "brf" ? "föreningen" : "er som hyresvärd";
   await sendEmail(spot.landlordEmail, `Godkännande för uthyrning av parkeringsplats – ${spot.address}`, {
     heading: "Får parkeringsplatsen hyras ut via Parklet?",
@@ -261,14 +265,18 @@ export async function requestLandlordApproval(accountId: string, spotId: string,
   return { ok: true as const };
 }
 
-export async function getSpotByApprovalToken(token: string) {
-  const [row] = await db
-    .select({ spot: spots, accountName: hostAccounts.name })
-    .from(spots)
-    .innerJoin(hostAccounts, eq(hostAccounts.id, spots.hostAccountId))
-    .where(eq(spots.landlordApprovalTokenHash, hashToken(token)))
-    .limit(1);
-  return row ?? null;
+export async function getSpotByApprovalToken(token: string): Promise<{ spot: Spot; accountName: string } | null> {
+  const row = must(
+    await api()
+      .from("spots")
+      .select(`${cols(spots)},${embed("account", hostAccounts, ["name"], { inner: true })}`)
+      .eq(S.landlordApprovalTokenHash, hashToken(token))
+      .maybeSingle(),
+    "getSpotByApprovalToken",
+  ) as (Record<string, unknown> & { account: { name: string } }) | null;
+  if (!row) return null;
+  const { account, ...spot } = row;
+  return { spot: parse(spots, spot), accountName: account.name };
 }
 
 export async function respondToLandlordApproval(
@@ -277,22 +285,16 @@ export async function respondToLandlordApproval(
 ) {
   const found = await getSpotByApprovalToken(token);
   if (!found || found.spot.landlordApproval !== "requested") return { ok: false as const, error: "Länken är ogiltig eller redan använd." };
-  await db
-    .update(spots)
-    .set({
-      landlordApproval: input.approve ? "approved" : "declined",
-      landlordApprovedByName: input.name,
-      landlordApprovedByRole: input.role,
-      landlordRespondedAt: new Date(),
-      landlordApprovalTokenHash: null,
-      // The association can impose its own vehicle registration rule.
-      ...(input.approve && input.requiresVehicleRegistration
-        ? { requiresVehicleRegistration: true, vehicleRegistrationNote: input.vehicleRegistrationNote, minNoticeMinutes: sql`greatest(${spots.minNoticeMinutes}, 1440)` }
-        : {}),
-      // A declined approval pulls an approved spot out of search immediately.
-      ...(input.approve ? {} : { review: sql`case when ${spots.review} = 'approved' then 'rejected'::spot_review else ${spots.review} end` }),
-    })
-    .where(eq(spots.id, found.spot.id));
+  // One step, and only once: the function checks the request is still open.
+  const answered = await rpc<string | null>("parklet_respond_landlord", {
+    p_token_hash: hashToken(token),
+    p_approve: input.approve,
+    p_name: input.name,
+    p_role: input.role,
+    p_requires_registration: input.requiresVehicleRegistration,
+    p_registration_note: input.vehicleRegistrationNote,
+  });
+  if (!answered) return { ok: false as const, error: "Länken är ogiltig eller redan använd." };
   const who = input.role ? `${input.name} (${input.role})` : input.name;
   await notifyAccount(found.spot.hostAccountId, {
     kind: "landlord_response",
@@ -310,59 +312,76 @@ export async function respondToLandlordApproval(
 export type HostSpotSummary = Spot & { upcomingBookings: number; earnedOre: number };
 
 export async function listAccountSpots(accountId: string): Promise<HostSpotSummary[]> {
-  const rows = await db
-    .select({
-      spot: spots,
-      upcomingBookings: sql<number>`count(${bookings.id}) filter (where ${bookings.status} = 'confirmed' and ${bookings.endsAt} > now())`.mapWith(Number),
-      earnedOre: sql<number>`coalesce(sum(${bookings.baseOre}) filter (where ${bookings.status} = 'confirmed'), 0)`.mapWith(Number),
-    })
-    .from(spots)
-    .leftJoin(bookings, eq(bookings.spotId, spots.id))
-    .where(eq(spots.hostAccountId, accountId))
-    .groupBy(spots.id)
-    .orderBy(asc(spots.createdAt));
-  return rows.map((r) => ({ ...r.spot, upcomingBookings: r.upcomingBookings, earnedOre: r.earnedOre }));
+  const [rows, stats] = await Promise.all([
+    api().from("spots").select(cols(spots)).eq(S.hostAccountId, accountId).order(S.createdAt),
+    api().rpc("parklet_account_spot_stats", { p_account_id: accountId }),
+  ]);
+  const byId = new Map(
+    must<{ spot_id: string; upcoming_bookings: number; earned_ore: number }[]>(stats, "listAccountSpots").map((r) => [r.spot_id, r]),
+  );
+  return parseAll(spots, must(rows, "listAccountSpots")).map((spot) => ({
+    ...spot,
+    upcomingBookings: byId.get(spot.id)?.upcoming_bookings ?? 0,
+    earnedOre: Number(byId.get(spot.id)?.earned_ore ?? 0),
+  }));
 }
 
 /* ------------------------------------------------------------ admin review */
 
 export async function listReviewQueue() {
-  const pendingSpots = await db
-    .select({ spot: spots, accountName: hostAccounts.name, accountKind: hostAccounts.kind })
-    .from(spots)
-    .innerJoin(hostAccounts, eq(hostAccounts.id, spots.hostAccountId))
-    .where(eq(spots.review, "pending_review"))
-    .orderBy(asc(spots.submittedAt));
-  const pendingAccounts = await db.select().from(hostAccounts).where(eq(hostAccounts.verificationStatus, "pending")).orderBy(asc(hostAccounts.createdAt));
-  return { pendingSpots, pendingAccounts };
+  const [spotRows, accountRows] = await Promise.all([
+    api()
+      .from("spots")
+      .select(`${cols(spots)},${embed("account", hostAccounts, ["name", "kind"], { inner: true })}`)
+      .eq(S.review, "pending_review")
+      .order(S.submittedAt),
+    api().from("host_accounts").select(cols(hostAccounts)).eq(A.verificationStatus, "pending").order(A.createdAt),
+  ]);
+  const pendingSpots = (must(spotRows, "listReviewQueue") as (Record<string, unknown> & { account: Pick<HostAccount, "name" | "kind"> })[]).map(
+    ({ account, ...spot }) => ({ spot: parse(spots, spot), accountName: account.name, accountKind: account.kind }),
+  );
+  return { pendingSpots, pendingAccounts: parseAll(hostAccounts, must(accountRows, "listReviewQueue")) };
 }
 
 export async function reviewSpot(spotId: string, adminId: string, approve: boolean, note: string | null) {
   if (!isUuid(spotId)) return false;
-  const updated = await db
-    .update(spots)
-    .set({ review: approve ? "approved" : "rejected", reviewNote: note, reviewedAt: new Date(), reviewedBy: adminId })
-    .where(and(eq(spots.id, spotId), inArray(spots.review, ["pending_review", "approved", "rejected"])))
-    .returning({ id: spots.id });
+  const updated = must(
+    await api()
+      .from("spots")
+      .update(toDb(spots, { review: approve ? "approved" : "rejected", reviewNote: note, reviewedAt: new Date(), reviewedBy: adminId }))
+      .eq(S.id, spotId)
+      .in(S.review, ["pending_review", "approved", "rejected"])
+      .select(S.id),
+    "reviewSpot",
+  );
   return updated.length > 0;
 }
 
 export async function reviewAccount(accountId: string, approve: boolean, note: string | null) {
   if (!isUuid(accountId)) return false;
-  const updated = await db
-    .update(hostAccounts)
-    .set({ verificationStatus: approve ? "verified" : "rejected", reviewNote: note, reviewedAt: new Date() })
-    .where(eq(hostAccounts.id, accountId))
-    .returning({ id: hostAccounts.id });
+  const updated = must(
+    await api()
+      .from("host_accounts")
+      .update(toDb(hostAccounts, { verificationStatus: approve ? "verified" : "rejected", reviewNote: note, reviewedAt: new Date() }))
+      .eq(A.id, accountId)
+      .select(A.id),
+    "reviewAccount",
+  );
   return updated.length > 0;
 }
 
 
 /** Other spots of the same account at the same address (e.g. created together as "Plats 1…N"). */
-export async function listSiblingSpots(spot: Pick<Spot, "id" | "hostAccountId" | "address" | "city">) {
-  return db
-    .select({ id: spots.id, title: spots.title, review: spots.review })
-    .from(spots)
-    .where(and(eq(spots.hostAccountId, spot.hostAccountId), eq(spots.address, spot.address), eq(spots.city, spot.city), sql`${spots.id} <> ${spot.id}`))
-    .orderBy(asc(spots.title));
+export async function listSiblingSpots(spot: Pick<Spot, "id" | "hostAccountId" | "address" | "city">): Promise<Pick<Spot, "id" | "title" | "review">[]> {
+  return must(
+    await api()
+      .from("spots")
+      .select(cols(spots, ["id", "title", "review"]))
+      .eq(S.hostAccountId, spot.hostAccountId)
+      .eq(S.address, spot.address)
+      .eq(S.city, spot.city)
+      .neq(S.id, spot.id)
+      .order(S.title),
+    "listSiblingSpots",
+  );
 }

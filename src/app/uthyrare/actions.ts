@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { db } from "@/db";
+import { api, must, toDb } from "@/db/api";
 import { documents, type DocumentKind } from "@/db/schema";
 import type { FormState } from "@/components/form";
 import { requireUser } from "@/lib/auth/session";
@@ -262,15 +262,15 @@ export async function uploadDocumentAction(_prev: FormState, formData: FormData)
     const spot = await getSpot(spotId);
     if (spot) targets = [spotId, ...(await listSiblingSpots(spot)).map((s) => s.id)];
   }
-  await db.insert(documents).values(
-    targets.map((target) => ({
-      hostAccountId: accountId,
-      spotId: target,
-      uploadedBy: user.id,
-      kind,
-      filename: file.name.slice(0, 200) || "dokument",
-      ...stored,
-    })),
+  must(
+    await api()
+      .from("documents")
+      .insert(
+        targets.map((target) =>
+          toDb(documents, { hostAccountId: accountId, spotId: target, uploadedBy: user.id, kind, filename: file.name.slice(0, 200) || "dokument", ...stored }),
+        ),
+      ),
+    "uploadDocumentAction",
   );
   revalidatePath(spotId ? `/uthyrare/${accountId}/platser/${spotId}` : `/uthyrare/${accountId}`);
   return { success: `${file.name} är uppladdad.` };

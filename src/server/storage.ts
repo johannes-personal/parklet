@@ -2,9 +2,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { eq } from "drizzle-orm";
-import { db } from "@/db";
-import { documentBlobs } from "@/db/schema";
+import { serviceHeaders } from "@/db/api";
 
 /**
  * Private document store for verification documents (ownership proofs,
@@ -15,14 +13,8 @@ import { documentBlobs } from "@/db/schema";
  * - "local" (default): files on disk under storage/documents. Development only.
  * - "supabase": a private Supabase Storage bucket (DOCUMENT_BUCKET, default
  *   "documents"), reached with the service key, so only the server can read it.
- *   Files still in document_blobs from the "database" driver are read from
- *   there and moved to the bucket the first time they are read.
- * - "database": bytes in the document_blobs table.
  */
-const driver = () => {
-  const d = process.env.DOCUMENT_STORAGE;
-  return d === "supabase" || d === "database" ? d : "local";
-};
+const driver = () => (process.env.DOCUMENT_STORAGE === "supabase" ? "supabase" : "local");
 
 const root = () =>
   process.env.DOCUMENT_STORAGE_DIR
@@ -58,8 +50,6 @@ export async function storeDocument(bytes: Buffer): Promise<StoredFile | { error
   const storageKey = `${new Date().toISOString().slice(0, 7)}/${randomUUID()}.${type.ext}`;
   if (driver() === "supabase") {
     await bucket.upload(storageKey, bytes, type.mime);
-  } else if (driver() === "database") {
-    await db.insert(documentBlobs).values({ storageKey, bytes });
   } else {
     const file = path.join(root(), storageKey);
     await mkdir(path.dirname(file), { recursive: true });
@@ -71,21 +61,8 @@ export async function storeDocument(bytes: Buffer): Promise<StoredFile | { error
 export async function readDocument(storageKey: string): Promise<Buffer> {
   if (driver() === "supabase") {
     const stored = await bucket.download(storageKey);
-    if (stored) return stored;
-    // Uploaded before the move to Storage: serve it, and move it now.
-    const legacy = await readBlob(storageKey);
-    if (!legacy) throw new Error("Document not found");
-    const type = sniffMime(legacy);
-    if (type) {
-      await bucket.upload(storageKey, legacy, type.mime);
-      await db.delete(documentBlobs).where(eq(documentBlobs.storageKey, storageKey));
-    }
-    return legacy;
-  }
-  if (driver() === "database") {
-    const bytes = await readBlob(storageKey);
-    if (!bytes) throw new Error("Document not found");
-    return bytes;
+    if (!stored) throw new Error("Document not found");
+    return stored;
   }
   const file = path.resolve(root(), storageKey);
   if (!file.startsWith(root() + path.sep)) throw new Error("Invalid storage key");
@@ -95,11 +72,6 @@ export async function readDocument(storageKey: string): Promise<Buffer> {
 export async function deleteDocumentFile(storageKey: string): Promise<void> {
   if (driver() === "supabase") {
     await bucket.remove(storageKey);
-    await db.delete(documentBlobs).where(eq(documentBlobs.storageKey, storageKey));
-    return;
-  }
-  if (driver() === "database") {
-    await db.delete(documentBlobs).where(eq(documentBlobs.storageKey, storageKey));
     return;
   }
   const file = path.resolve(root(), storageKey);
@@ -107,21 +79,15 @@ export async function deleteDocumentFile(storageKey: string): Promise<void> {
   await rm(file, { force: true });
 }
 
-async function readBlob(storageKey: string): Promise<Buffer | null> {
-  const [row] = await db.select({ bytes: documentBlobs.bytes }).from(documentBlobs).where(eq(documentBlobs.storageKey, storageKey)).limit(1);
-  return row ? Buffer.from(row.bytes) : null;
-}
-
 /** Supabase Storage's REST API, with the service key (server only; the bucket has no public access). */
 const bucket = {
   config() {
     const base = process.env.SUPABASE_URL;
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SECRET_KEY;
-    if (!base || !key) throw new Error("DOCUMENT_STORAGE=supabase needs SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_SECRET_KEY).");
+    if (!base) throw new Error("DOCUMENT_STORAGE=supabase needs SUPABASE_URL and SUPABASE_SECRET_KEY (or SUPABASE_SERVICE_ROLE_KEY).");
     return {
       url: (p: string) => `${base.replace(/\/$/, "")}/storage/v1/${p}`,
       name: process.env.DOCUMENT_BUCKET ?? "documents",
-      headers: { apikey: key, Authorization: `Bearer ${key}` },
+      headers: serviceHeaders(),
     };
   },
 

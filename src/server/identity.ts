@@ -1,9 +1,13 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
-import { and, eq, lt } from "drizzle-orm";
 import * as oidc from "openid-client";
-import { db } from "@/db";
+import { api, cols, embed, must, names, parse, toDb } from "@/db/api";
 import { hostAccountMembers, hostAccounts, identityRequests, users } from "@/db/schema";
+
+const R = names(identityRequests);
+const U = names(users);
+const M = names(hostAccountMembers);
+const A = names(hostAccounts);
 import { appUrl } from "@/lib/app-url";
 import { encryptField, hasEncryptionKey } from "@/lib/crypto";
 import { normalizePersonnummer } from "@/lib/personnummer";
@@ -82,8 +86,13 @@ export async function startVerification(userId: string, next: string): Promise<U
   const nonce = oidc.randomNonce();
   const codeVerifier = oidc.randomPKCECodeVerifier();
 
-  await db.delete(identityRequests).where(lt(identityRequests.expiresAt, new Date()));
-  await db.insert(identityRequests).values({ state, userId, nonce, codeVerifier, next, expiresAt: new Date(Date.now() + REQUEST_TTL_MS) });
+  must(await api().from("identity_requests").delete().lt(R.expiresAt, new Date().toISOString()), "startVerification");
+  must(
+    await api()
+      .from("identity_requests")
+      .insert(toDb(identityRequests, { state, userId, nonce, codeVerifier, next, expiresAt: new Date(Date.now() + REQUEST_TTL_MS) })),
+    "startVerification",
+  );
 
   return oidc.buildAuthorizationUrl(config, {
     redirect_uri: redirectUri(),
@@ -103,10 +112,12 @@ export type VerificationResult = { ok: true; next: string } | { ok: false; reaso
 /** Step 2: the broker redirected back. Exchange the code, validate the ID token and record the identity. */
 export async function completeVerification(userId: string, callbackUrl: URL): Promise<VerificationResult> {
   const state = callbackUrl.searchParams.get("state") ?? "";
-  const [request] = await db
-    .delete(identityRequests)
-    .where(and(eq(identityRequests.state, state), eq(identityRequests.userId, userId)))
-    .returning();
+  // Used once: taking the request out of the table is what claims it.
+  const [claimed] = must<unknown[]>(
+    await api().from("identity_requests").delete().eq(R.state, state).eq(R.userId, userId).select(cols(identityRequests)),
+    "completeVerification",
+  );
+  const request = claimed ? parse(identityRequests, claimed) : null;
   if (!request) return { ok: false, reason: "expired", next: "/uthyrare" };
   const next = request.next;
   if (request.expiresAt < new Date()) return { ok: false, reason: "expired", next };
@@ -146,25 +157,38 @@ async function recordVerifiedIdentity(
   userId: string,
   identity: { provider: string; ref: string; name: string | null; personnummer: string | null },
 ) {
-  await db
-    .update(users)
-    .set({
-      identityVerifiedAt: new Date(),
-      identityProvider: identity.provider,
-      identityRef: identity.ref,
-      identityName: identity.name,
-      personnummerEncrypted: identity.personnummer ? encryptField(identity.personnummer) : null,
-    })
-    .where(eq(users.id, userId));
+  must(
+    await api()
+      .from("users")
+      .update(
+        toDb(users, {
+          identityVerifiedAt: new Date(),
+          identityProvider: identity.provider,
+          identityRef: identity.ref,
+          identityName: identity.name,
+          personnummerEncrypted: identity.personnummer ? encryptField(identity.personnummer) : null,
+        }),
+      )
+      .eq(U.id, userId),
+    "recordVerifiedIdentity",
+  );
 
   // A household account is verified by its owner's identity.
-  const households = await db
-    .select({ id: hostAccounts.id })
-    .from(hostAccounts)
-    .innerJoin(hostAccountMembers, eq(hostAccountMembers.hostAccountId, hostAccounts.id))
-    .where(and(eq(hostAccountMembers.userId, userId), eq(hostAccountMembers.role, "owner"), eq(hostAccounts.kind, "household")));
-  for (const h of households) {
-    await db.update(hostAccounts).set({ verificationStatus: "verified", reviewedAt: new Date() }).where(eq(hostAccounts.id, h.id));
+  const households = must<{ account: { id: string } }[]>(
+    await api()
+      .from("host_account_members")
+      .select(embed("account", hostAccounts, ["id"], { inner: true }))
+      .eq(M.userId, userId)
+      .eq(M.role, "owner")
+      .eq(`account.${A.kind}`, "household"),
+    "recordVerifiedIdentity",
+  );
+  const ids = households.map((h) => h.account.id);
+  if (ids.length) {
+    must(
+      await api().from("host_accounts").update(toDb(hostAccounts, { verificationStatus: "verified", reviewedAt: new Date() })).in(A.id, ids),
+      "recordVerifiedIdentity",
+    );
   }
 }
 
@@ -175,6 +199,6 @@ export async function verifyIdentityMock(userId: string) {
 }
 
 export async function isIdentityVerified(userId: string): Promise<boolean> {
-  const [row] = await db.select({ at: users.identityVerifiedAt }).from(users).where(eq(users.id, userId)).limit(1);
+  const row = must<{ at: string | null } | null>(await api().from("users").select(`at:${U.identityVerifiedAt}`).eq(U.id, userId).maybeSingle(), "isIdentityVerified");
   return Boolean(row?.at);
 }

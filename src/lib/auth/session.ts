@@ -1,14 +1,14 @@
 import "server-only";
-import { and, eq, gt } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { connection } from "next/server";
 import { redirect } from "next/navigation";
 import { cache } from "react";
-import { db } from "@/db";
+import { api, embed, must, names, toDb } from "@/db/api";
 import { sessions, users } from "@/db/schema";
 import { generateToken, hashToken } from "./tokens";
 
 const COOKIE = "parklet_session";
+const S = names(sessions);
 const SESSION_DAYS = 30;
 
 export type CurrentUser = { id: string; name: string; email: string; isAdmin: boolean; identityVerified: boolean };
@@ -17,7 +17,7 @@ export type CurrentUser = { id: string; name: string; email: string; isAdmin: bo
 export async function startSession(userId: string) {
   const token = generateToken();
   const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 3600 * 1000);
-  await db.insert(sessions).values({ id: hashToken(token), userId, expiresAt });
+  must(await api().from("sessions").insert(toDb(sessions, { id: hashToken(token), userId, expiresAt })), "startSession");
   (await cookies()).set(COOKIE, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
@@ -30,7 +30,7 @@ export async function startSession(userId: string) {
 export async function endSession() {
   const store = await cookies();
   const token = store.get(COOKIE)?.value;
-  if (token) await db.delete(sessions).where(eq(sessions.id, hashToken(token)));
+  if (token) must(await api().from("sessions").delete().eq(S.id, hashToken(token)), "endSession");
   store.delete(COOKIE);
 }
 
@@ -44,12 +44,16 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   // Session validity depends on the current time, so this is always request-time work.
   await connection();
   if (!token) return null;
-  const [row] = await db
-    .select({ id: users.id, name: users.name, email: users.email, isAdmin: users.isAdmin, identityVerifiedAt: users.identityVerifiedAt })
-    .from(sessions)
-    .innerJoin(users, eq(users.id, sessions.userId))
-    .where(and(eq(sessions.id, hashToken(token)), gt(sessions.expiresAt, new Date())))
-    .limit(1);
+  const session = must<{ user: { id: string; name: string; email: string; isAdmin: boolean; identityVerifiedAt: string | null } } | null>(
+    await api()
+      .from("sessions")
+      .select(embed("user", users, ["id", "name", "email", "isAdmin", "identityVerifiedAt"], { inner: true }))
+      .eq(S.id, hashToken(token))
+      .gt(S.expiresAt, new Date().toISOString())
+      .maybeSingle(),
+    "getCurrentUser",
+  );
+  const row = session?.user;
   if (!row) return null;
   return { id: row.id, name: row.name, email: row.email, isAdmin: row.isAdmin, identityVerified: row.identityVerifiedAt != null };
 });

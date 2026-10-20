@@ -1,8 +1,12 @@
+import { execFileSync } from "node:child_process";
 import { defineConfig, devices } from "@playwright/test";
 
 const PORT = 3100;
 const IDP = "http://localhost:3101";
 const REGISTRY = "http://localhost:3102";
+const API = "http://localhost:3103";
+// The local API's service key (Playwright can't import the ES module itself).
+const SERVICE_KEY = execFileSync(process.execPath, ["scripts/postgrest.mjs", "--print-key"]).toString().trim();
 const E2E_DB = process.env.E2E_DATABASE_URL ?? "postgres://parklet:parklet@localhost:5432/parklet_e2e";
 export const OUTBOX = "storage/e2e-outbox.jsonl";
 
@@ -42,11 +46,23 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
     },
     {
+      // Supabase's HTTP API for the e2e database: the app reaches its data only through it.
+      // Starts before global-setup migrates; the last migration tells it to reload.
+      command: `node scripts/postgrest.mjs --port 3103`,
+      url: `${API}/`,
+      reuseExistingServer: !process.env.CI,
+      env: { DATABASE_URL: E2E_DB },
+    },
+    {
       command: `npx next start -p ${PORT}`,
-      url: `http://localhost:${PORT}/api/health`,
+      // Not /api/health: that needs the tables, which global-setup creates after the servers start.
+      url: `http://localhost:${PORT}/robots.txt`,
       reuseExistingServer: !process.env.CI,
       env: {
-        DATABASE_URL: E2E_DB,
+        SUPABASE_REST_URL: API,
+        SUPABASE_SERVICE_ROLE_KEY: SERVICE_KEY,
+        SUPABASE_SECRET_KEY: "",
+        DOCUMENT_STORAGE: "local",
         MAIL_OUTBOX: OUTBOX,
         APP_URL: `http://localhost:${PORT}`,
         GEOCODER_URL: "http://127.0.0.1:9",

@@ -1,11 +1,28 @@
 import "server-only";
-import { and, desc, eq, gt, gte, inArray, lt, lte, sql } from "drizzle-orm";
-import { db } from "@/db";
-import { availabilityWindows, bookings, hostAccounts, spots, type Spot } from "@/db/schema";
+import { api, cols, embed, must, names, rpc } from "@/db/api";
+import { hostAccounts, spots, type Spot } from "@/db/schema";
 import { isWithinWindows, type AvailabilityWindow } from "@/lib/availability";
 import { boundingBox, distanceMeters, type LatLng } from "@/lib/geo";
 import { calculatePrice, type PriceBreakdown } from "@/lib/pricing";
-import { bookableSql } from "./spots";
+import { BOOKABLE_FILTERS } from "./spots";
+
+const S = names(spots);
+const CANDIDATE_KEYS = [
+  "id",
+  "title",
+  "address",
+  "city",
+  "lat",
+  "lng",
+  "spotType",
+  "covered",
+  "evCharging",
+  "pricePerHourOre",
+  "pricePerDayOre",
+  "minDurationMinutes",
+  "minNoticeMinutes",
+] as const;
+type Candidate = Pick<Spot, (typeof CANDIDATE_KEYS)[number]>;
 
 export const DEFAULT_RADIUS_M = 3000;
 export const WIDE_RADIUS_M = 15000;
@@ -37,48 +54,31 @@ export async function searchSpots(opts: { center: LatLng | null; start: Date | n
 }
 
 async function runSearch(center: LatLng | null, radiusM: number | null, start: Date | null, end: Date | null) {
-  const conditions = [bookableSql, eq(spots.visibility, "public")];
+  let query = api()
+    .from("spots")
+    .select(`${cols(spots, CANDIDATE_KEYS)},${embed("account", hostAccounts, ["id"], { inner: true })}`)
+    .eq(S.visibility, "public");
+  for (const [column, value] of BOOKABLE_FILTERS) query = query.eq(column, value);
   if (center && radiusM) {
     const box = boundingBox(center, radiusM);
-    conditions.push(gte(spots.lat, box.minLat), lte(spots.lat, box.maxLat), gte(spots.lng, box.minLng), lte(spots.lng, box.maxLng));
+    query = query.gte(S.lat, box.minLat).lte(S.lat, box.maxLat).gte(S.lng, box.minLng).lte(S.lng, box.maxLng);
   }
-  const candidates = await db
-    .select({
-      id: spots.id,
-      title: spots.title,
-      address: spots.address,
-      city: spots.city,
-      lat: spots.lat,
-      lng: spots.lng,
-      spotType: spots.spotType,
-      covered: spots.covered,
-      evCharging: spots.evCharging,
-      pricePerHourOre: spots.pricePerHourOre,
-      pricePerDayOre: spots.pricePerDayOre,
-      minDurationMinutes: spots.minDurationMinutes,
-      minNoticeMinutes: spots.minNoticeMinutes,
-    })
-    .from(spots)
-    .innerJoin(hostAccounts, eq(hostAccounts.id, spots.hostAccountId))
-    .where(and(...conditions))
-    .orderBy(desc(spots.createdAt))
-    .limit(500);
+  const candidates = must<(Candidate & { account?: unknown })[]>(await query.order(S.createdAt, { ascending: false }).limit(500), "searchSpots");
 
-  let rows = candidates.map((c) => ({ ...c, distanceM: center ? distanceMeters(center, c) : null }));
+  let rows = candidates.map(({ account, ...c }) => (void account, { ...c, distanceM: center ? distanceMeters(center, c) : null }));
   if (center && radiusM) rows = rows.filter((r) => r.distanceM! <= radiusM);
 
   if (start && end && end > start && rows.length) {
-    const ids = rows.map((r) => r.id);
-    const [windows, busy] = await Promise.all([
-      db.select().from(availabilityWindows).where(inArray(availabilityWindows.spotId, ids)),
-      db
-        .selectDistinct({ spotId: bookings.spotId })
-        .from(bookings)
-        .where(and(inArray(bookings.spotId, ids), inArray(bookings.status, ["confirmed", "pending_payment"]), lt(bookings.startsAt, end), gt(bookings.endsAt, start), sql`(${bookings.status} = 'confirmed' OR ${bookings.holdExpiresAt} > now())`)),
-    ]);
-    const busyIds = new Set(busy.map((b) => b.spotId));
+    // One call for all candidates: their opening hours and which are taken in the period.
+    const availability = await rpc<{ windows: { spot_id: string; weekday: number; start_minute: number; end_minute: number }[]; busy: string[] }>(
+      "parklet_search_availability",
+      { p_spot_ids: rows.map((r) => r.id), p_start: start.toISOString(), p_end: end.toISOString() },
+    );
+    const busyIds = new Set(availability.busy);
     const bySpot = new Map<string, AvailabilityWindow[]>();
-    for (const w of windows) bySpot.set(w.spotId, [...(bySpot.get(w.spotId) ?? []), w]);
+    for (const w of availability.windows) {
+      bySpot.set(w.spot_id, [...(bySpot.get(w.spot_id) ?? []), { weekday: w.weekday, startMinute: w.start_minute, endMinute: w.end_minute }]);
+    }
     const minutes = (end.getTime() - start.getTime()) / 60_000;
     const now = Date.now();
     rows = rows.filter(

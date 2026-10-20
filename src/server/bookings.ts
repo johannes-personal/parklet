@@ -1,13 +1,12 @@
 import "server-only";
-import { and, asc, desc, eq, gt, inArray, lt, or, sql } from "drizzle-orm";
-import { db } from "@/db";
-import { bookings, hostAccountMembers, spots, users, vehicles, type Booking, type Spot } from "@/db/schema";
+import { api, ApiError, cols, embed, must, names, parse, parseAll, rpc, toDb } from "@/db/api";
+import { bookings, hostAccountMembers, spots, users, vehicles, type Booking, type Spot, type Vehicle } from "@/db/schema";
 import { isWithinWindows } from "@/lib/availability";
 import { calculatePrice, durationMinutes, type PriceBreakdown } from "@/lib/pricing";
 import { formatSek } from "@/lib/money";
 import { formatDateTime, formatDuration, formatRange } from "@/lib/time";
 import { isUuid } from "./ids";
-import { notifyAccount, notifyUsers } from "./notifications";
+import { notifyAccount, notifyAdmins, notifyUsers } from "./notifications";
 import { getPaymentProvider } from "./payments";
 import { getSpotWithAccount, isBookable, type SpotWithWindows } from "./spots";
 
@@ -43,17 +42,26 @@ export function checkRules(spot: SpotWithWindows, start: Date, end: Date, now = 
   };
 }
 
-/** Holding statuses: these occupy the slot (see the exclusion constraint). */
-const holding = sql`(${bookings.status} = 'confirmed' OR (${bookings.status} = 'pending_payment' AND ${bookings.holdExpiresAt} > now()))`;
+const B = names(bookings);
+const M = names(hostAccountMembers);
+
+/** Bookings that occupy their slot (see the exclusion constraint): confirmed, or held and not yet expired. */
+const holdingFilter = (now: Date) => `${B.status}.eq.confirmed,and(${B.status}.eq.pending_payment,${B.holdExpiresAt}.gt.${now.toISOString()})`;
 
 /** Upcoming busy ranges on a spot, shown to drivers without revealing who booked. */
-export async function listBusyRanges(spotId: string, from = new Date()) {
-  return db
-    .select({ startsAt: bookings.startsAt, endsAt: bookings.endsAt })
-    .from(bookings)
-    .where(and(eq(bookings.spotId, spotId), holding, gt(bookings.endsAt, from)))
-    .orderBy(asc(bookings.startsAt))
-    .limit(20);
+export async function listBusyRanges(spotId: string, from = new Date()): Promise<Pick<Booking, "startsAt" | "endsAt">[]> {
+  const rows = must(
+    await api()
+      .from("bookings")
+      .select(cols(bookings, ["startsAt", "endsAt"]))
+      .eq(B.spotId, spotId)
+      .or(holdingFilter(new Date()))
+      .gt(B.endsAt, from.toISOString())
+      .order(B.startsAt)
+      .limit(20),
+    "listBusyRanges",
+  );
+  return parseAll(bookings, rows);
 }
 
 export type CreateBookingResult = { ok: true; bookingId: string } | { ok: false; error: string };
@@ -80,44 +88,21 @@ export async function createBooking(input: {
   const price = rules.price;
 
   try {
-    const bookingId = await db.transaction(async (tx) => {
-      // Serialize bookings per spot. Concurrent inserts checking the exclusion constraint
-      // otherwise wait on each other's uncommitted rows and can deadlock instead of one
-      // winning. NO KEY UPDATE doesn't block foreign-key checks against the spot.
-      await tx.execute(sql`select 1 from ${spots} where ${spots.id} = ${spot.id} for no key update`);
-
-      // Release stale holds on this spot so the exclusion constraint only sees live ones.
-      await tx
-        .update(bookings)
-        .set({ status: "expired" })
-        .where(and(eq(bookings.spotId, spot.id), eq(bookings.status, "pending_payment"), lt(bookings.holdExpiresAt, new Date())));
-
-      // Remember the plate for next time.
-      const [vehicle] = await tx
-        .insert(vehicles)
-        .values({ userId: input.driverId, reg: input.vehicleReg })
-        .onConflictDoUpdate({ target: [vehicles.userId, vehicles.reg], set: { reg: input.vehicleReg } })
-        .returning({ id: vehicles.id });
-
-      const [created] = await tx
-        .insert(bookings)
-        .values({
-          spotId: spot.id,
-          driverId: input.driverId,
-          vehicleId: vehicle.id,
-          startsAt: input.start,
-          endsAt: input.end,
-          status: "pending_payment",
-          holdExpiresAt: new Date(Date.now() + HOLD_MINUTES * 60_000),
-          vehicleReg: input.vehicleReg,
-          vehicleRegistration: spot.requiresVehicleRegistration ? "pending" : "not_required",
-          baseOre: price.baseOre,
-          feeOre: price.feeOre,
-          totalOre: price.totalOre,
-          paymentProvider: getPaymentProvider().name,
-        })
-        .returning({ id: bookings.id });
-      return created.id;
+    // One step in the database (0010_http_api.sql): lock the spot so concurrent bookings
+    // queue instead of deadlocking on the exclusion constraint, release stale holds,
+    // remember the plate for next time and place the hold.
+    const bookingId = await rpc<string>("parklet_create_booking", {
+      p_spot_id: spot.id,
+      p_driver_id: input.driverId,
+      p_starts_at: input.start.toISOString(),
+      p_ends_at: input.end.toISOString(),
+      p_vehicle_reg: input.vehicleReg,
+      p_vehicle_registration: spot.requiresVehicleRegistration ? "pending" : "not_required",
+      p_base_ore: price.baseOre,
+      p_fee_ore: price.feeOre,
+      p_total_ore: price.totalOre,
+      p_payment_provider: getPaymentProvider().name,
+      p_hold_minutes: HOLD_MINUTES,
     });
     return { ok: true, bookingId };
   } catch (err) {
@@ -134,31 +119,41 @@ export async function createBooking(input: {
  * Idempotent: confirming twice is a no-op.
  */
 export async function confirmPayment(bookingId: string, paymentRef: string): Promise<{ ok: true } | { ok: false; error: string }> {
-  const updated = await db
-    .update(bookings)
-    .set({ status: "confirmed", paymentStatus: "paid", paymentRef, confirmedAt: new Date(), holdExpiresAt: null })
-    .where(and(eq(bookings.id, bookingId), eq(bookings.status, "pending_payment"), gt(bookings.holdExpiresAt, new Date())))
-    .returning({ id: bookings.id });
+  if (!isUuid(bookingId)) return { ok: false, error: "Bokningen finns inte." };
+  const now = new Date();
+  const updated = must(
+    await api()
+      .from("bookings")
+      .update(toDb(bookings, { status: "confirmed", paymentStatus: "paid", paymentRef, confirmedAt: now, holdExpiresAt: null }))
+      .eq(B.id, bookingId)
+      .eq(B.status, "pending_payment")
+      .gt(B.holdExpiresAt, now.toISOString())
+      .select(B.id),
+    "confirmPayment",
+  );
   if (updated.length) {
     await announceBooking(bookingId);
     return { ok: true };
   }
-  const [b] = await db.select({ status: bookings.status }).from(bookings).where(eq(bookings.id, bookingId)).limit(1);
+  const b = must(await api().from("bookings").select(B.status).eq(B.id, bookingId).maybeSingle(), "confirmPayment") as { status: string } | null;
   if (b?.status === "confirmed") return { ok: true };
   return { ok: false, error: "Reservationen hann gå ut innan betalningen genomfördes. Ingen betalning har dragits. Boka igen." };
 }
 
 /** Tell the host about a new booking (and the car to register), and send the driver a confirmation. */
 async function announceBooking(bookingId: string) {
-  const [row] = await db
-    .select({ booking: bookings, spot: spots, driverName: users.name })
-    .from(bookings)
-    .innerJoin(spots, eq(spots.id, bookings.spotId))
-    .innerJoin(users, eq(users.id, bookings.driverId))
-    .where(eq(bookings.id, bookingId))
-    .limit(1);
+  const row = must(
+    await api()
+      .from("bookings")
+      .select(`${cols(bookings)},${embed("spot", spots, undefined, { inner: true })},${embed("driver", users, ["name"], { inner: true, fk: "bookings_driver_id_users_id_fk" })}`)
+      .eq(B.id, bookingId)
+      .maybeSingle(),
+    "announceBooking",
+  ) as (Record<string, unknown> & { spot: unknown; driver: { name: string } }) | null;
   if (!row) return;
-  const { booking, spot } = row;
+  const booking = parse(bookings, row);
+  const spot = parse(spots, row.spot);
+  const driverName = row.driver.name;
   const when = formatRange(booking.startsAt, booking.endsAt);
   const register = booking.vehicleRegistration === "pending";
   const details: [string, string][] = [
@@ -170,7 +165,7 @@ async function announceBooking(bookingId: string) {
     kind: register ? "vehicle_registration" : "booking_new",
     title: register ? `Registrera ${booking.vehicleReg} – ny bokning av ${spot.title}` : `Ny bokning: ${spot.title}`,
     body:
-      `${row.driverName.split(" ")[0]} har bokat ${spot.title}.` +
+      `${driverName.split(" ")[0]} har bokat ${spot.title}.` +
       (register
         ? `\n\nFöreningen kräver att bilen registreras. Registrera ${booking.vehicleReg} i föreningens parkeringssystem före ${formatDateTime(booking.startsAt)} och markera den som registrerad i Parklet, så att föraren vet att det är klart.`
         : ""),
@@ -190,18 +185,13 @@ async function announceBooking(bookingId: string) {
   });
 }
 
+/** 23P01 = exclusion_violation: the slot overlaps a booking that holds it. */
 function isExclusionViolation(err: unknown): boolean {
-  // 23P01 = exclusion_violation. Drizzle wraps driver errors, so check the cause too.
-  const codes = [err, (err as { cause?: unknown })?.cause].map((e) => (e as { code?: string } | undefined)?.code);
-  return codes.includes("23P01");
+  return err instanceof ApiError && err.code === "23P01";
 }
 
 async function isAccountMember(accountId: string, userId: string) {
-  const rows = await db
-    .select({ u: hostAccountMembers.userId })
-    .from(hostAccountMembers)
-    .where(and(eq(hostAccountMembers.hostAccountId, accountId), eq(hostAccountMembers.userId, userId)))
-    .limit(1);
+  const rows = must(await api().from("host_account_members").select(M.userId).eq(M.hostAccountId, accountId).eq(M.userId, userId).limit(1), "isAccountMember");
   return rows.length > 0;
 }
 
@@ -225,73 +215,72 @@ export type BookingWithSpot = Booking & {
   viewerIsHost: boolean;
 };
 
-const bookingSelect = {
-  booking: bookings,
-  spot: {
-    id: spots.id,
-    title: spots.title,
-    address: spots.address,
-    city: spots.city,
-    lat: spots.lat,
-    lng: spots.lng,
-    hostAccountId: spots.hostAccountId,
-    cancellationHours: spots.cancellationHours,
-    accessInstructions: spots.accessInstructions,
-    requiresVehicleRegistration: spots.requiresVehicleRegistration,
-    vehicleRegistrationNote: spots.vehicleRegistrationNote,
-  },
-};
+const SPOT_KEYS = [
+  "id",
+  "title",
+  "address",
+  "city",
+  "lat",
+  "lng",
+  "hostAccountId",
+  "cancellationHours",
+  "accessInstructions",
+  "requiresVehicleRegistration",
+  "vehicleRegistrationNote",
+] as const;
+const BOOKING_WITH_SPOT = `${cols(bookings)},${embed("spot", spots, SPOT_KEYS, { inner: true })}`;
 
-const memberOfSpotAccount = (userId: string) =>
-  sql`exists (select 1 from ${hostAccountMembers} m where m.host_account_id = ${spots.hostAccountId} and m.user_id = ${userId})`;
+function bookingWithSpot(row: unknown) {
+  const r = row as { spot: unknown };
+  return { ...parse(bookings, row), spot: parse(spots, r.spot) as BookingWithSpot["spot"] };
+}
 
 /** A booking visible to the given user: they are either the driver or an administrator of the host account. */
 export async function getBookingForUser(bookingId: string, userId: string): Promise<BookingWithSpot | null> {
   if (!isUuid(bookingId)) return null;
-  const [row] = await db
-    .select({ ...bookingSelect, viewerIsHost: memberOfSpotAccount(userId).mapWith(Boolean) })
-    .from(bookings)
-    .innerJoin(spots, eq(spots.id, bookings.spotId))
-    .where(and(eq(bookings.id, bookingId), or(eq(bookings.driverId, userId), memberOfSpotAccount(userId))))
-    .limit(1);
+  const row = must(await api().from("bookings").select(BOOKING_WITH_SPOT).eq(B.id, bookingId).maybeSingle(), "getBookingForUser");
   if (!row) return null;
-  const names = await firstNames([row.booking.driverId]);
-  return { ...row.booking, spot: row.spot, driverName: names.get(row.booking.driverId) ?? "", viewerIsHost: row.viewerIsHost };
+  const booking = bookingWithSpot(row);
+  const viewerIsHost = await isAccountMember(booking.spot.hostAccountId, userId);
+  if (booking.driverId !== userId && !viewerIsHost) return null;
+  const names = await firstNames([booking.driverId]);
+  return { ...booking, driverName: names.get(booking.driverId) ?? "", viewerIsHost };
 }
 
 export async function listDriverBookings(driverId: string): Promise<BookingWithSpot[]> {
-  const rows = await db
-    .select(bookingSelect)
-    .from(bookings)
-    .innerJoin(spots, eq(spots.id, bookings.spotId))
-    .where(and(eq(bookings.driverId, driverId), inArray(bookings.status, ["confirmed", "cancelled", "pending_payment"])))
-    .orderBy(desc(bookings.startsAt))
-    .limit(200);
-  return rows.map((r) => ({ ...r.booking, spot: r.spot, driverName: "", viewerIsHost: false }));
+  const rows = must(
+    await api()
+      .from("bookings")
+      .select(BOOKING_WITH_SPOT)
+      .eq(B.driverId, driverId)
+      .in(B.status, ["confirmed", "cancelled", "pending_payment"])
+      .order(B.startsAt, { ascending: false })
+      .limit(200),
+    "listDriverBookings",
+  );
+  return rows.map((r: unknown) => ({ ...bookingWithSpot(r), driverName: "", viewerIsHost: false }));
 }
 
 export async function listAccountBookings(accountId: string): Promise<BookingWithSpot[]> {
-  const rows = await db
-    .select(bookingSelect)
-    .from(bookings)
-    .innerJoin(spots, eq(spots.id, bookings.spotId))
-    .where(
-      and(
-        eq(spots.hostAccountId, accountId),
-        inArray(bookings.status, ["confirmed", "cancelled"]),
-        gt(bookings.endsAt, new Date(Date.now() - 7 * 24 * 3600 * 1000)),
-      ),
-    )
-    .orderBy(asc(bookings.startsAt))
-    .limit(200);
-  const names = await firstNames(rows.map((r) => r.booking.driverId));
-  return rows.map((r) => ({ ...r.booking, spot: r.spot, driverName: names.get(r.booking.driverId) ?? "", viewerIsHost: true }));
+  const rows = must(
+    await api()
+      .from("bookings")
+      .select(BOOKING_WITH_SPOT)
+      .eq(`spot.${names(spots).hostAccountId}`, accountId)
+      .in(B.status, ["confirmed", "cancelled"])
+      .gt(B.endsAt, new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString())
+      .order(B.startsAt)
+      .limit(200),
+    "listAccountBookings",
+  ).map(bookingWithSpot);
+  const firstNameOf = await firstNames(rows.map((r: { driverId: string }) => r.driverId));
+  return rows.map((r: ReturnType<typeof bookingWithSpot>) => ({ ...r, driverName: firstNameOf.get(r.driverId) ?? "", viewerIsHost: true }));
 }
 
 async function firstNames(ids: string[]): Promise<Map<string, string>> {
   const unique = [...new Set(ids)];
   if (unique.length === 0) return new Map();
-  const rows = await db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, unique));
+  const rows = must<{ id: string; name: string }[]>(await api().from("users").select("id,name").in(names(users).id, unique), "firstNames");
   // Only first names are shared between drivers and hosts.
   return new Map(rows.map((r) => [r.id, r.name.split(" ")[0]]));
 }
@@ -306,7 +295,7 @@ export async function cancelBooking(bookingId: string, userId: string, now = new
   const booking = await getBookingForUser(bookingId, userId);
   if (!booking) return { ok: false, error: "Bokningen finns inte." };
   if (booking.status === "pending_payment" && booking.driverId === userId) {
-    await db.update(bookings).set({ status: "expired" }).where(and(eq(bookings.id, booking.id), eq(bookings.status, "pending_payment")));
+    must(await api().from("bookings").update({ [B.status]: "expired" }).eq(B.id, booking.id).eq(B.status, "pending_payment"), "cancelBooking");
     return { ok: true };
   }
   if (booking.status !== "confirmed") return { ok: false, error: "Bokningen är inte aktiv." };
@@ -319,16 +308,31 @@ export async function cancelBooking(bookingId: string, userId: string, now = new
     return { ok: false, error: "Det är för sent att avboka kostnadsfritt. Kontakta supporten om något har hänt." };
   }
 
-  await db.transaction(async (tx) => {
-    const updated = await tx
-      .update(bookings)
-      .set({ status: "cancelled", cancelledAt: now, cancelledBy: asHost ? "host" : "driver", paymentStatus: "refunded" })
-      .where(and(eq(bookings.id, booking.id), eq(bookings.status, "confirmed")))
-      .returning({ id: bookings.id });
-    if (updated.length && booking.paymentRef) {
+  // Only one cancellation wins: the update requires the booking to still be confirmed. The
+  // payment stays "paid" until the refund has gone through, so a cancelled booking that is
+  // still "paid" always means money is owed back (also if this function dies half-way).
+  const updated = must(
+    await api()
+      .from("bookings")
+      .update(toDb(bookings, { status: "cancelled", cancelledAt: now, cancelledBy: asHost ? "host" : "driver" }))
+      .eq(B.id, booking.id)
+      .eq(B.status, "confirmed")
+      .select(B.id),
+    "cancelBooking",
+  );
+  if (updated.length === 0) return { ok: false, error: "Bokningen är inte aktiv." };
+  if (booking.paymentRef && booking.paymentStatus === "paid") {
+    try {
       await getPaymentProvider().refund({ ref: booking.paymentRef, amountOre: booking.totalOre });
+    } catch (err) {
+      await undoCancellation(booking, err);
+      throw err;
     }
-  });
+    must(
+      await api().from("bookings").update(toDb(bookings, { paymentStatus: "refunded" })).eq(B.id, booking.id).eq(B.status, "cancelled"),
+      "cancelBooking",
+    );
+  }
   const when = formatRange(booking.startsAt, booking.endsAt);
   if (asHost) {
     await notifyUsers([booking.driverId], {
@@ -348,15 +352,45 @@ export async function cancelBooking(bookingId: string, userId: string, now = new
   return { ok: true };
 }
 
+/**
+ * The refund failed: make the booking confirmed again, so the driver keeps the spot they
+ * paid for. If someone booked the freed time in the meantime that is no longer possible;
+ * the booking then stays cancelled and paid, and the admins are told to refund by hand.
+ */
+async function undoCancellation(booking: BookingWithSpot, cause: unknown) {
+  try {
+    must(
+      await api()
+        .from("bookings")
+        .update(toDb(bookings, { status: "confirmed", cancelledAt: null, cancelledBy: null }))
+        .eq(B.id, booking.id)
+        .eq(B.status, "cancelled"),
+      "cancelBooking",
+    );
+  } catch (err) {
+    console.error("[cancelBooking] refund failed and the booking could not be restored", booking.id, cause, err);
+    await notifyAdmins({
+      kind: "refund_failed",
+      title: `Återbetalning misslyckades: ${booking.spot.title}`,
+      body: `Bokningen ${formatRange(booking.startsAt, booking.endsAt)} är avbokad men ${formatSek(booking.totalOre)} har inte betalats tillbaka. Återbetala manuellt (bokning ${booking.id}, betalning ${booking.paymentRef}).`,
+      href: "/admin",
+    });
+  }
+}
+
 /** The host confirms that the driver's car has been registered in the association's parking system. */
 export async function markVehicleRegistered(bookingId: string, userId: string) {
   const booking = await getBookingForUser(bookingId, userId);
   if (!booking || !booking.viewerIsHost) return false;
-  const updated = await db
-    .update(bookings)
-    .set({ vehicleRegistration: "done", vehicleRegisteredAt: new Date() })
-    .where(and(eq(bookings.id, bookingId), eq(bookings.vehicleRegistration, "pending")))
-    .returning({ id: bookings.id });
+  const updated = must(
+    await api()
+      .from("bookings")
+      .update(toDb(bookings, { vehicleRegistration: "done", vehicleRegisteredAt: new Date() }))
+      .eq(B.id, bookingId)
+      .eq(B.vehicleRegistration, "pending")
+      .select(B.id),
+    "markVehicleRegistered",
+  );
   if (updated.length && booking.status === "confirmed") {
     await notifyUsers([booking.driverId], {
       kind: "vehicle_registered",
@@ -368,6 +402,7 @@ export async function markVehicleRegistered(bookingId: string, userId: string) {
   return true;
 }
 
-export async function listVehicles(userId: string) {
-  return db.select().from(vehicles).where(eq(vehicles.userId, userId)).orderBy(asc(vehicles.createdAt));
+export async function listVehicles(userId: string): Promise<Vehicle[]> {
+  const V = names(vehicles);
+  return parseAll(vehicles, must(await api().from("vehicles").select(cols(vehicles)).eq(V.userId, userId).order(V.createdAt), "listVehicles"));
 }
