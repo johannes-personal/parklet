@@ -7,9 +7,10 @@ import * as schema from "./schema";
 const rawUrl = process.env.DATABASE_URL ?? process.env.POSTGRES_URL;
 const MISSING = "DATABASE_URL (or POSTGRES_URL) is not set. Copy .env.example to .env, or connect the Supabase integration on Vercel.";
 // Builds don't touch the database, so a missing URL only fails when a query runs.
-const url = sessionMode(cleanUrl(rawUrl ?? "postgres://missing@127.0.0.1:1/missing"));
+const url = cleanUrl(rawUrl ?? "postgres://missing@127.0.0.1:1/missing");
 
-// Any other transaction pooler does not support prepared statements.
+// Supabase's transaction pooler (Supavisor, port 6543) does not support
+// prepared statements. Serverless functions also keep their pools small.
 const transactionPooler = /:6543\//.test(url);
 
 /**
@@ -23,25 +24,19 @@ function cleanUrl(value: string): string {
   return u.toString();
 }
 
-/**
- * The Supabase integration's POSTGRES_URL points at Supavisor's transaction
- * mode (port 6543). In that mode queries from postgres.js stalled for good
- * (the server showed them as "active / ClientRead"), hanging every page that
- * queried the database. The same pooler in session mode (port 5432, same host
- * and credentials) behaves like a normal connection. Parklet's traffic is far
- * below its connection limit, and idle connections are closed quickly.
- */
-function sessionMode(value: string): string {
-  const u = new URL(value);
-  if (u.hostname.endsWith(".pooler.supabase.com") && u.port === "6543") u.port = "5432";
-  return u.toString();
-}
-
 // Reuse one pool across hot reloads in development.
 const globalForDb = globalThis as unknown as { pgClient?: ReturnType<typeof postgres> };
 const options = {
   max: process.env.VERCEL ? 3 : 10,
   prepare: !transactionPooler,
+  // postgres.js pipelines queries on a busy connection. Through the transaction
+  // pooler, pipelined queries stalled for good (the server showed them as
+  // "active / ClientRead"); once all of an instance's connections were stuck,
+  // every page that queried the database hung. Send one query at a time per
+  // connection there. (The option exists but is missing from the type
+  // definitions.) Session mode (port 5432) is no way out: it allows only 15
+  // clients in total, which serverless instances use up at once.
+  max_pipeline: transactionPooler ? 0 : 100,
   // Serverless instances come and go; don't hold pooler connections while idle.
   idle_timeout: process.env.VERCEL ? 20 : undefined,
   onnotice: () => {},
