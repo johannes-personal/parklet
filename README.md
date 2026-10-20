@@ -60,8 +60,10 @@ Live demo: **https://parklet-rebuild.vercel.app**
   RLS is enabled on every table with no policies, so Supabase's public Data API can't read
   anything, while the app connects as the table owner.
 - **App:** Vercel, with functions pinned to `arn1` (Stockholm) in `vercel.json`.
-- **Connection:** the Supabase ↔ Vercel integration injects `POSTGRES_URL` (transaction pooler,
-  port 6543). The client strips pooler-specific URL parameters and disables prepared statements.
+- **Connection:** the Supabase ↔ Vercel integration injects `POSTGRES_URL` (Supavisor's
+  transaction pooler, port 6543). The client strips pooler-specific URL parameters and connects
+  to the same pooler in session mode (port 5432) instead: in transaction mode queries stalled
+  indefinitely. See `src/db/index.ts`.
 - **Vercel env:** `DOCUMENT_STORAGE=database`, `NEXT_PUBLIC_DEMO=1`. Links use `APP_URL` if
   set, otherwise Vercel's production or deployment URL.
 - **Mail:** every mail lands in the `mail_outbox` table, readable by admins at `/admin/epost`.
