@@ -11,6 +11,8 @@ export default defineConfig({
   },
   test: {
     include: ["tests/**/*.test.ts"],
+    // Real external services: `npm run test:live` (vitest.live.config.mts).
+    exclude: ["tests/live/**", "node_modules/**"],
     environment: "node",
     setupFiles: ["tests/integration/setup.ts"],
     globalSetup: ["tests/support/api-server.ts"],
