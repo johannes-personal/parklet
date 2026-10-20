@@ -6,7 +6,7 @@ import { calculatePrice, durationMinutes, type PriceBreakdown } from "@/lib/pric
 import { formatSek } from "@/lib/money";
 import { formatDateTime, formatDuration, formatRange } from "@/lib/time";
 import { isUuid } from "./ids";
-import { notifyAccount, notifyUsers } from "./notifications";
+import { notifyAccount, notifyAdmins, notifyUsers } from "./notifications";
 import { getPaymentProvider } from "./payments";
 import { getSpotWithAccount, isBookable, type SpotWithWindows } from "./spots";
 
@@ -46,7 +46,7 @@ const B = names(bookings);
 const M = names(hostAccountMembers);
 
 /** Bookings that occupy their slot (see the exclusion constraint): confirmed, or held and not yet expired. */
-export const holdingFilter = (now: Date) => `${B.status}.eq.confirmed,and(${B.status}.eq.pending_payment,${B.holdExpiresAt}.gt.${now.toISOString()})`;
+const holdingFilter = (now: Date) => `${B.status}.eq.confirmed,and(${B.status}.eq.pending_payment,${B.holdExpiresAt}.gt.${now.toISOString()})`;
 
 /** Upcoming busy ranges on a spot, shown to drivers without revealing who booked. */
 export async function listBusyRanges(spotId: string, from = new Date()): Promise<Pick<Booking, "startsAt" | "endsAt">[]> {
@@ -308,28 +308,30 @@ export async function cancelBooking(bookingId: string, userId: string, now = new
     return { ok: false, error: "Det är för sent att avboka kostnadsfritt. Kontakta supporten om något har hänt." };
   }
 
-  // Only one cancellation wins: the update requires the booking to still be confirmed.
+  // Only one cancellation wins: the update requires the booking to still be confirmed. The
+  // payment stays "paid" until the refund has gone through, so a cancelled booking that is
+  // still "paid" always means money is owed back (also if this function dies half-way).
   const updated = must(
     await api()
       .from("bookings")
-      .update(toDb(bookings, { status: "cancelled", cancelledAt: now, cancelledBy: asHost ? "host" : "driver", paymentStatus: "refunded" }))
+      .update(toDb(bookings, { status: "cancelled", cancelledAt: now, cancelledBy: asHost ? "host" : "driver" }))
       .eq(B.id, booking.id)
       .eq(B.status, "confirmed")
       .select(B.id),
     "cancelBooking",
   );
   if (updated.length === 0) return { ok: false, error: "Bokningen är inte aktiv." };
-  if (booking.paymentRef) {
+  if (booking.paymentRef && booking.paymentStatus === "paid") {
     try {
       await getPaymentProvider().refund({ ref: booking.paymentRef, amountOre: booking.totalOre });
     } catch (err) {
-      // Put the booking back, so a failed refund doesn't leave a cancelled booking unpaid back.
-      await api()
-        .from("bookings")
-        .update(toDb(bookings, { status: "confirmed", cancelledAt: null, cancelledBy: null, paymentStatus: "paid" }))
-        .eq(B.id, booking.id);
+      await undoCancellation(booking, err);
       throw err;
     }
+    must(
+      await api().from("bookings").update(toDb(bookings, { paymentStatus: "refunded" })).eq(B.id, booking.id).eq(B.status, "cancelled"),
+      "cancelBooking",
+    );
   }
   const when = formatRange(booking.startsAt, booking.endsAt);
   if (asHost) {
@@ -348,6 +350,32 @@ export async function cancelBooking(bookingId: string, userId: string, now = new
     });
   }
   return { ok: true };
+}
+
+/**
+ * The refund failed: make the booking confirmed again, so the driver keeps the spot they
+ * paid for. If someone booked the freed time in the meantime that is no longer possible;
+ * the booking then stays cancelled and paid, and the admins are told to refund by hand.
+ */
+async function undoCancellation(booking: BookingWithSpot, cause: unknown) {
+  try {
+    must(
+      await api()
+        .from("bookings")
+        .update(toDb(bookings, { status: "confirmed", cancelledAt: null, cancelledBy: null }))
+        .eq(B.id, booking.id)
+        .eq(B.status, "cancelled"),
+      "cancelBooking",
+    );
+  } catch (err) {
+    console.error("[cancelBooking] refund failed and the booking could not be restored", booking.id, cause, err);
+    await notifyAdmins({
+      kind: "refund_failed",
+      title: `Återbetalning misslyckades: ${booking.spot.title}`,
+      body: `Bokningen ${formatRange(booking.startsAt, booking.endsAt)} är avbokad men ${formatSek(booking.totalOre)} har inte betalats tillbaka. Återbetala manuellt (bokning ${booking.id}, betalning ${booking.paymentRef}).`,
+      href: "/admin",
+    });
+  }
 }
 
 /** The host confirms that the driver's car has been registered in the association's parking system. */

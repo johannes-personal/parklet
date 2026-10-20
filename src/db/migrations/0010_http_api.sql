@@ -240,22 +240,22 @@ LANGUAGE sql STABLE SET search_path = public, pg_temp AS $$
     WHERE (p_bookable IS NULL OR (p_bookable = 'yes' AND b.bookable) OR (p_bookable = 'no' AND NOT b.bookable))
   ),
   chosen AS (SELECT * FROM filtered WHERE p_review IS NULL OR review::text = p_review),
-  page AS (
-    SELECT * FROM chosen
-    ORDER BY
+  ordered AS (
+    SELECT *, row_number() OVER (ORDER BY
       CASE WHEN p_sort = 'title' THEN title END ASC,
       CASE WHEN p_sort = 'submitted' THEN submitted_at END DESC NULLS LAST,
       CASE WHEN p_sort = 'bookings' THEN total END DESC,
-      updated_at DESC
-    LIMIT p_limit OFFSET p_offset
-  )
+      updated_at DESC, id) AS pos
+    FROM chosen
+  ),
+  page AS (SELECT * FROM ordered ORDER BY pos LIMIT p_limit OFFSET p_offset)
   SELECT jsonb_build_object(
     'rows', coalesce((SELECT jsonb_agg(jsonb_build_object(
       'id', id, 'title', title, 'address', address, 'city', city, 'review', review,
       'right_basis', right_basis, 'landlord_kind', landlord_kind, 'submitted_at', submitted_at, 'updated_at', updated_at,
       'account_id', host_account_id, 'account_name', account_name, 'account_kind', account_kind,
       'bookable', bookable, 'not_bookable', not_bookable, 'upcoming', upcoming, 'total', total
-    )) FROM page), '[]'::jsonb),
+    ) ORDER BY pos) FROM page), '[]'::jsonb),
     'total', (SELECT count(*) FROM chosen),
     'by_review', coalesce((SELECT jsonb_object_agg(review, n) FROM (SELECT review, count(*) AS n FROM filtered GROUP BY review) r), '{}'::jsonb),
     'cities', coalesce((SELECT jsonb_agg(jsonb_build_object('city', city, 'n', n) ORDER BY city) FROM (SELECT city, count(*) AS n FROM spots GROUP BY city) c), '[]'::jsonb)
@@ -290,20 +290,66 @@ LANGUAGE sql STABLE SET search_path = public, pg_temp AS $$
       AND (p_payout IS NULL OR a.payout_status::text = p_payout)
   ),
   chosen AS (SELECT * FROM base WHERE p_verification IS NULL OR verification_status::text = p_verification),
-  page AS (
-    SELECT * FROM chosen
-    ORDER BY
+  ordered AS (
+    SELECT *, row_number() OVER (ORDER BY
       CASE WHEN p_sort = 'spots' THEN spot_count END DESC,
       CASE WHEN p_sort IN ('name', 'spots') THEN name END ASC,
-      created_at DESC
-    LIMIT p_limit OFFSET p_offset
-  )
+      created_at DESC, id) AS pos
+    FROM chosen
+  ),
+  page AS (SELECT * FROM ordered ORDER BY pos LIMIT p_limit OFFSET p_offset)
   SELECT jsonb_build_object(
     'rows', coalesce((SELECT jsonb_agg(jsonb_build_object(
-      'account', to_jsonb(p) - 'spot_count' - 'approved_count', 'spots', spot_count, 'approved', approved_count
-    )) FROM page p), '[]'::jsonb),
+      'account', to_jsonb(p) - 'spot_count' - 'approved_count' - 'pos', 'spots', spot_count, 'approved', approved_count
+    ) ORDER BY pos) FROM page p), '[]'::jsonb),
     'total', (SELECT count(*) FROM chosen),
     'by_verification', coalesce((SELECT jsonb_object_agg(verification_status, n) FROM (SELECT verification_status, count(*) AS n FROM base GROUP BY verification_status) v), '{}'::jsonb)
+  );
+$$;
+--> statement-breakpoint
+
+-- For a timed search: the opening hours of the candidate spots and which of them are
+-- taken (a confirmed booking or an unexpired hold) in [p_start, p_end). One value, so
+-- PostgREST's row limit can't cut it short, and the ids travel in the request body.
+CREATE FUNCTION public.parklet_search_availability(p_spot_ids uuid[], p_start timestamptz, p_end timestamptz)
+RETURNS jsonb
+LANGUAGE sql STABLE SET search_path = public, pg_temp AS $$
+  SELECT jsonb_build_object(
+    'windows', coalesce((
+      SELECT jsonb_agg(jsonb_build_object('spot_id', w.spot_id, 'weekday', w.weekday, 'start_minute', w.start_minute, 'end_minute', w.end_minute))
+      FROM availability_windows w WHERE w.spot_id = ANY (p_spot_ids)
+    ), '[]'::jsonb),
+    'busy', coalesce((
+      SELECT jsonb_agg(DISTINCT b.spot_id)
+      FROM bookings b
+      WHERE b.spot_id = ANY (p_spot_ids) AND b.starts_at < p_end AND b.ends_at > p_start
+        AND (b.status = 'confirmed' OR (b.status = 'pending_payment' AND b.hold_expires_at > now()))
+    ), '[]'::jsonb)
+  );
+$$;
+--> statement-breakpoint
+
+-- The admins' morning summary: what waits for review and what happened since p_since.
+-- Counts and sums are made here, not over rows in the app (PostgREST caps those at 1000).
+CREATE FUNCTION public.parklet_admin_digest(p_since timestamptz) RETURNS jsonb
+LANGUAGE sql STABLE SET search_path = public, pg_temp AS $$
+  SELECT jsonb_build_object(
+    'pending_spots', coalesce((SELECT jsonb_agg(jsonb_build_object('id', id, 'title', title) ORDER BY submitted_at NULLS LAST, id)
+      FROM (SELECT id, title, submitted_at FROM spots WHERE review = 'pending_review' ORDER BY submitted_at NULLS LAST, id LIMIT 8) s), '[]'::jsonb),
+    'pending_spot_count', (SELECT count(*) FROM spots WHERE review = 'pending_review'),
+    'pending_accounts', coalesce((SELECT jsonb_agg(jsonb_build_object('id', id, 'name', name) ORDER BY created_at, id)
+      FROM (SELECT id, name, created_at FROM host_accounts WHERE verification_status = 'pending' ORDER BY created_at, id LIMIT 8) a), '[]'::jsonb),
+    'pending_account_count', (SELECT count(*) FROM host_accounts WHERE verification_status = 'pending'),
+    'oldest_waiting', (SELECT min(t) FROM (
+      SELECT submitted_at AS t FROM spots WHERE review = 'pending_review'
+      UNION ALL SELECT created_at FROM host_accounts WHERE verification_status = 'pending') w),
+    'new_spots', (SELECT count(*) FROM spots WHERE created_at >= p_since),
+    'new_accounts', (SELECT count(*) FROM host_accounts WHERE created_at >= p_since),
+    'new_users', (SELECT count(*) FROM users WHERE created_at >= p_since),
+    'booked', (SELECT count(*) FROM bookings WHERE status = 'confirmed' AND confirmed_at >= p_since),
+    'booked_ore', (SELECT coalesce(sum(total_ore), 0) FROM bookings WHERE status = 'confirmed' AND confirmed_at >= p_since),
+    'cancelled', (SELECT count(*) FROM bookings WHERE status = 'cancelled' AND cancelled_at >= p_since),
+    'overdue', (SELECT count(*) FROM bookings WHERE vehicle_overdue_notified_at >= p_since)
   );
 $$;
 --> statement-breakpoint
@@ -319,7 +365,9 @@ REVOKE EXECUTE ON FUNCTION
   public.parklet_respond_landlord(text, boolean, text, text, boolean, text),
   public.parklet_account_spot_stats(uuid),
   public.parklet_admin_search_spots(text, text, text, text, text, text, integer, integer),
-  public.parklet_admin_search_accounts(text, text, text, text, text, integer, integer)
+  public.parklet_admin_search_accounts(text, text, text, text, text, integer, integer),
+  public.parklet_search_availability(uuid[], timestamptz, timestamptz),
+  public.parklet_admin_digest(timestamptz)
 FROM PUBLIC;
 --> statement-breakpoint
 
@@ -337,7 +385,7 @@ BEGIN
                   'parklet_replace_windows', 'parklet_create_spots', 'parklet_update_spot', 'parklet_create_booking',
                   'parklet_create_host_account', 'parklet_accept_invitation', 'parklet_reset_password',
                   'parklet_respond_landlord', 'parklet_account_spot_stats', 'parklet_admin_search_spots',
-                  'parklet_admin_search_accounts') LOOP
+                  'parklet_admin_search_accounts', 'parklet_search_availability', 'parklet_admin_digest') LOOP
         IF role_name = 'service_role' THEN
           EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO service_role', fn);
         ELSE

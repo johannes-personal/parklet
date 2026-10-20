@@ -61,12 +61,34 @@ describe("the API's security", () => {
     expect(FUNCTIONS.length).toBeGreaterThanOrEqual(10);
   });
 
-  it("does not let anonymous callers run any of Parklet's functions", async () => {
-    for (const fn of FUNCTIONS) {
-      const res = await fetch(`${API}/rpc/${fn}`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
-      // 401/403 permission denied; never 2xx. (A 404 would mean the arguments didn't match: still not run.)
-      expect([401, 403, 404], `${fn} answered ${res.status}`).toContain(res.status);
-      if (res.status === 404) expect(((await res.json()) as { code: string }).code).toBe("PGRST202");
+  it("lets only service_role run Parklet's functions", async () => {
+    const rows = await db.execute<{ fn: string; anon: boolean; authenticated: boolean; service: boolean; public_: boolean }>(sql`
+      select p.oid::regprocedure::text as fn,
+        has_function_privilege('anon', p.oid, 'execute') as anon,
+        has_function_privilege('authenticated', p.oid, 'execute') as authenticated,
+        has_function_privilege('service_role', p.oid, 'execute') as service,
+        exists (select from aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
+                where a.grantee = 0 and a.privilege_type = 'EXECUTE') as public_
+      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public' and p.proname like 'parklet\\_%'`);
+    expect(rows.map((r) => r.fn.split("(")[0]).sort()).toEqual([...FUNCTIONS].sort());
+    for (const r of rows) expect(r, r.fn).toMatchObject({ anon: false, authenticated: false, service: true, public_: false });
+  });
+
+  it("refuses anonymous calls to every function, with all its arguments given", async () => {
+    const rows = await db.execute<{ fn: string; args: string[] }>(sql`
+      select p.proname as fn,
+        -- Input arguments only (a function returning a table also names its columns here).
+        array(select name from unnest(p.proargnames, coalesce(p.proargmodes, array_fill('i'::"char", array[cardinality(p.proargnames)]))) as t(name, mode)
+              where mode in ('i', 'b', 'v')) as args
+      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public' and p.proname like 'parklet\\_%'`);
+    expect(rows).toHaveLength(FUNCTIONS.length);
+    for (const { fn, args } of rows) {
+      const body = JSON.stringify(Object.fromEntries((args ?? []).map((a) => [a, null])));
+      const res = await fetch(`${API}/rpc/${fn}`, { method: "POST", headers: { "content-type": "application/json" }, body });
+      // Found (all arguments matched) but not allowed.
+      expect([401, 403], `${fn} answered ${res.status}`).toContain(res.status);
     }
   });
 
@@ -175,6 +197,24 @@ describe("host accounts through the API", () => {
   });
 });
 
+describe("the admins' digest through the API", () => {
+  it("counts in the database", async () => {
+    const { spotId } = await makeBookableSpot();
+    await db.update(spots).set({ review: "pending_review", submittedAt: new Date(Date.now() - 3600_000) }).where(eq(spots.id, spotId));
+    const driver = await makeUser();
+    for (const [i, total] of [1500, 2500].entries()) {
+      const start = new Date(Date.now() + (24 + i * 3) * 3600_000);
+      await db.insert(bookings).values({
+        spotId, driverId: driver.id, startsAt: start, endsAt: new Date(start.getTime() + 3600_000), status: "confirmed",
+        vehicleReg: "ABC123", baseOre: total, feeOre: 0, totalOre: total, paymentProvider: "mock", confirmedAt: new Date(),
+      });
+    }
+    const d = await rpc<Record<string, unknown>>("parklet_admin_digest", { p_since: new Date(Date.now() - 24 * 3600_000).toISOString() });
+    expect(d).toMatchObject({ pending_spot_count: 1, pending_account_count: 0, booked: 2, booked_ore: 4000, new_spots: 1, new_users: 2 });
+    expect(d.pending_spots).toEqual([{ id: spotId, title: "Testplats" }]);
+  });
+});
+
 describe("password reset through the API", () => {
   it("uses a token once, sets the password and signs out everywhere", async () => {
     const user = await makeUser();
@@ -192,6 +232,36 @@ describe("password reset through the API", () => {
 });
 
 describe("search through the API", () => {
+  it("checks opening hours and bookings for every candidate, however many there are", async () => {
+    // 150 spots open around the clock (1050 opening-hour rows, more than PostgREST returns
+    // from a table at once) around the corner, and the nearest one, created last.
+    const { owner, accountId } = await household();
+    const far = await createSpots(accountId, owner.id, await spotInput({ lat: 57.71, schedule: { mode: "always" } }), 150);
+    const [near] = await createSpots(accountId, owner.id, await spotInput({ title: "Närmast", schedule: { mode: "always" } }));
+    await db.update(spots).set({ review: "approved" });
+    await db.update(hostAccounts).set({ payoutStatus: "active" });
+    // One of the far ones is taken in the period.
+    const driver = await makeUser();
+    const start = new Date(Math.ceil((Date.now() + 48 * 3600_000) / 3600_000) * 3600_000);
+    const end = new Date(start.getTime() + 2 * 3600_000);
+    await db.insert(bookings).values({
+      spotId: far[0], driverId: driver.id, startsAt: start, endsAt: end, status: "confirmed",
+      vehicleReg: "ABC123", baseOre: 0, feeOre: 0, totalOre: 0, paymentProvider: "mock",
+    });
+
+    const all = await rpc<{ windows: unknown[]; busy: string[] }>("parklet_search_availability", {
+      p_spot_ids: [...far, near],
+      p_start: start.toISOString(),
+      p_end: end.toISOString(),
+    });
+    expect(all.windows).toHaveLength(151 * 7);
+    expect(all.busy).toEqual([far[0]]);
+
+    const { results } = await searchSpots({ center: { lat: 57.7, lng: 11.97 }, start, end });
+    expect(results[0].id).toBe(near);
+    expect(results.map((r) => r.id)).not.toContain(far[0]);
+  });
+
   it("finds bookable spots only", async () => {
     const { spotId, account } = await makeBookableSpot();
     const center = { lat: 57.7, lng: 11.97 };

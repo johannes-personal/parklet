@@ -1,8 +1,9 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { closeDb, db } from "./direct-db";
 import { bookings, hostAccounts, spots } from "@/db/schema";
 import { cancelBooking, confirmPayment, createBooking, markVehicleRegistered } from "@/server/bookings";
+import { getPaymentProvider } from "@/server/payments";
 import { searchSpots } from "@/server/search";
 import { makeBookableSpot, makeUser, resetDb } from "./helpers";
 
@@ -98,6 +99,25 @@ describe("booking flow against Postgres", () => {
     expect(await markVehicleRegistered(ok.bookingId, host.id)).toBe(true);
     const [after] = await db.select().from(bookings).where(eq(bookings.id, ok.bookingId));
     expect(after.vehicleRegistration).toBe("done");
+  });
+
+  it("marks a booking refunded only after the refund, and keeps it when the refund fails", async () => {
+    const { spotId } = await makeBookableSpot();
+    const driver = await makeUser();
+    const r = await createBooking({ driverId: driver.id, spotId, start: hoursFromNow(48), end: hoursFromNow(50), vehicleReg: "ABC123" });
+    if (!r.ok) throw new Error();
+    await confirmPayment(r.bookingId, "ref_refund");
+
+    const refund = vi.spyOn(getPaymentProvider(), "refund").mockRejectedValueOnce(new Error("provider down"));
+    await expect(cancelBooking(r.bookingId, driver.id)).rejects.toThrow("provider down");
+    let [row] = await db.select().from(bookings).where(eq(bookings.id, r.bookingId));
+    expect(row).toMatchObject({ status: "confirmed", paymentStatus: "paid", cancelledAt: null });
+
+    expect(await cancelBooking(r.bookingId, driver.id)).toEqual({ ok: true });
+    [row] = await db.select().from(bookings).where(eq(bookings.id, r.bookingId));
+    expect(row).toMatchObject({ status: "cancelled", paymentStatus: "refunded", cancelledBy: "driver" });
+    expect(refund).toHaveBeenCalledTimes(2);
+    refund.mockRestore();
   });
 
   it("applies the free cancellation window for drivers but not hosts", async () => {

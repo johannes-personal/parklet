@@ -1,15 +1,12 @@
 import "server-only";
-import { api, cols, embed, must, names } from "@/db/api";
-import { availabilityWindows, bookings, hostAccounts, spots, type Spot } from "@/db/schema";
+import { api, cols, embed, must, names, rpc } from "@/db/api";
+import { hostAccounts, spots, type Spot } from "@/db/schema";
 import { isWithinWindows, type AvailabilityWindow } from "@/lib/availability";
 import { boundingBox, distanceMeters, type LatLng } from "@/lib/geo";
 import { calculatePrice, type PriceBreakdown } from "@/lib/pricing";
-import { holdingFilter } from "./bookings";
 import { BOOKABLE_FILTERS } from "./spots";
 
 const S = names(spots);
-const B = names(bookings);
-const W = names(availabilityWindows);
 const CANDIDATE_KEYS = [
   "id",
   "title",
@@ -72,21 +69,16 @@ async function runSearch(center: LatLng | null, radiusM: number | null, start: D
   if (center && radiusM) rows = rows.filter((r) => r.distanceM! <= radiusM);
 
   if (start && end && end > start && rows.length) {
-    const ids = rows.map((r) => r.id);
-    const [windowRows, busyRows] = await Promise.all([
-      api().from("availability_windows").select(cols(availabilityWindows, ["spotId", "weekday", "startMinute", "endMinute"])).in(W.spotId, ids),
-      api()
-        .from("bookings")
-        .select(cols(bookings, ["spotId"]))
-        .in(B.spotId, ids)
-        .lt(B.startsAt, end.toISOString())
-        .gt(B.endsAt, start.toISOString())
-        .or(holdingFilter(new Date())),
-    ]);
-    const windows = must<(AvailabilityWindow & { spotId: string })[]>(windowRows, "searchSpots");
-    const busyIds = new Set(must<{ spotId: string }[]>(busyRows, "searchSpots").map((b) => b.spotId));
+    // One call for all candidates: their opening hours and which are taken in the period.
+    const availability = await rpc<{ windows: { spot_id: string; weekday: number; start_minute: number; end_minute: number }[]; busy: string[] }>(
+      "parklet_search_availability",
+      { p_spot_ids: rows.map((r) => r.id), p_start: start.toISOString(), p_end: end.toISOString() },
+    );
+    const busyIds = new Set(availability.busy);
     const bySpot = new Map<string, AvailabilityWindow[]>();
-    for (const w of windows) bySpot.set(w.spotId, [...(bySpot.get(w.spotId) ?? []), w]);
+    for (const w of availability.windows) {
+      bySpot.set(w.spot_id, [...(bySpot.get(w.spot_id) ?? []), { weekday: w.weekday, startMinute: w.start_minute, endMinute: w.end_minute }]);
+    }
     const minutes = (end.getTime() - start.getTime()) / 60_000;
     const now = Date.now();
     rows = rows.filter(
