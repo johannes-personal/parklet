@@ -64,7 +64,11 @@ Live demo: **https://parklet-rebuild.vercel.app**
   transaction pooler, port 6543). The client strips pooler-specific URL parameters and disables
   prepared statements (`src/db/client-options.ts`). Session mode (port 5432) is not an option on
   Vercel: it allows only 15 clients in total.
-- **Vercel env:** `DOCUMENT_STORAGE=database`, `NEXT_PUBLIC_DEMO=1`. Links use `APP_URL` if
+- **Documents** (ownership proofs, contracts, board minutes) are kept in the private Supabase
+  Storage bucket `documents` (4 MB limit, PDF and images only, no public access), reached with the
+  service key from the Supabase integration. Documents from before the move are read from the
+  `document_blobs` table and moved to the bucket the first time they are opened.
+- **Vercel env:** `DOCUMENT_STORAGE=supabase`, `NEXT_PUBLIC_DEMO=1`. Links use `APP_URL` if
   set, otherwise Vercel's production or deployment URL.
 - **Mail:** every mail lands in the `mail_outbox` table, readable by admins at `/admin/epost`.
   With `RESEND_API_KEY` and `MAIL_FROM` set, mail to real addresses is also sent through
