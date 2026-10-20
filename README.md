@@ -61,9 +61,9 @@ Live demo: **https://parklet-rebuild.vercel.app**
   anything, while the app connects as the table owner.
 - **App:** Vercel, with functions pinned to `arn1` (Stockholm) in `vercel.json`.
 - **Connection:** the Supabase ↔ Vercel integration injects `POSTGRES_URL` (Supavisor's
-  transaction pooler, port 6543). The client strips pooler-specific URL parameters, disables
-  prepared statements and sends one query at a time per connection: pipelined queries stalled
-  indefinitely in transaction mode. See `src/db/index.ts`.
+  transaction pooler, port 6543). The client strips pooler-specific URL parameters and disables
+  prepared statements (`src/db/client-options.ts`). Session mode (port 5432) is not an option on
+  Vercel: it allows only 15 clients in total.
 - **Vercel env:** `DOCUMENT_STORAGE=database`, `NEXT_PUBLIC_DEMO=1`. Links use `APP_URL` if
   set, otherwise Vercel's production or deployment URL.
 - **Mail:** every mail lands in the `mail_outbox` table, readable by admins at `/admin/epost`.
@@ -82,6 +82,10 @@ Live demo: **https://parklet-rebuild.vercel.app**
   association and company accounts are then checked against the register: unknown and
   deregistered numbers are refused, the registered name is used, and admins see the result.
   Without credentials the check is skipped. The e2e tests use `e2e/fake-bolagsverket.mjs`.
+- **Stuck queries:** the app treats a query that takes more than 20 s (a transaction: 30 s) as
+  stuck and replaces its connection pool (`src/db/index.ts`). As a second net, pg_cron job
+  `parklet-end-stuck-queries` ends app queries stuck for over 2 minutes every 5 minutes and tells
+  admins in the bell (`scripts/supabase-stuck-queries.sql`, applied by hand on Supabase).
 - **Reminders:** Supabase's pg_cron calls `/api/cron/paminnelser` every 10 minutes (job
   `parklet-reminders`, via pg_net). It authenticates with the `cron` row in `app_secrets`, a
   token generated inside the database, so there is no secret to copy into Vercel.
