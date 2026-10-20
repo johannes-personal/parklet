@@ -82,6 +82,10 @@ Live demo: **https://parklet-rebuild.vercel.app**
   association and company accounts are then checked against the register: unknown and
   deregistered numbers are refused, the registered name is used, and admins see the result.
   Without credentials the check is skipped. The e2e tests use `e2e/fake-bolagsverket.mjs`.
+- **Stuck queries:** the app treats a query that takes more than 20 s (a transaction: 30 s) as
+  stuck and replaces its connection pool (`src/db/index.ts`). As a second net, pg_cron job
+  `parklet-end-stuck-queries` ends app queries stuck for over 2 minutes every 5 minutes and tells
+  admins in the bell (`scripts/supabase-stuck-queries.sql`, applied by hand on Supabase).
 - **Reminders:** Supabase's pg_cron calls `/api/cron/paminnelser` every 10 minutes (job
   `parklet-reminders`, via pg_net). It authenticates with the `cron` row in `app_secrets`, a
   token generated inside the database, so there is no secret to copy into Vercel.
