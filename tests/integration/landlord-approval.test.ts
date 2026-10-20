@@ -1,5 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { closeDb } from "./direct-db";
+import { eq } from "drizzle-orm";
+import { spots } from "@/db/schema";
+import { closeDb, db } from "./direct-db";
 import { requestLandlordApproval, respondToLandlordApproval, submitSpotForReview } from "@/server/spots";
 import { searchSpots } from "@/server/search";
 import { getSpotRow, mailTo, makeBookableSpot, notificationsOf, resetDb } from "./helpers";
@@ -14,10 +16,12 @@ const center = { lat: 57.7, lng: 11.97 };
 
 describe("the landlord declining", () => {
   it("pulls an approved spot out of search, and it can't be submitted again", async () => {
-    const { spotId, account, host } = await makeBookableSpot({ rightBasis: "rents", landlordKind: "brf", landlordEmail: LANDLORD });
-    expect((await searchSpots({ center, start: null, end: null })).results.map((r) => r.id)).toEqual([spotId]);
-
+    // The request goes out while the spot is a draft (documents are locked once it is
+    // approved); Parklet then approves the spot on other grounds, and the board answers later.
+    const { spotId, account, host } = await makeBookableSpot({ review: "draft", rightBasis: "rents", landlordKind: "brf", landlordEmail: LANDLORD });
     expect(await requestLandlordApproval(account.id, spotId, host.name)).toEqual({ ok: true });
+    await db.update(spots).set({ review: "approved" }).where(eq(spots.id, spotId));
+    expect((await searchSpots({ center, start: null, end: null })).results.map((r) => r.id)).toEqual([spotId]);
     const [mail] = await mailTo(LANDLORD);
     const token = mail.text.match(/\/godkannande\/([A-Za-z0-9_-]+)/)?.[1];
     expect(token).toBeTruthy();
