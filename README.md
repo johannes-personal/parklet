@@ -69,8 +69,9 @@ Live demo: **https://parklet-rebuild.vercel.app**
 - **Mail:** every mail lands in the `mail_outbox` table, readable by admins at `/admin/epost`.
   With `RESEND_API_KEY` and `MAIL_FROM` set, mail to real addresses is also sent through
   [Resend](https://resend.com); the demo accounts' `@parklet.test` addresses are never sent.
-- **Demo accounts** were seeded with random passwords nobody holds (`SEED_PASSWORD=random`).
-  An admin can take one over with "Glömt lösenord" and the outbox.
+- **Demo accounts** on production use the password `parklet-demo-1` (they were seeded with
+  random ones, `SEED_PASSWORD=random`, and reset for testing). An admin can also take one over
+  with "Glömt lösenord" and the outbox.
 - **BankID (Idura):** set `IDURA_ISSUER` (`https://<your-domain>.idura.broker`),
   `IDURA_CLIENT_ID`, `IDURA_CLIENT_SECRET` and `IDENTITY_ENCRYPTION_KEY` in Vercel. In Idura,
   the application is a *Regular Web Application* with *OAuth2 Code Flow* enabled and the redirect
