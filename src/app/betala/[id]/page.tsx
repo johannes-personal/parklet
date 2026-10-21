@@ -8,24 +8,28 @@ import { requireUser } from "@/lib/auth/session";
 import { formatSek } from "@/lib/money";
 import { formatRange, formatTime } from "@/lib/time";
 import { getBookingForUser } from "@/server/bookings";
+import { isStripeTestMode } from "@/server/stripe";
 
 export const metadata: Metadata = { title: "Betala", robots: { index: false } };
 
-export default function CheckoutPage({ params }: PageProps<"/betala/[id]">) {
+export default function CheckoutPage(props: PageProps<"/betala/[id]">) {
   return (
     <Suspense fallback={<div className="mx-auto h-96 w-full max-w-lg animate-pulse" />}>
-      <Checkout params={params} />
+      <Checkout {...props} />
     </Suspense>
   );
 }
 
-async function Checkout({ params }: { params: PageProps<"/betala/[id]">["params"] }) {
+async function Checkout({ params, searchParams }: PageProps<"/betala/[id]">) {
   const { id } = await params;
+  const sp = await searchParams;
   const user = await requireUser(`/betala/${id}`);
   const b = await getBookingForUser(id, user.id);
   if (!b || b.driverId !== user.id) return <BookingUnavailable email={user.email} returnTo={`/betala/${id}`} />;
   if (b.status === "confirmed") redirect(`/bokning/${b.id}`);
   const expired = b.status !== "pending_payment" || !b.holdExpiresAt || b.holdExpiresAt < new Date();
+  const stripe = b.paymentProvider === "stripe";
+  const testMode = !stripe || isStripeTestMode();
 
   return (
     <div className="mx-auto w-full max-w-lg px-4 py-10">
@@ -62,12 +66,37 @@ async function Checkout({ params }: { params: PageProps<"/betala/[id]">["params"
         </div>
       ) : (
         <div className="card mt-6 space-y-4 p-5">
+          {sp.avbruten ? (
+            <p role="status" className="text-sm font-medium">
+              Betalningen avbröts. Ingen betalning har dragits, och platsen är fortfarande reserverad åt dig.
+            </p>
+          ) : null}
+          {sp.fel ? (
+            <p role="alert" className="text-sm font-medium text-danger">
+              Vi kunde inte bekräfta betalningen. Har den dragits bekräftas bokningen automatiskt inom några minuter; annars kan du försöka igen.
+            </p>
+          ) : null}
           <p className="text-sm text-ink-soft">Platsen är reserverad åt dig till kl. {formatTime(b.holdExpiresAt!)}.</p>
-          <div className="rounded-xl border border-dashed border-warn/50 bg-warn-soft p-4 text-sm text-warn">
-            <strong>Testläge.</strong> I produktion visas här betalleverantörens säkra betalformulär (kort, Apple Pay, Google Pay, Swish, Klarna)
-            med 3-D Secure. Inga riktiga pengar dras.
-          </div>
-          <PayButton bookingId={b.id} label={`Betala ${formatSek(b.totalOre)} (testläge)`} />
+          {stripe ? (
+            <p className="text-sm text-ink-soft">
+              Du betalar på Stripes säkra betalsida, med kort, Apple Pay, Google Pay eller andra betalsätt som visas där. Parklet ser aldrig dina kortuppgifter.
+            </p>
+          ) : null}
+          {testMode ? (
+            <div className="rounded-xl border border-dashed border-warn/50 bg-warn-soft p-4 text-sm text-warn">
+              {stripe ? (
+                <>
+                  <strong>Testläge.</strong> Betala med Stripes testkort 4242 4242 4242 4242, ett datum framåt i tiden och valfri CVC. Inga riktiga pengar dras.
+                </>
+              ) : (
+                <>
+                  <strong>Testläge.</strong> I produktion visas här betalleverantörens säkra betalformulär (kort, Apple Pay, Google Pay, Swish, Klarna)
+                  med 3-D Secure. Inga riktiga pengar dras.
+                </>
+              )}
+            </div>
+          ) : null}
+          <PayButton bookingId={b.id} provider={b.paymentProvider} label={`Betala ${formatSek(b.totalOre)}${testMode ? " (testläge)" : ""}`} />
           <p className="text-xs text-muted">
             Genom att betala godkänner du{" "}
             <Link href="/villkor" className="link">

@@ -23,5 +23,5 @@ async function Dashboard({ params, searchParams }: P) {
   const user = await requireUser(`/uthyrare/${accountId}`);
   const account = await getAccountForMember(accountId, user.id);
   if (!account) return <NoAccountAccess user={user} accountId={accountId} returnTo={`/uthyrare/${accountId}`} />;
-  return <AccountDashboard user={user} account={account} payoutsConnected={Boolean(sp.utbetalning)} />;
+  return <AccountDashboard user={user} account={account} payoutNotice={typeof sp.utbetalning === "string" ? sp.utbetalning : undefined} />;
 }

@@ -6,7 +6,6 @@ import { getCurrentUser, safeNext } from "@/lib/auth/session";
 import { parseLocalDateTime } from "@/lib/time";
 import { normalizeVehicleReg } from "@/lib/validation";
 import { createBooking } from "@/server/bookings";
-import { getPaymentProvider } from "@/server/payments";
 
 export async function bookAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const spotId = String(formData.get("spotId") ?? "");
@@ -32,5 +31,6 @@ export async function bookAction(_prev: FormState, formData: FormData): Promise<
 
   const result = await createBooking({ driverId: user.id, spotId, start, end, vehicleReg: reg });
   if (!result.ok) return { error: result.error, values };
-  redirect(getPaymentProvider().checkoutUrl(result.bookingId));
+  // The summary and the "Betala" button; from there the provider takes over.
+  redirect(`/betala/${result.bookingId}`);
 }

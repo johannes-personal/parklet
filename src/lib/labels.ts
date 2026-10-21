@@ -1,4 +1,4 @@
-import type { SpotType } from "@/db/schema";
+import type { PayoutStatus, SpotType } from "@/db/schema";
 
 export const SPOT_TYPE_LABEL: Record<SpotType, string> = {
   outdoor: "Utomhusplats",
@@ -14,6 +14,15 @@ export function spotFeatures(s: { spotType: SpotType; covered: boolean; evChargi
   if (s.maxHeightCm) out.push(`Max höjd ${(s.maxHeightCm / 100).toFixed(2).replace(".", ",")} m`);
   return out;
 }
+
+/** A host account's payout account, as admins see it. */
+export const PAYOUT_LABEL: Record<PayoutStatus, string> = {
+  not_connected: "Ej kopplad",
+  onboarding: "Påbörjad hos Stripe",
+  pending: "Stripe kontrollerar",
+  restricted: "Stripe behöver uppgifter",
+  active: "Kopplad",
+};
 
 export const DOCUMENT_KIND_LABEL: Record<string, string> = {
   ownership_proof: "Ägarskapsbevis (t.ex. lagfart, köpekontrakt)",

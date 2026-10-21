@@ -22,7 +22,7 @@ export default function BookingPage(props: PageProps<"/bokning/[id]">) {
 
 async function BookingDetails({ params, searchParams }: PageProps<"/bokning/[id]">) {
   const { id } = await params;
-  const { bekraftad } = await searchParams;
+  const { bekraftad, behandlas } = await searchParams;
   const user = await requireUser(`/bokning/${id}`);
   const b = await getBookingForUser(id, user.id);
   if (!b) return <BookingUnavailable email={user.email} returnTo={`/bokning/${id}`} />;
@@ -38,6 +38,17 @@ async function BookingDetails({ params, searchParams }: PageProps<"/bokning/[id]
       {bekraftad && b.status === "confirmed" ? (
         <p role="status" className="mb-6 rounded-xl border border-ok/20 bg-ok-soft px-4 py-3 font-medium text-ok">
           Klart! Din parkering är bokad och betald. Ett kvitto har skickats till din e-post.
+        </p>
+      ) : null}
+      {behandlas && b.status === "pending_payment" ? (
+        <p role="status" className="mb-6 rounded-xl border border-line bg-surface px-4 py-3 text-ink-soft">
+          Betalningen behandlas. Du får en bokningsbekräftelse så snart den är klar.
+        </p>
+      ) : null}
+      {b.status === "expired" && b.paymentStatus === "refunded" ? (
+        <p role="status" className="mb-6 rounded-xl border border-line bg-surface px-4 py-3 text-ink-soft">
+          Betalningen kom fram efter att reservationen hade gått ut, och platsen hann bokas av någon annan. Hela beloppet, {formatSek(b.totalOre)}, återbetalas
+          till {isDriver ? "ditt" : "förarens"} betalsätt inom några bankdagar.
         </p>
       ) : null}
       {b.status === "cancelled" ? (

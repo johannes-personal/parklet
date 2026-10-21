@@ -6,7 +6,8 @@ import { Pager, Select } from "@/app/admin/list-controls";
 import { Badge } from "@/components/status-badge";
 import { requireAdmin } from "@/lib/auth/session";
 import { formMatchesKind } from "@/lib/bolagsverket";
-import { VERIFICATION_LABEL } from "@/lib/labels";
+import type { PayoutStatus } from "@/db/schema";
+import { PAYOUT_LABEL, VERIFICATION_LABEL } from "@/lib/labels";
 import { formatDateTime } from "@/lib/time";
 import { searchAccounts, type AccountFilters } from "@/server/admin-search";
 import { HOST_KIND_LABEL } from "@/server/host-accounts";
@@ -22,7 +23,7 @@ function filtersFrom(sp: SP): AccountFilters {
     q: one(sp.q)?.slice(0, 100),
     kind: pick(one(sp.typ), ["household", "association", "company"] as const),
     verification: pick(one(sp.status), ["unverified", "pending", "verified", "rejected"] as const),
-    payout: pick(one(sp.utbetalning), ["active", "not_connected"] as const),
+    payout: pick(one(sp.utbetalning), Object.keys(PAYOUT_LABEL) as PayoutStatus[]),
     sort: pick(one(sp.sortera), ["created", "name", "spots"] as const),
     page: Number(one(sp.sida)) || 1,
   };
@@ -65,7 +66,7 @@ async function Results({ searchParams }: { searchParams: PageProps<"/admin/konto
         {f.verification ? <input type="hidden" name="status" value={f.verification} /> : null}
         <div className="grid gap-3 sm:grid-cols-3">
           <Select label="Typ" name="typ" value={f.kind} options={Object.entries(HOST_KIND_LABEL)} />
-          <Select label="Utbetalning" name="utbetalning" value={f.payout} options={[["active", "Kopplad"], ["not_connected", "Ej kopplad"]]} />
+          <Select label="Utbetalning" name="utbetalning" value={f.payout} options={Object.entries(PAYOUT_LABEL)} />
           <Select label="Sortera" name="sortera" value={f.sort} all="Senast skapad" options={[["name", "Namn A–Ö"], ["spots", "Flest platser"]]} />
         </div>
       </FilterForm>
@@ -136,7 +137,7 @@ async function Results({ searchParams }: { searchParams: PageProps<"/admin/konto
                       <Badge kind={v.kind}>{v.text}</Badge>
                     </td>
                     <td className="md:px-4 md:py-3">
-                      {a.payoutStatus === "active" ? <span className="text-ok">Kopplad</span> : <span className="text-muted">Ej kopplad</span>}
+                      <span className={a.payoutStatus === "active" ? "text-ok" : a.payoutStatus === "restricted" ? "text-warn" : "text-muted"}>{PAYOUT_LABEL[a.payoutStatus]}</span>
                     </td>
                     <td className="text-ink-soft md:px-4 md:py-3 md:text-right">
                       <Link href={`/admin/platser?q=${encodeURIComponent(a.orgNumber ?? a.name)}`} className="link relative z-10">
