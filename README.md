@@ -3,11 +3,12 @@
 A rebuild of [parklet.se](https://www.parklet.se), a marketplace where people and
 organisations rent out their parking spots when they're not using them.
 
-- **[docs/01-site-review.md](docs/01-site-review.md)**: review of the current site
-  (16 findings with evidence, prioritised).
-- **[docs/02-tech-stack.md](docs/02-tech-stack.md)**: recommended stack and why.
-- **[docs/03-mvp.md](docs/03-mvp.md)**: what the MVP does, how it handles right-to-rent
-  verification, compliant payments and BRF vehicle registration, and what's next.
+- **[docs/01-rapport.md](docs/01-rapport.md)** (in Swedish, for Parklet's owner): the review
+  of the current site (16 findings, prioritised), how the rebuild fixes each one, and the
+  technical overview: stack and why, data and security, the right-to-rent, payment and
+  vehicle-registration rules, integrations, tests, and the steps left before launch.
+- **[docs/04-emails.md](docs/04-emails.md)**: every e-mail and notification.
+- **[docs/05-testplan.md](docs/05-testplan.md)**: manual test plan for the main flows.
 
 ![MVP home page](docs/images/mvp-home.png)
 
@@ -118,4 +119,4 @@ Live demo: **https://parklet-rebuild.vercel.app**
 
 See [.env.example](.env.example). Before a real launch, production needs Resend set up with
 a verified sending domain, and the payment
-and e-ID integrations described in `docs/03-mvp.md`.
+and e-ID integrations described in `docs/01-rapport.md` (section 4.9).

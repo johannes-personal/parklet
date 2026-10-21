@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 /**
  * Payment provider boundary.
  *
- * Production design (Stripe Connect, see docs/03-mvp.md): Parklet never holds
+ * Production design (Stripe Connect, see docs/01-rapport.md, 4.4): Parklet never holds
  * the money itself. Each booking is a PaymentIntent created on the platform
  * with `transfer_data.destination` = the host's connected account and
  * `application_fee_amount` = Parklet's service fee. Stripe carries the
