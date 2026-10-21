@@ -71,12 +71,25 @@ export async function readDocument(storageKey: string): Promise<Buffer> {
 
 export async function deleteDocumentFile(storageKey: string): Promise<void> {
   if (driver() === "supabase") {
-    await bucket.remove(storageKey);
+    await bucket.remove([storageKey]);
     return;
   }
   const file = path.resolve(root(), storageKey);
   if (!file.startsWith(root() + path.sep)) throw new Error("Invalid storage key");
   await rm(file, { force: true });
+}
+
+/**
+ * Deletes many documents' files at once (the demo reset, src/server/demo-data.ts):
+ * a request per 1,000 keys to the bucket, or the local files side by side. Files
+ * that are already gone are fine.
+ */
+export async function deleteDocumentFiles(storageKeys: string[]): Promise<void> {
+  if (driver() === "supabase") {
+    for (let i = 0; i < storageKeys.length; i += 1000) await bucket.remove(storageKeys.slice(i, i + 1000));
+    return;
+  }
+  await Promise.all(storageKeys.map((key) => deleteDocumentFile(key)));
 }
 
 /** Supabase Storage's REST API, with the service key (server only; the bucket has no public access). */
@@ -113,12 +126,12 @@ const bucket = {
     throw new Error(`storage: download failed (${res.status}): ${body.slice(0, 200)}`);
   },
 
-  async remove(storageKey: string) {
+  async remove(storageKeys: string[]) {
     const c = this.config();
     const res = await fetch(c.url(`object/${c.name}`), {
       method: "DELETE",
       headers: { ...c.headers, "content-type": "application/json" },
-      body: JSON.stringify({ prefixes: [storageKey] }),
+      body: JSON.stringify({ prefixes: storageKeys }),
       signal: AbortSignal.timeout(20_000),
     });
     if (!res.ok) throw new Error(`storage: delete failed (${res.status}): ${(await res.text()).slice(0, 200)}`);

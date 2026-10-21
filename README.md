@@ -45,6 +45,14 @@ Demo accounts (password `parklet-demo-1`):
 | `ny@parklet.test` | New host who hasn't verified or connected payouts |
 | `admin@parklet.test` | Parklet reviewer (`/admin`) |
 
+The demo set is defined once, in `src/server/demo-data.ts`. `npm run db:seed` wipes the data and
+loads it; so does **Återställ testdata** at `/admin/testdata`, which admins get on the demo
+deployment (`NEXT_PUBLIC_DEMO=1`) and in development, not in a real production. Both keep every
+admin whose address can receive mail (not `@parklet.test`, `@example.com` and the like): their
+user row stays as it is (password, BankID identity, admin flag), the session that pressed the
+button too, and everything else they had is removed with the rest. `app_secrets` stays. The
+old documents' files are removed from the store and the demo's PDF is stored again.
+
 Payments and payout onboarding run in **test mode** (clearly marked in the UI). BankID uses
 Idura when configured (see Deployment) and an instant mock otherwise.
 Emails are printed to the server log and appended to `storage/outbox.jsonl`, so you can
@@ -90,7 +98,9 @@ Live demo: **https://parklet-rebuild.vercel.app**
   [Resend](https://resend.com); the demo accounts' `@parklet.test` addresses are never sent.
 - **Demo accounts** on production use the password `parklet-demo-1` (they were seeded with
   random ones, `SEED_PASSWORD=random`, and reset for testing). An admin can also take one over
-  with "Glömt lösenord" and the outbox.
+  with "Glömt lösenord" and the outbox. To start testing over, an admin presses **Återställ
+  testdata** at `/admin/testdata`: the demo set as the seed makes it, with `parklet-demo-1`
+  (`SEED_PASSWORD` applies to the CLI seed only), keeping admins with a real address.
 - **BankID (Idura):** set `IDURA_ISSUER` (`https://<your-domain>.idura.broker`),
   `IDURA_CLIENT_ID`, `IDURA_CLIENT_SECRET` and `IDENTITY_ENCRYPTION_KEY` in Vercel. In Idura,
   the application is a *Regular Web Application* with *OAuth2 Code Flow* enabled and the redirect

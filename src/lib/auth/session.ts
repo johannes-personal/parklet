@@ -34,6 +34,12 @@ export async function endSession() {
   store.delete(COOKIE);
 }
 
+/** The id of this request's session (the hash of the cookie's token), or null. */
+export async function currentSessionId(): Promise<string | null> {
+  const token = (await cookies()).get(COOKIE)?.value;
+  return token ? hashToken(token) : null;
+}
+
 /**
  * The signed-in user, or null. Memoised per request so the header, page and
  * actions share one lookup. Reads cookies, so callers must sit behind

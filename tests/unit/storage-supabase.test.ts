@@ -32,7 +32,7 @@ vi.stubGlobal("fetch", async (input: string, init: RequestInit = {}) => {
   return new Response("", { status: 405 });
 });
 
-const { deleteDocumentFile, readDocument, storeDocument } = await import("@/server/storage");
+const { deleteDocumentFile, deleteDocumentFiles, readDocument, storeDocument } = await import("@/server/storage");
 const pdf = Buffer.from("%PDF-1.4\n% test document\n");
 
 beforeEach(() => {
@@ -65,4 +65,19 @@ test("a new-style secret key goes in the apikey header only", async () => {
   const stored = await storeDocument(pdf);
   if ("error" in stored) throw new Error(stored.error);
   expect(calls).toEqual([expect.objectContaining({ method: "POST", auth: null, apikey: "sb_secret_test" })]);
+});
+
+test("the demo reset removes many documents in one request", async () => {
+  const keys: string[] = [];
+  for (let i = 0; i < 3; i++) {
+    const stored = await storeDocument(pdf);
+    if ("error" in stored) throw new Error(stored.error);
+    keys.push(stored.storageKey);
+  }
+  calls.length = 0;
+  await deleteDocumentFiles(keys);
+  expect(calls).toEqual([expect.objectContaining({ method: "DELETE", url: "/storage/v1/object/documents" })]);
+  expect(objects.size).toBe(0);
+  await deleteDocumentFiles([]);
+  expect(calls).toHaveLength(1);
 });
