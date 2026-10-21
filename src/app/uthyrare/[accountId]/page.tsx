@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { markRegisteredAction } from "@/app/bokning-actions";
 import { connectPayoutsAction, toggleSpotAction } from "@/app/uthyrare/actions";
 import { DocumentUploader, InviteForm, SubmitAccountForm } from "@/components/host/forms";
+import { NoAccountAccess } from "@/components/host/host-access";
 import { Badge, BookingStatusBadge } from "@/components/status-badge";
 import { requireUser } from "@/lib/auth/session";
 import { ACCOUNT_DOC_OPTIONS, DOCUMENT_KIND_LABEL, REVIEW_LABEL } from "@/lib/labels";
@@ -57,7 +57,7 @@ async function Dashboard({ params, searchParams }: P) {
   const sp = await searchParams;
   const user = await requireUser(`/uthyrare/${accountId}`);
   const account = await getAccountForMember(accountId, user.id);
-  if (!account) notFound();
+  if (!account) return <NoAccountAccess user={user} accountId={accountId} returnTo={`/uthyrare/${accountId}`} />;
   const isOrg = account.kind !== "household";
   const [spots, bookings, docs, members, invites] = await Promise.all([
     listAccountSpots(accountId),

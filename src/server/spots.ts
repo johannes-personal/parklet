@@ -104,6 +104,17 @@ export async function updateSpot(accountId: string, spotId: string, input: SpotI
   const next = { ...input, ...rightFields(input) };
   const reviewedChanged = REVIEWED_FIELDS.some((f) => existing[f] !== next[f]);
   const landlordChanged = existing.landlordEmail !== next.landlordEmail || existing.rightBasis !== next.rightBasis;
+  // The landlord's or BRF's rules stay as long as its approval does: the host can't
+  // switch off a registration requirement it set, nor its day's notice.
+  if (existing.landlordRequiresRegistration && !landlordChanged) {
+    next.requiresVehicleRegistration = true;
+    next.minNoticeMinutes = Math.max(next.minNoticeMinutes, 1440);
+    if (!next.vehicleRegistrationNote) next.vehicleRegistrationNote = existing.vehicleRegistrationNote;
+  }
+  // The approval belongs to the landlord who gave it. Another landlord (or basis) on a
+  // submitted or approved spot means a new approval first: the spot goes back to draft,
+  // so it can't be booked meanwhile.
+  const needsNewApproval = landlordChanged && existing.review !== "draft" && next.rightBasis === "rents";
 
   // One step: the spot and its opening hours.
   return rpc<boolean>("parklet_update_spot", {
@@ -113,7 +124,11 @@ export async function updateSpot(accountId: string, spotId: string, input: SpotI
       ...next,
       updatedAt: new Date(),
       // A moved spot or a new legal basis must be verified again before it can be booked.
-      ...(reviewedChanged && existing.review !== "draft" ? { review: "pending_review" as const, submittedAt: new Date() } : {}),
+      ...(needsNewApproval
+        ? { review: "draft" as const, submittedAt: null }
+        : reviewedChanged && existing.review !== "draft"
+          ? { review: "pending_review" as const, submittedAt: new Date() }
+          : {}),
       ...(landlordChanged
         ? {
             landlordApproval: next.rightBasis === "rents" ? ("missing" as const) : ("not_needed" as const),
@@ -121,6 +136,7 @@ export async function updateSpot(accountId: string, spotId: string, input: SpotI
             landlordApprovedByName: null,
             landlordApprovedByRole: null,
             landlordRespondedAt: null,
+            landlordRequiresRegistration: false,
           }
         : {}),
     }),
@@ -144,6 +160,22 @@ export async function listSpotDocuments(spotId: string): Promise<DocumentRow[]> 
 /* --------------------------------------------- right-to-rent requirements */
 
 /**
+ * A spot's documents (and its landlord request) can change only before it is
+ * submitted, or after Parklet has sent it back: never while Parklet reviews it
+ * (withdraw it first) or once it is approved.
+ */
+export const documentsEditable = (review: Spot["review"]) => review === "draft" || review === "rejected";
+
+export const DOCUMENTS_LOCKED_MESSAGE: Record<"pending_review" | "approved", string> = {
+  pending_review: "Underlagen är låsta medan Parklet granskar platsen. Ta tillbaka platsen från granskningen om du behöver ändra något.",
+  approved: "Platsen är godkänd och underlagen är låsta. Kontakta Parklet om något har ändrats.",
+};
+
+export function documentsLockedError(review: Spot["review"]) {
+  return review === "pending_review" || review === "approved" ? DOCUMENTS_LOCKED_MESSAGE[review] : null;
+}
+
+/**
  * Remove a document from a spot that hasn't been submitted (or was sent back).
  * The stored file goes too once no other spot uses it (uploads can be shared
  * by spots at the same address).
@@ -152,9 +184,8 @@ export async function deleteSpotDocument(accountId: string, spotId: string, docu
   if (!isUuid(documentId)) return { ok: false as const, error: "Dokumentet finns inte." };
   const spot = await getSpot(spotId);
   if (!spot || spot.hostAccountId !== accountId) return { ok: false as const, error: "Platsen finns inte." };
-  if (spot.review === "pending_review" || spot.review === "approved") {
-    return { ok: false as const, error: "Underlagen kan inte tas bort medan platsen granskas eller är godkänd." };
-  }
+  const locked = documentsLockedError(spot.review);
+  if (locked) return { ok: false as const, error: locked };
   const [deleted] = must(
     await api().from("documents").delete().eq(D.id, documentId).eq(D.spotId, spotId).eq(D.hostAccountId, accountId).select(cols(documents, ["storageKey"])),
     "deleteSpotDocument",
@@ -198,6 +229,8 @@ export function spotRequirements(spot: Spot, docs: { kind: string }[]): Requirem
 export async function submitSpotForReview(accountId: string, spotId: string, { announce = true } = {}) {
   const spot = await getSpot(spotId);
   if (!spot || spot.hostAccountId !== accountId) return { ok: false as const, error: "Platsen finns inte." };
+  if (spot.review === "pending_review") return { ok: false as const, error: "Platsen granskas redan." };
+  if (spot.review === "approved") return { ok: false as const, error: "Platsen är redan godkänd." };
   if (spot.landlordApproval === "declined") {
     return { ok: false as const, error: "Hyresvärden/föreningen har nekat uthyrning av platsen. Den kan inte skickas in." };
   }
@@ -207,6 +240,22 @@ export async function submitSpotForReview(accountId: string, spotId: string, { a
   must(await api().from("spots").update(toDb(spots, { review: "pending_review", submittedAt: new Date(), reviewNote: null })).eq(S.id, spotId), "submitSpotForReview");
   if (announce) await announceSubmittedSpots(accountId, [spotId]);
   return { ok: true as const };
+}
+
+/** Take a spot back from Parklet's review, so its documents can be changed. False if it wasn't under review. */
+export async function withdrawSpotFromReview(accountId: string, spotId: string) {
+  if (!isUuid(spotId)) return false;
+  const updated = must(
+    await api()
+      .from("spots")
+      .update(toDb(spots, { review: "draft", submittedAt: null }))
+      .eq(S.id, spotId)
+      .eq(S.hostAccountId, accountId)
+      .eq(S.review, "pending_review")
+      .select(S.id),
+    "withdrawSpotFromReview",
+  );
+  return updated.length > 0;
 }
 
 /** Tell Parklet's admins about spots submitted together (one notification for a BRF's whole row of spots). */
@@ -241,6 +290,8 @@ export async function requestLandlordApproval(accountId: string, spotId: string,
   const row = await getSpotWithAccount(spotId);
   if (!row || row.spot.hostAccountId !== accountId) return { ok: false as const, error: "Platsen finns inte." };
   const { spot, account } = row;
+  const locked = documentsLockedError(spot.review);
+  if (locked) return { ok: false as const, error: locked };
   if (spot.rightBasis !== "rents" || !spot.landlordEmail) {
     return { ok: false as const, error: "Ange föreningens eller hyresvärdens e-postadress först." };
   }
@@ -343,33 +394,61 @@ export async function listReviewQueue() {
   return { pendingSpots, pendingAccounts: parseAll(hostAccounts, must(accountRows, "listReviewQueue")) };
 }
 
-export async function reviewSpot(spotId: string, adminId: string, approve: boolean, note: string | null) {
+/**
+ * An admin's decision. "approve" (also after a rejection), "reject" (a submission,
+ * with a note) and "revoke" (take back an approval, with a note). Each is only
+ * possible from the states listed, so a decision made on an outdated page does
+ * nothing; false then.
+ */
+export type ReviewDecision = "approve" | "reject" | "revoke";
+
+const SPOT_DECISIONS: Record<ReviewDecision, { from: Spot["review"][]; to: Spot["review"] }> = {
+  approve: { from: ["pending_review", "rejected"], to: "approved" },
+  reject: { from: ["pending_review"], to: "rejected" },
+  revoke: { from: ["approved"], to: "rejected" },
+};
+
+const ACCOUNT_DECISIONS: Record<ReviewDecision, { from: HostAccount["verificationStatus"][]; to: HostAccount["verificationStatus"] }> = {
+  approve: { from: ["pending", "rejected"], to: "verified" },
+  reject: { from: ["pending"], to: "rejected" },
+  revoke: { from: ["verified"], to: "rejected" },
+};
+
+/** The decisions an admin can make on a spot or account in its current state. */
+export const spotDecisions = (review: Spot["review"]) =>
+  (Object.keys(SPOT_DECISIONS) as ReviewDecision[]).filter((d) => SPOT_DECISIONS[d].from.includes(review));
+export const accountDecisions = (status: HostAccount["verificationStatus"]) =>
+  (Object.keys(ACCOUNT_DECISIONS) as ReviewDecision[]).filter((d) => ACCOUNT_DECISIONS[d].from.includes(status));
+
+export async function reviewSpot(spotId: string, adminId: string, decision: ReviewDecision, note: string | null) {
   if (!isUuid(spotId)) return false;
+  const { from, to } = SPOT_DECISIONS[decision];
   const updated = must(
     await api()
       .from("spots")
-      .update(toDb(spots, { review: approve ? "approved" : "rejected", reviewNote: note, reviewedAt: new Date(), reviewedBy: adminId }))
+      .update(toDb(spots, { review: to, reviewNote: note, reviewedAt: new Date(), reviewedBy: adminId }))
       .eq(S.id, spotId)
-      .in(S.review, ["pending_review", "approved", "rejected"])
+      .in(S.review, from)
       .select(S.id),
     "reviewSpot",
   );
   return updated.length > 0;
 }
 
-export async function reviewAccount(accountId: string, approve: boolean, note: string | null) {
+export async function reviewAccount(accountId: string, decision: ReviewDecision, note: string | null) {
   if (!isUuid(accountId)) return false;
+  const { from, to } = ACCOUNT_DECISIONS[decision];
   const updated = must(
     await api()
       .from("host_accounts")
-      .update(toDb(hostAccounts, { verificationStatus: approve ? "verified" : "rejected", reviewNote: note, reviewedAt: new Date() }))
+      .update(toDb(hostAccounts, { verificationStatus: to, reviewNote: note, reviewedAt: new Date() }))
       .eq(A.id, accountId)
+      .in(A.verificationStatus, from)
       .select(A.id),
     "reviewAccount",
   );
   return updated.length > 0;
 }
-
 
 /** Other spots of the same account at the same address (e.g. created together as "Plats 1…N"). */
 export async function listSiblingSpots(spot: Pick<Spot, "id" | "hostAccountId" | "address" | "city">): Promise<Pick<Spot, "id" | "title" | "review">[]> {

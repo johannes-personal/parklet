@@ -1,0 +1,28 @@
+name: Live integrations
+
+# Tests against real external services (tests/live/), kept out of the PR checks so
+# an outage elsewhere never blocks a merge. Needs the repository secrets
+# BOLAGSVERKET_CLIENT_ID and BOLAGSVERKET_CLIENT_SECRET (and optionally the variable
+# BOLAGSVERKET_ENV=test); without them the tests skip.
+on:
+  workflow_dispatch:
+  schedule:
+    # Mondays, 06:17 UTC
+    - cron: "17 6 * * 1"
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      BOLAGSVERKET_CLIENT_ID: ${{ secrets.BOLAGSVERKET_CLIENT_ID }}
+      BOLAGSVERKET_CLIENT_SECRET: ${{ secrets.BOLAGSVERKET_CLIENT_SECRET }}
+      BOLAGSVERKET_ENV: ${{ vars.BOLAGSVERKET_ENV }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run test:live

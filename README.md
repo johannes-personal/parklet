@@ -57,6 +57,7 @@ follow approval, invitation and reset links locally.
 | `npm run lint` / `typecheck` | ESLint, TypeScript |
 | `npm test` | Unit + integration tests (needs `parklet_test` database; set `TEST_DATABASE_URL` to override). Starts its own PostgREST |
 | `npm run test:e2e` | Playwright against a production build (`npm run build` first; uses `parklet_e2e` database) |
+| `npm run test:live` | Against real external services (Bolagsverket); needs `BOLAGSVERKET_CLIENT_ID`/`_SECRET`, skips without. In CI: the weekly "Live integrations" workflow, from repository secrets |
 | `npm run db:generate` | Generate a migration after changing `src/db/schema.ts` |
 | `npm run db:migrate` / `db:seed` | Apply migrations / load demo data |
 | `npm run db:api` | Serve the local database through PostgREST on port 3300 |

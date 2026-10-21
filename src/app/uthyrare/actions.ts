@@ -23,12 +23,15 @@ import {
   announceSubmittedSpots,
   createSpots,
   deleteSpotDocument,
+  documentsEditable,
+  documentsLockedError,
   getSpot,
   listSiblingSpots,
   requestLandlordApproval,
   setSpotStatus,
   submitSpotForReview,
   updateSpot,
+  withdrawSpotFromReview,
 } from "@/server/spots";
 import { storeDocument } from "@/server/storage";
 
@@ -228,6 +231,14 @@ export async function submitSpotAction(_prev: FormState, formData: FormData): Pr
   };
 }
 
+export async function withdrawSpotAction(formData: FormData) {
+  const accountId = String(formData.get("accountId"));
+  const spotId = String(formData.get("spotId"));
+  await requireMember(accountId);
+  await withdrawSpotFromReview(accountId, spotId);
+  redirect(`/uthyrare/${accountId}/platser/${spotId}`);
+}
+
 export async function requestApprovalAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const accountId = String(formData.get("accountId"));
   const spotId = String(formData.get("spotId"));
@@ -246,12 +257,21 @@ const ACCOUNT_DOC_KINDS: DocumentKind[] = ["org_registration", "board_minutes", 
 export async function uploadDocumentAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const accountId = String(formData.get("accountId"));
   const spotId = String(formData.get("spotId") ?? "") || null;
-  const { user } = await requireMember(accountId);
+  const { user, account } = await requireMember(accountId);
   const kind = String(formData.get("kind")) as DocumentKind;
   if (!(spotId ? SPOT_DOC_KINDS : ACCOUNT_DOC_KINDS).includes(kind)) return { error: "Välj vilken typ av dokument det är." };
   if (spotId) {
     const spot = await getSpot(spotId);
     if (!spot || spot.hostAccountId !== accountId) return { error: "Platsen finns inte." };
+    const locked = documentsLockedError(spot.review);
+    if (locked) return { error: locked };
+  } else if (account.verificationStatus === "pending" || account.verificationStatus === "verified") {
+    return {
+      error:
+        account.verificationStatus === "pending"
+          ? "Underlagen är låsta medan Parklet granskar organisationen."
+          : "Organisationen är verifierad och underlagen är låsta. Kontakta Parklet om något har ändrats.",
+    };
   }
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) return { error: "Välj en fil att ladda upp." };
@@ -260,7 +280,8 @@ export async function uploadDocumentAction(_prev: FormState, formData: FormData)
   let targets: (string | null)[] = [spotId];
   if (spotId && formData.get("applyToSiblings") === "on") {
     const spot = await getSpot(spotId);
-    if (spot) targets = [spotId, ...(await listSiblingSpots(spot)).map((s) => s.id)];
+    // Only to siblings whose documents can still change.
+    if (spot) targets = [spotId, ...(await listSiblingSpots(spot)).filter((s) => documentsEditable(s.review)).map((s) => s.id)];
   }
   must(
     await api()

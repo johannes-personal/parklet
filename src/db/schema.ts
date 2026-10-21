@@ -233,6 +233,8 @@ export const spots = pgTable(
 
     /** e.g. the BRF requires temporary renters' cars to be registered in its parking system. */
     requiresVehicleRegistration: boolean("requires_vehicle_registration").notNull().default(false),
+    /** Set when the landlord or BRF required registration in its approval; the host can't switch it off. */
+    landlordRequiresRegistration: boolean("landlord_requires_registration").notNull().default(false),
     vehicleRegistrationNote: text("vehicle_registration_note").notNull().default(""),
 
     review: spotReviewEnum("review").notNull().default("draft"),

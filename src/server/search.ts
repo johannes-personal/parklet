@@ -25,7 +25,10 @@ const CANDIDATE_KEYS = [
 type Candidate = Pick<Spot, (typeof CANDIDATE_KEYS)[number]>;
 
 export const DEFAULT_RADIUS_M = 3000;
-export const WIDE_RADIUS_M = 15000;
+/** Wider and wider circles when nothing is found nearby; null means anywhere (the closest spots). */
+const WIDER_RADII_M = [15_000, 100_000, null] as const;
+/** How many spots "the closest" shows when there are none in the wider circles. */
+const NEAREST_ANYWHERE = 10;
 const MAX_RESULTS = 100;
 
 export type SearchResult = Pick<
@@ -39,7 +42,9 @@ export type SearchResult = Pick<
 
 export type SearchOutcome = {
   results: SearchResult[];
+  /** The circle the results come from: null without a centre, or when they are simply the closest spots. */
   radiusM: number | null;
+  /** True when nothing was found within DEFAULT_RADIUS_M and the search looked further. */
   widened: boolean;
 };
 
@@ -50,7 +55,13 @@ export async function searchSpots(opts: { center: LatLng | null; start: Date | n
   }
   const near = await runSearch(center, DEFAULT_RADIUS_M, start, end);
   if (near.length > 0) return { results: near, radiusM: DEFAULT_RADIUS_M, widened: false };
-  return { results: await runSearch(center, WIDE_RADIUS_M, start, end), radiusM: WIDE_RADIUS_M, widened: true };
+  // Nothing close: look further, and in the end show the closest spots wherever they are,
+  // so a town without spots still gets an answer.
+  for (const radiusM of WIDER_RADII_M) {
+    const results = await runSearch(center, radiusM, start, end);
+    if (results.length > 0) return { results: radiusM ? results : results.slice(0, NEAREST_ANYWHERE), radiusM, widened: true };
+  }
+  return { results: [], radiusM: null, widened: true };
 }
 
 async function runSearch(center: LatLng | null, radiusM: number | null, start: Date | null, end: Date | null) {

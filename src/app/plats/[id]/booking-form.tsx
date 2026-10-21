@@ -68,40 +68,45 @@ export function BookingForm(p: Props) {
         names={{ from: "from", to: "to" }}
       />
 
-      <fieldset>
-        <legend className="label">Bil</legend>
-        {p.vehicles.length > 0 ? (
-          <select name="vehicleReg" className="input" value={vehicle} onChange={(e) => setVehicle(e.target.value)} aria-label="Välj bil">
-            {p.vehicles.map((v) => (
-              <option key={v.id} value={v.reg}>
-                {v.reg}
-                {v.nickname ? ` – ${v.nickname}` : ""}
-              </option>
-            ))}
-            <option value="">Annan bil…</option>
-          </select>
-        ) : null}
-        {useNew ? (
-          <div className={p.vehicles.length ? "mt-2" : ""}>
-            <label htmlFor={f("newReg")} className="sr-only">
-              Registreringsnummer
-            </label>
-            <input
-              id={f("newReg")}
-              name="newReg"
-              className="input uppercase placeholder:normal-case"
-              placeholder="Registreringsnummer, t.ex. ABC123"
-              autoComplete="off"
-              defaultValue={state?.values?.newReg}
-              {...errProps(state, "newReg")}
-            />
-            <FieldError state={state} name="newReg" />
-          </div>
-        ) : null}
-        {p.requiresVehicleRegistration ? (
-          <p className="hint">Föreningen kräver att bilen registreras. Uthyraren registrerar ditt registreringsnummer innan bokningen startar.</p>
-        ) : null}
-      </fieldset>
+      {/* The car is asked for after logging in: the driver's saved cars come from the account. */}
+      {p.loggedIn ? (
+        <fieldset>
+          <legend className="label">Bil</legend>
+          {p.vehicles.length > 0 ? (
+            <select name="vehicleReg" className="input" value={vehicle} onChange={(e) => setVehicle(e.target.value)} aria-label="Välj bil">
+              {p.vehicles.map((v) => (
+                <option key={v.id} value={v.reg}>
+                  {v.reg}
+                  {v.nickname ? ` – ${v.nickname}` : ""}
+                </option>
+              ))}
+              <option value="">Annan bil…</option>
+            </select>
+          ) : null}
+          {useNew ? (
+            <div className={p.vehicles.length ? "mt-2" : ""}>
+              <label htmlFor={f("newReg")} className="sr-only">
+                Registreringsnummer
+              </label>
+              <input
+                id={f("newReg")}
+                name="newReg"
+                className="input uppercase placeholder:normal-case"
+                placeholder="Registreringsnummer, t.ex. ABC123"
+                autoComplete="off"
+                defaultValue={state?.values?.newReg}
+                {...errProps(state, "newReg")}
+              />
+              <FieldError state={state} name="newReg" />
+            </div>
+          ) : null}
+          {p.requiresVehicleRegistration ? (
+            <p className="hint">Föreningen kräver att bilen registreras. Uthyraren registrerar ditt registreringsnummer innan bokningen startar.</p>
+          ) : null}
+        </fieldset>
+      ) : p.requiresVehicleRegistration ? (
+        <p className="hint">Föreningen kräver att bilen registreras. Du anger registreringsnumret när du har loggat in.</p>
+      ) : null}
 
       <div className="rounded-xl bg-canvas p-4 text-sm" aria-live="polite">
         {!preview ? (

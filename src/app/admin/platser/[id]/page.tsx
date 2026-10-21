@@ -1,15 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { reviewSpotAction } from "@/app/admin/actions";
 import { ReviewForm } from "@/app/admin/review-form";
 import { Badge } from "@/components/status-badge";
+import { Unavailable } from "@/components/unavailable";
 import { requireAdmin } from "@/lib/auth/session";
-import { DOCUMENT_KIND_LABEL, REVIEW_LABEL } from "@/lib/labels";
+import { DOCUMENT_KIND_LABEL, REVIEW_LABEL, VERIFICATION_LABEL } from "@/lib/labels";
 import { formatDateTime } from "@/lib/time";
 import { HOST_KIND_LABEL, listMembers } from "@/server/host-accounts";
-import { getSpotWithAccount, listSpotDocuments, spotRequirements } from "@/server/spots";
+import { getSpotWithAccount, listSpotDocuments, spotDecisions, spotRequirements } from "@/server/spots";
 
 export const metadata: Metadata = { title: "Granska plats", robots: { index: false } };
 
@@ -38,7 +38,13 @@ async function Content({ params, searchParams }: P) {
   const { id } = await params;
   const { fel } = await searchParams;
   const row = await getSpotWithAccount(id);
-  if (!row) notFound();
+  if (!row) {
+    return (
+      <Unavailable title="Platsen finns inte" actions={[{ href: "/admin/platser", label: "Alla platser" }]}>
+        <p>Platsen har tagits bort, eller så är länken fel.</p>
+      </Unavailable>
+    );
+  }
   const { spot, account } = row;
   const [docs, members] = await Promise.all([listSpotDocuments(id), listMembers(account.id)]);
   const reqs = spotRequirements(spot, docs);
@@ -56,7 +62,7 @@ async function Content({ params, searchParams }: P) {
       <dl className="card divide-y divide-line text-sm">
         {[
           ["Adress", `${spot.address}, ${spot.city} (${spot.lat.toFixed(5)}, ${spot.lng.toFixed(5)})`],
-          ["Uthyrarkonto", `${account.name} – ${HOST_KIND_LABEL[account.kind]}${account.orgNumber ? `, ${account.orgNumber}` : ""} (${account.verificationStatus})`],
+          ["Uthyrarkonto", `${account.name} – ${HOST_KIND_LABEL[account.kind]}${account.orgNumber ? `, ${account.orgNumber}` : ""} (${VERIFICATION_LABEL[account.verificationStatus].text.toLowerCase()})`],
           ["Ägare av kontot", owner ? `${owner.name}, ${owner.email}` : "–"],
           ["Grund", spot.rightBasis === "owns" ? "Äger platsen" : `Hyr av ${spot.landlordKind === "brf" ? "bostadsrättsförening" : "hyresvärd"}: ${spot.landlordName ?? "–"} (${spot.landlordEmail ?? "ingen e-post"})`],
           [
@@ -103,7 +109,22 @@ async function Content({ params, searchParams }: P) {
         )}
         <p className="mt-4 text-sm text-muted">Kontrollera att namn och adress i dokumenten stämmer med kontots legitimerade ägare och platsens adress.</p>
       </section>
-      <ReviewForm action={reviewSpotAction} idName="spotId" id={spot.id} error={Boolean(fel)} />
+      <ReviewForm
+        action={reviewSpotAction}
+        idName="spotId"
+        id={spot.id}
+        decisions={spotDecisions(spot.review)}
+        status={
+          {
+            draft: "Platsen har inte skickats in för granskning än.",
+            pending_review: `Inskickad${spot.submittedAt ? ` ${formatDateTime(spot.submittedAt)}` : ""}. Väntar på ditt beslut.`,
+            approved: `Godkänd${spot.reviewedAt ? ` ${formatDateTime(spot.reviewedAt)}` : ""}.`,
+            rejected: `Ej godkänd${spot.reviewNote ? ` (${spot.reviewNote.replace(/[.\s]+$/, "")})` : ""}. Väntar på att uthyraren kompletterar.`,
+          }[spot.review]
+        }
+        returnTo={spot.review === "pending_review" ? "/admin" : `/admin/platser/${spot.id}`}
+        error={fel === "motivering" || fel === "status" ? fel : undefined}
+      />
     </div>
   );
 }

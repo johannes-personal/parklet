@@ -35,7 +35,12 @@ export function parseOrganisationResponse(body: unknown): RegistryLookup {
   const list = (body as { organisationer?: ApiOrganisation[] } | null)?.organisationer;
   if (!Array.isArray(list) || list.length === 0) return { result: "not_found" };
   const org = list[0];
-  if (org.fel?.typ === "ORGANISATION_FINNS_EJ") return { result: "not_found" };
+  // The real API reports "not registered" per section (each with its own `fel`), not once
+  // for the organisation; the documented top-level `fel` is accepted too.
+  const errors = [org.fel, org.organisationsnamn?.fel, org.organisationsform?.fel, org.juridiskForm?.fel, org.avregistreradOrganisation?.fel]
+    .map((f) => f?.typ)
+    .filter((t): t is string => Boolean(t));
+  if (errors.includes("ORGANISATION_FINNS_EJ")) return { result: "not_found" };
   if (org.fel?.typ) return { result: "unavailable", reason: org.fel.typ };
 
   const names = org.organisationsnamn?.organisationsnamnLista ?? [];

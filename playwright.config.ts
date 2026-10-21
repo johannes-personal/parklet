@@ -18,6 +18,8 @@ export default defineConfig({
   testDir: "e2e",
   fullyParallel: false,
   workers: 1,
+  // A committed test.only must not quietly shrink the CI run.
+  forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
   globalSetup: "./e2e/global-setup.ts",

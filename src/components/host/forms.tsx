@@ -11,6 +11,7 @@ import {
   submitAccountAction,
   submitSpotAction,
   uploadDocumentAction,
+  withdrawSpotAction,
 } from "@/app/uthyrare/actions";
 import { errProps, FieldError, FormAlert, SubmitButton, type FormState } from "@/components/form";
 
@@ -91,6 +92,7 @@ export function DocumentSlot({
   kinds,
   docs,
   canDelete,
+  canUpload = true,
   siblings = 0,
   note,
 }: {
@@ -107,6 +109,8 @@ export function DocumentSlot({
   kinds?: { value: string; label: string }[];
   docs: SlotDocument[];
   canDelete: boolean;
+  /** False while the documents are locked (the spot is under review or approved). */
+  canUpload?: boolean;
   siblings?: number;
 }) {
   const f = useFieldIds();
@@ -143,52 +147,59 @@ export function DocumentSlot({
                     </a>
                     {d.kindLabel ? <span className="text-muted">{d.kindLabel}</span> : null}
                   </span>
-                  {canDelete ? <DeleteDocumentButton accountId={accountId} spotId={spotId} documentId={d.id} filename={d.filename} onResult={setNotice} /> : null}
+                  {canDelete ? (
+                    <DeleteDocumentButton accountId={accountId} spotId={spotId} documentId={d.id} filename={d.filename} onResult={setNotice} />
+                  ) : null}
                 </li>
               ))}
             </ul>
           ) : null}
 
-          <form ref={form} action={action} className="mt-3 space-y-3">
-            <FormAlert state={notice ?? state} />
-            <input type="hidden" name="accountId" value={accountId} />
-            <input type="hidden" name="spotId" value={spotId} />
-            {kind ? <input type="hidden" name="kind" value={kind} /> : null}
-            <div className="flex flex-wrap items-end gap-3">
-              {kinds ? (
-                <div className="min-w-48 flex-1">
-                  <label htmlFor={f("kind")} className="label">
-                    Typ av dokument
-                  </label>
-                  <select id={f("kind")} name="kind" className="input" defaultValue={kinds[0]?.value}>
-                    {kinds.map((k) => (
-                      <option key={k.value} value={k.value}>
-                        {k.label}
-                      </option>
-                    ))}
-                  </select>
+          {canUpload ? (
+            <form ref={form} action={action} className="mt-3 space-y-3">
+              <FormAlert state={notice ?? state} />
+              <input type="hidden" name="accountId" value={accountId} />
+              <input type="hidden" name="spotId" value={spotId} />
+              {kind ? <input type="hidden" name="kind" value={kind} /> : null}
+              <div className="flex flex-wrap items-end gap-3">
+                {kinds ? (
+                  <div className="min-w-48 flex-1">
+                    <label htmlFor={f("kind")} className="label">
+                      Typ av dokument
+                    </label>
+                    <select id={f("kind")} name="kind" className="input" defaultValue={kinds[0]?.value}>
+                      {kinds.map((k) => (
+                        <option key={k.value} value={k.value}>
+                          {k.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : null}
+                <div>
+                  <input
+                    id={f("file")}
+                    name="file"
+                    type="file"
+                    accept="application/pdf,image/jpeg,image/png,image/heic"
+                    // Upload as soon as a file is chosen.
+                    onChange={(e) => e.currentTarget.files?.length && form.current?.requestSubmit()}
+                    className="peer sr-only"
+                  />
+                  <FilePickButton htmlFor={f("file")}>{docs.length ? "Lägg till fil…" : "Välj fil…"}</FilePickButton>
                 </div>
-              ) : null}
-              <div>
-                <input
-                  id={f("file")}
-                  name="file"
-                  type="file"
-                  accept="application/pdf,image/jpeg,image/png,image/heic"
-                  // Upload as soon as a file is chosen.
-                  onChange={(e) => e.currentTarget.files?.length && form.current?.requestSubmit()}
-                  className="peer sr-only"
-                />
-                <FilePickButton htmlFor={f("file")}>{docs.length ? "Lägg till fil…" : "Välj fil…"}</FilePickButton>
+                <p className="basis-full text-xs text-muted sm:basis-auto sm:self-center">PDF eller bild, max 4 MB</p>
               </div>
-              <p className="basis-full text-xs text-muted sm:basis-auto sm:self-center">PDF eller bild, max 4 MB</p>
-            </div>
-            {siblings > 0 ? (
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" name="applyToSiblings" defaultChecked className="accent-brand" /> Gäller även de {siblings} andra platserna på samma adress
-              </label>
-            ) : null}
-          </form>
+              {siblings > 0 ? (
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" name="applyToSiblings" defaultChecked className="accent-brand" /> Gäller även de {siblings} andra platserna på samma
+                  adress
+                </label>
+              ) : null}
+            </form>
+          ) : docs.length === 0 ? (
+            <p className="mt-2 text-sm text-muted">Inget uppladdat.</p>
+          ) : null}
         </div>
       </div>
     </section>
@@ -263,6 +274,19 @@ export function SubmitSpotForm({ accountId, spotId, label, siblings = 0 }: { acc
   );
 }
 
+/** Take a spot back from Parklet's review, to change its documents. */
+export function WithdrawSpotForm({ accountId, spotId }: { accountId: string; spotId: string }) {
+  return (
+    <form action={withdrawSpotAction}>
+      <input type="hidden" name="accountId" value={accountId} />
+      <input type="hidden" name="spotId" value={spotId} />
+      <SubmitButton className="btn-secondary" pendingText="Tar tillbaka…">
+        Ta tillbaka från granskningen
+      </SubmitButton>
+    </form>
+  );
+}
+
 export function RequestApprovalForm({ accountId, spotId, again }: { accountId: string; spotId: string; again: boolean }) {
   const [state, action] = useActionState<FormState, FormData>(requestApprovalAction, null);
   return (
@@ -322,7 +346,10 @@ export function CreateAccountForm({ identityVerified }: { identityVerified: bool
         <legend className="label">Vem hyr ut?</legend>
         <div className="grid gap-3">
           {KINDS.map((k) => (
-            <label key={k.value} className="peer flex cursor-pointer gap-3 rounded-xl border border-line p-4 has-checked:border-brand has-checked:bg-brand-soft">
+            <label
+              key={k.value}
+              className="peer flex cursor-pointer gap-3 rounded-xl border border-line p-4 has-checked:border-brand has-checked:bg-brand-soft"
+            >
               <input type="radio" name="kind" value={k.value} className="mt-1 accent-brand" defaultChecked={kind === k.value} />
               <span>
                 <span className="font-medium">{k.title}</span>
@@ -348,14 +375,29 @@ export function CreateAccountForm({ identityVerified }: { identityVerified: bool
             <label htmlFor={f("orgNumber")} className="label">
               Organisationsnummer
             </label>
-            <input id={f("orgNumber")} name="orgNumber" inputMode="numeric" className="input" placeholder="NNNNNN-NNNN" defaultValue={state?.values?.orgNumber} {...errProps(state, "orgNumber")} />
+            <input
+              id={f("orgNumber")}
+              name="orgNumber"
+              inputMode="numeric"
+              className="input"
+              placeholder="NNNNNN-NNNN"
+              defaultValue={state?.values?.orgNumber}
+              {...errProps(state, "orgNumber")}
+            />
             <FieldError state={state} name="orgNumber" />
           </div>
           <div>
             <label htmlFor={f("signatoryRole")} className="label">
               Din roll
             </label>
-            <input id={f("signatoryRole")} name="signatoryRole" className="input" placeholder="T.ex. Styrelseledamot, firmatecknare eller förvaltare" defaultValue={state?.values?.signatoryRole} {...errProps(state, "signatoryRole")} />
+            <input
+              id={f("signatoryRole")}
+              name="signatoryRole"
+              className="input"
+              placeholder="T.ex. Styrelseledamot, firmatecknare eller förvaltare"
+              defaultValue={state?.values?.signatoryRole}
+              {...errProps(state, "signatoryRole")}
+            />
             <FieldError state={state} name="signatoryRole" />
           </div>
           <label className="flex items-start gap-3 text-sm">
@@ -367,9 +409,7 @@ export function CreateAccountForm({ identityVerified }: { identityVerified: bool
         </div>
       </details>
 
-      {!identityVerified ? (
-        <p className="text-sm text-ink-soft">Du kommer att behöva legitimera dig med BankID innan du kan ta emot bokningar.</p>
-      ) : null}
+      {!identityVerified ? <p className="text-sm text-ink-soft">Du kommer att behöva legitimera dig med BankID innan du kan ta emot bokningar.</p> : null}
       <SubmitButton className="btn-primary btn-lg">Skapa uthyrarkonto</SubmitButton>
     </form>
   );

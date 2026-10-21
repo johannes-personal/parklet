@@ -1,5 +1,7 @@
-import { expect, type Locator, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
+import { createHash, randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
+import postgres from "postgres";
 import { DateTime } from "luxon";
 
 export const PASSWORD = "parklet-demo-1";
@@ -11,6 +13,29 @@ export async function login(page: Page, email: string, password = PASSWORD) {
   await page.getByLabel("Lösenord", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Logga in" }).click();
   await expect(page).not.toHaveURL(/logga-in/);
+}
+
+/** The e2e database, for setting up and checking state. Close it with `.end()`. */
+export const e2eDb = () => postgres(E2E_DB, { max: 1, onnotice: () => {} });
+
+/**
+ * Sign in without the login form: a session row and its cookie, as the app makes
+ * them (src/lib/auth/session.ts). The form itself is tested by login() in a few
+ * flows; everything else uses this, so many tests don't trip the login rate limit.
+ */
+export async function signIn(page: Page, email: string) {
+  const sql = e2eDb();
+  try {
+    const [user] = await sql`select id from users where email = ${email}`;
+    if (!user) throw new Error(`No user ${email}`);
+    const token = randomBytes(32).toString("base64url");
+    const hash = createHash("sha256").update(token).digest("hex");
+    await sql`insert into sessions (id, user_id, expires_at) values (${hash}, ${user.id}, now() + interval '1 day')`;
+    const base = new URL(test.info().project.use.baseURL ?? "http://localhost:3100");
+    await page.context().addCookies([{ name: "parklet_session", value: token, domain: base.hostname, path: "/", httpOnly: true, sameSite: "Lax" }]);
+  } finally {
+    await sql.end();
+  }
 }
 
 export async function logout(page: Page) {

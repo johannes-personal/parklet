@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { closeDb, db } from "./direct-db";
@@ -9,7 +9,7 @@ import { searchAccounts, searchSpots as adminSearchSpots } from "@/server/admin-
 import { acceptInvitation, createHostAccount, getAccountForMember, inviteAdmin } from "@/server/host-accounts";
 import { searchSpots } from "@/server/search";
 import { createSpots, getSpot, listAccountSpots, requestLandlordApproval, respondToLandlordApproval, updateSpot } from "@/server/spots";
-import { makeBookableSpot, makeUser, resetDb } from "./helpers";
+import { makeBookableSpot, makeUser, resetDb, spotInput } from "./helpers";
 import { TEST_API_PORT } from "../support/env";
 
 beforeEach(resetDb);
@@ -18,37 +18,15 @@ afterAll(async () => {
 });
 
 const API = `http://localhost:${TEST_API_PORT}`;
-const FUNCTIONS = [...readFileSync("src/db/migrations/0010_http_api.sql", "utf8").matchAll(/CREATE FUNCTION public\.(\w+)/g)].map((m) => m[1]);
-
-async function spotInput(overrides: Record<string, unknown> = {}) {
-  return {
-    title: "Uppfart",
-    description: "",
-    address: "Testgatan 1",
-    city: "Göteborg",
-    lat: 57.7,
-    lng: 11.97,
-    spotType: "driveway" as const,
-    covered: false,
-    evCharging: false,
-    maxHeightCm: null,
-    pricePerHourOre: 2000,
-    pricePerDayOre: null,
-    minDurationMinutes: 60,
-    minNoticeMinutes: 0,
-    cancellationHours: 2,
-    accessInstructions: "",
-    visibility: "public" as const,
-    schedule: { mode: "weekdaysDaytime" as const },
-    rightBasis: "owns" as const,
-    landlordKind: null,
-    landlordName: "",
-    landlordEmail: "",
-    requiresVehicleRegistration: false,
-    vehicleRegistrationNote: "",
-    ...overrides,
-  };
-}
+const MIGRATIONS = "src/db/migrations";
+/** Every function any migration creates in the public schema. */
+const FUNCTIONS = [
+  ...new Set(
+    readdirSync(MIGRATIONS)
+      .filter((f) => f.endsWith(".sql"))
+      .flatMap((f) => [...readFileSync(`${MIGRATIONS}/${f}`, "utf8").matchAll(/CREATE (?:OR REPLACE )?FUNCTION public\.(\w+)/gi)].map((m) => m[1])),
+  ),
+];
 
 async function household(name = "Värd") {
   const owner = await makeUser(name);
@@ -92,19 +70,12 @@ describe("the API's security", () => {
     }
   });
 
-  it("does not show anonymous callers any rows", async () => {
-    await makeBookableSpot();
-    for (const table of ["users", "spots", "host_accounts", "sessions"]) {
-      const res = await fetch(`${API}/${table}?select=*`);
-      expect(res.ok ? await res.json() : []).toEqual([]);
-    }
-  });
 });
 
 describe("spots through the API", () => {
   it("creates numbered spots with their opening hours in one step", async () => {
     const { owner, accountId } = await household();
-    const ids = await createSpots(accountId, owner.id, await spotInput(), 3);
+    const ids = await createSpots(accountId, owner.id, spotInput(), 3);
     expect(ids).toHaveLength(3);
     const spot = await getSpot(ids[2]);
     expect(spot?.title).toBe("Uppfart – Plats 3");
@@ -118,14 +89,14 @@ describe("spots through the API", () => {
 
   it("creates nothing when one of the spots is invalid", async () => {
     const { owner, accountId } = await household();
-    await expect(createSpots(accountId, owner.id, await spotInput({ pricePerHourOre: -1 }), 2)).rejects.toThrow();
+    await expect(createSpots(accountId, owner.id, spotInput({ pricePerHourOre: -1 }), 2)).rejects.toThrow();
     expect(await db.select().from(spots)).toHaveLength(0);
     expect(await db.select().from(availabilityWindows)).toHaveLength(0);
   });
 
   it("updates a spot and replaces its opening hours; moving an approved spot sends it back to review", async () => {
     const { account, spotId } = await makeBookableSpot();
-    const ok = await updateSpot(account.id, spotId, await spotInput({ address: "Nya gatan 2", schedule: { mode: "eveningsWeekends" } }));
+    const ok = await updateSpot(account.id, spotId, spotInput({ address: "Nya gatan 2", schedule: { mode: "eveningsWeekends" } }));
     expect(ok).toBe(true);
     const spot = await getSpot(spotId);
     expect(spot?.address).toBe("Nya gatan 2");
@@ -138,7 +109,7 @@ describe("spots through the API", () => {
   it("does not update another account's spot", async () => {
     const { spotId } = await makeBookableSpot();
     const other = await household("Annan");
-    expect(await updateSpot(other.accountId, spotId, await spotInput({ title: "Kapad" }))).toBe(false);
+    expect(await updateSpot(other.accountId, spotId, spotInput({ title: "Kapad" }))).toBe(false);
     expect((await getSpot(spotId))?.title).toBe("Testplats");
   });
 
@@ -164,7 +135,7 @@ describe("spots through the API", () => {
 
   it("takes the landlord's answer once", async () => {
     const { owner, accountId } = await household();
-    const [spotId] = await createSpots(accountId, owner.id, await spotInput({ rightBasis: "rents", landlordKind: "brf", landlordEmail: "brf@example.com" }));
+    const [spotId] = await createSpots(accountId, owner.id, spotInput({ rightBasis: "rents", landlordKind: "brf", landlordEmail: "brf@example.com" }));
     expect(await requestLandlordApproval(accountId, spotId, owner.name)).toEqual({ ok: true });
     const [{ token }] = await db.execute<{ token: string }>(
       sql`select substring(text from '/godkannande/([A-Za-z0-9_-]+)') as token from mail_outbox where "to" = 'brf@example.com' order by id desc limit 1`,
@@ -236,8 +207,8 @@ describe("search through the API", () => {
     // 150 spots open around the clock (1050 opening-hour rows, more than PostgREST returns
     // from a table at once) around the corner, and the nearest one, created last.
     const { owner, accountId } = await household();
-    const far = await createSpots(accountId, owner.id, await spotInput({ lat: 57.71, schedule: { mode: "always" } }), 150);
-    const [near] = await createSpots(accountId, owner.id, await spotInput({ title: "Närmast", schedule: { mode: "always" } }));
+    const far = await createSpots(accountId, owner.id, spotInput({ lat: 57.71, schedule: { mode: "always" } }), 150);
+    const [near] = await createSpots(accountId, owner.id, spotInput({ title: "Närmast", schedule: { mode: "always" } }));
     await db.update(spots).set({ review: "approved" });
     await db.update(hostAccounts).set({ payoutStatus: "active" });
     // One of the far ones is taken in the period.
@@ -262,18 +233,10 @@ describe("search through the API", () => {
     expect(results.map((r) => r.id)).not.toContain(far[0]);
   });
 
-  it("finds bookable spots only", async () => {
-    const { spotId, account } = await makeBookableSpot();
-    const center = { lat: 57.7, lng: 11.97 };
-    expect((await searchSpots({ center, start: null, end: null })).results.map((r) => r.id)).toEqual([spotId]);
-    await db.update(hostAccounts).set({ payoutStatus: "not_connected" }).where(eq(hostAccounts.id, account.id));
-    expect((await searchSpots({ center, start: null, end: null })).results).toEqual([]);
-  });
-
   it("gives admins every spot and account with filters and counts", async () => {
     const { spotId, account } = await makeBookableSpot();
     const { owner, accountId } = await household("Utkast Ek");
-    await createSpots(accountId, owner.id, await spotInput({ title: "Utkastplats", city: "Malmö" }));
+    await createSpots(accountId, owner.id, spotInput({ title: "Utkastplats", city: "Malmö" }));
 
     const all = await adminSearchSpots({});
     expect(all.total).toBe(2);

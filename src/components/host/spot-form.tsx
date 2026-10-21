@@ -43,7 +43,8 @@ export function SpotForm({
   const [city, setCity] = useState(v("city"));
   const [basis, setBasis] = useState(v("rightBasis"));
   const [landlordKind, setLandlordKind] = useState(v("landlordKind"));
-  const [requiresReg, setRequiresReg] = useState(checked("requiresVehicleRegistration"));
+  const imposed = Boolean(defaults.landlordRequiresRegistration);
+  const [requiresReg, setRequiresReg] = useState(imposed || checked("requiresVehicleRegistration"));
   const initialPos = state?.values?.lat ? { lat: Number(state.values.lat), lng: Number(state.values.lng) } : defaults.lat != null ? { lat: defaults.lat, lng: defaults.lng! } : null;
 
   return (
@@ -245,13 +246,20 @@ export function SpotForm({
               Framförhållning
             </label>
             <select id={f("minNoticeMinutes")} name="minNoticeMinutes" className="input" defaultValue={v("minNoticeMinutes")} {...errProps(state, "minNoticeMinutes")}>
-              <option value="0">Kan bokas direkt</option>
-              <option value="60">Minst 1 timme innan</option>
-              <option value="240">Minst 4 timmar innan</option>
+              <option value="0" disabled={imposed}>
+                Kan bokas direkt
+              </option>
+              <option value="60" disabled={imposed}>
+                Minst 1 timme innan
+              </option>
+              <option value="240" disabled={imposed}>
+                Minst 4 timmar innan
+              </option>
               <option value="1440">Minst 1 dygn innan</option>
               <option value="2880">Minst 2 dygn innan</option>
             </select>
             <FieldError state={state} name="minNoticeMinutes" />
+            {imposed ? <p className="hint">Föreningen kräver registrering, så platsen bokas minst ett dygn i förväg.</p> : null}
           </div>
         </div>
         <p className="text-sm text-muted">Föraren betalar en serviceavgift på 10 % ovanpå ditt pris. Du får hela ditt pris.</p>
@@ -264,14 +272,22 @@ export function SpotForm({
             name="requiresVehicleRegistration"
             className="mt-1 size-4 accent-brand"
             checked={requiresReg}
+            disabled={imposed}
             onChange={(e) => setRequiresReg(e.target.checked)}
           />
+          {/* A disabled checkbox isn't sent; the server keeps the requirement anyway. */}
+          {imposed ? <input type="hidden" name="requiresVehicleRegistration" value="on" /> : null}
           <span>
             <span className="font-medium">Den tillfälliga hyresgästens bil måste registreras</span>
             <span className="block text-sm text-ink-soft">
               T.ex. i föreningens parkeringssystem eller hos parkeringsbolaget. Du får förarens registreringsnummer och bockar av när bilen är
               registrerad.
             </span>
+            {imposed ? (
+              <span className="mt-1 block text-sm font-medium text-ink-soft">
+                Föreningen eller hyresvärden kräver det i sitt godkännande, så det kan inte stängas av här.
+              </span>
+            ) : null}
           </span>
         </label>
         {requiresReg ? (

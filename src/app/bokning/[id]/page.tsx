@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { CancelButton } from "@/app/booking-buttons";
 import { markRegisteredAction } from "@/app/bokning-actions";
 import { BookingStatusBadge } from "@/components/status-badge";
+import { BookingUnavailable } from "@/components/booking-unavailable";
 import { requireUser } from "@/lib/auth/session";
 import { formatSek } from "@/lib/money";
 import { formatDateTime, formatRange } from "@/lib/time";
@@ -25,7 +25,7 @@ async function BookingDetails({ params, searchParams }: PageProps<"/bokning/[id]
   const { bekraftad } = await searchParams;
   const user = await requireUser(`/bokning/${id}`);
   const b = await getBookingForUser(id, user.id);
-  if (!b) notFound();
+  if (!b) return <BookingUnavailable email={user.email} returnTo={`/bokning/${id}`} />;
   const isDriver = b.driverId === user.id;
   const active = b.status === "confirmed" && b.endsAt > new Date();
   const deadline = driverCancellationDeadline(b, b.spot.cancellationHours);

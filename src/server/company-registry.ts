@@ -68,8 +68,15 @@ export async function lookupOrganisation(orgNumber: string): Promise<RegistryLoo
     });
     if (res.status === 404) return { result: "not_found" };
     if (res.status === 401) cachedToken = null;
-    if (!res.ok) return { result: "unavailable", reason: `HTTP ${res.status}` };
-    return parseOrganisationResponse(await res.json());
+    if (!res.ok) {
+      // Public register data only; logged so an answer we don't understand can be fixed.
+      console.warn("company registry: lookup answered", res.status, (await res.text()).slice(0, 500));
+      return { result: "unavailable", reason: `HTTP ${res.status}` };
+    }
+    const body: unknown = await res.json();
+    const lookup = parseOrganisationResponse(body);
+    if (lookup.result === "unavailable") console.warn("company registry: unexpected answer", lookup.reason, JSON.stringify(body).slice(0, 500));
+    return lookup;
   } catch (err) {
     console.error("company registry: lookup failed", err instanceof Error ? err.message : err);
     return { result: "unavailable", reason: "request failed" };

@@ -19,6 +19,22 @@ const BRF = { kod: "BRF", klartext: "Bostadsrättsförening" };
 const REGISTRY = {
   "7696001234": organisation("Bostadsrättsföreningen Testgården", BRF),
   "7696009997": organisation("Brf Nedlagd", BRF, { avregistreradOrganisation: { avregistreringsdatum: "2020-01-01" } }),
+  "5560125790": organisation("Testbolaget Fastigheter AB", { kod: "AB", klartext: "Aktiebolag" }),
+};
+
+// What the real API answers for a number it doesn't have (seen in production): no
+// top-level error, but each section carries its own "not registered" error.
+const notRegistered = () => {
+  const fel = {
+    typ: "ORGANISATION_FINNS_EJ",
+    felBeskrivning: "Begärd organisation finns inte registrerad i sökbar form hos aktuell dataproducent.",
+  };
+  return {
+    avregistreradOrganisation: { avregistreringsdatum: null, dataproducent: "Bolagsverket", fel },
+    avregistreringsorsak: { kod: null, klartext: null, dataproducent: "Bolagsverket", fel },
+    organisationsnamn: { organisationsnamnLista: null, dataproducent: "Bolagsverket", fel },
+    organisationsform: { kod: null, klartext: null, dataproducent: "Bolagsverket", fel },
+  };
 };
 
 const json = (res, status, body) => {
@@ -47,7 +63,7 @@ http
       if (!tokens.has((req.headers.authorization ?? "").replace(/^Bearer /, ""))) return json(res, 401, { error: "unauthorized" });
       const { identitetsbeteckning } = JSON.parse(await readBody(req));
       const org = REGISTRY[identitetsbeteckning];
-      return json(res, 200, { organisationer: [org ?? { fel: { typ: "ORGANISATION_FINNS_EJ", felBeskrivning: "Organisationen finns inte" } }] });
+      return json(res, 200, { organisationer: [org ?? notRegistered()] });
     }
     // Readiness probe for Playwright.
     if (req.url === "/health") return json(res, 200, { ok: true });

@@ -2,30 +2,37 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
+import { HostIntro } from "@/components/host/host-intro";
 import { Badge } from "@/components/status-badge";
-import { requireUser } from "@/lib/auth/session";
+import { getCurrentUser } from "@/lib/auth/session";
 import { HOST_KIND_LABEL, listAccountsForUser } from "@/server/host-accounts";
 
-export const metadata: Metadata = { title: "Uthyrning" };
+export const metadata: Metadata = {
+  title: "Hyr ut din parkeringsplats",
+  description: "Tjäna pengar på din parkeringsplats när du inte använder den. Du bestämmer tider och pris – vi sköter bokning och betalning.",
+};
 
+/**
+ * The one way into hosting. Without a host account (or signed out) it explains
+ * how renting out works and leads to /uthyrare/nytt; with one it opens that
+ * account's dashboard; with several it lists them.
+ */
 export default function HostIndexPage() {
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-10">
-      <h1 className="text-2xl font-bold">Uthyrning</h1>
-      <Suspense fallback={<div className="card mt-6 h-32 animate-pulse" />}>
-        <Accounts />
-      </Suspense>
-    </div>
+    <Suspense fallback={<div className="mx-auto h-96 w-full max-w-4xl animate-pulse px-4 py-14" />}>
+      <HostHome />
+    </Suspense>
   );
 }
 
-async function Accounts() {
-  const user = await requireUser("/uthyrare");
-  const accounts = await listAccountsForUser(user.id);
-  if (accounts.length === 0) redirect("/uthyrare/nytt");
+async function HostHome() {
+  const user = await getCurrentUser();
+  const accounts = user ? await listAccountsForUser(user.id) : [];
+  if (accounts.length === 0) return <HostIntro />;
   if (accounts.length === 1) redirect(`/uthyrare/${accounts[0].id}`);
   return (
-    <>
+    <div className="mx-auto w-full max-w-3xl px-4 py-10">
+      <h1 className="text-2xl font-bold">Uthyrning</h1>
       <ul className="mt-6 space-y-3">
         {accounts.map((a) => (
           <li key={a.id}>
@@ -44,6 +51,6 @@ async function Accounts() {
       <Link href="/uthyrare/nytt" className="btn-secondary mt-6">
         Skapa ett till uthyrarkonto
       </Link>
-    </>
+    </div>
   );
 }
