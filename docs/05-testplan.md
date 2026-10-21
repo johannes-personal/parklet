@@ -51,11 +51,13 @@ Markers:
 
 Reset first, so every flow starts from the state described below.
 
-1. Log in as `johannes@jvo.se` (or `admin@parklet.test`) and open `/admin/testdata`.
-2. Click **Återställ testdata**.
-   - The demo accounts in the table below are back to their starting state.
+1. Log in as `johannes@jvo.se` (or `admin@parklet.test`) and open the admin tab **Testdata** (`/admin/testdata`).
+   - It lists the demo logins and their password.
+2. Click **Återställ testdata** and confirm.
+   - A green message says what was removed and created. You are still logged in (other devices are logged out).
+   - The demo accounts in the table below are back to their starting state, with their bookings and documents.
    - Accounts with real addresses that were created during testing (for example `snyggast@jvo.se`) are **deleted**, so the same address can register again.
-   - Your own admin login (`johannes@jvo.se`) is kept.
+   - Your own admin login (`johannes@jvo.se`) is kept, with its password and BankID; anything it created (host accounts, spots, bookings, cars) is removed.
    - The page is for admins only, and only in the demo deployment.
 
 Reset again whenever a flow leaves things in a state the next one doesn't expect.
