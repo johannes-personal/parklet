@@ -108,3 +108,107 @@ test("an organisation's verification: approve, remove, approve again", async ({ 
   await page.getByRole("button", { name: /^Notiser/ }).click();
   await expect(page.getByRole("link", { name: /Verifieringen av er organisation har tagits bort/ })).toBeVisible();
 });
+
+test("a household that loses its approval starts over, and its spots can't be booked until approved again", async ({ page }) => {
+  // A fresh, fully set-up household with one approved spot (a copy of a seeded one).
+  const stamp = Date.now();
+  const email = `hushall-${stamp}@example.com`;
+  const title = `Hushållsplats ${stamp}`;
+  const sql = e2eDb();
+  const [user] = await sql`
+    insert into users (email, name, password_hash, identity_verified_at, identity_provider)
+    select ${email}, 'Lisa Lindgren', password_hash, now(), 'mock-bankid' from users where email = 'anna@parklet.test' returning id`;
+  const [account] = await sql`
+    insert into host_accounts (kind, name, verification_status, payout_status, payout_account_ref)
+    values ('household', 'Lisa Lindgren', 'verified', 'active', 'acct_mock_e2e') returning id`;
+  await sql`insert into host_account_members (host_account_id, user_id, role) values (${account.id}, ${user.id}, 'owner')`;
+  await sql`create temp table copy as select * from spots where title = 'Carport nära Liseberg'`;
+  const [original] = await sql`select id from copy`;
+  const [spot] = await sql`update copy set id = gen_random_uuid(), host_account_id = ${account.id}, title = ${title} returning id`;
+  await sql`insert into spots select * from copy`;
+  await sql`
+    insert into availability_windows (spot_id, weekday, start_minute, end_minute)
+    select ${spot.id}, weekday, start_minute, end_minute from availability_windows where spot_id = ${original.id}`;
+  await sql.end();
+
+  const step = (name: string, done: boolean) => page.getByText(`${name} (${done ? "klart" : "ej klart"})`, { exact: true });
+  const setup = page.getByRole("heading", { name: "Innan du kan ta emot bokningar" });
+  const bookable = async (yes: boolean) => {
+    await logout(page);
+    await page.goto(`/plats/${spot.id}`);
+    if (yes) await expect(page.getByRole("form", { name: "Boka platsen" })).toBeVisible();
+    else await expect(page.getByRole("heading", { name: "Platsen kan inte bokas just nu" })).toBeVisible();
+  };
+  const decide = async (path: string, button: string, note?: string) => {
+    await logout(page);
+    await signIn(page, "admin@parklet.test");
+    await page.goto(path);
+    const decision = page.locator("form").filter({ has: page.getByRole("heading", { name: "Beslut" }) });
+    if (note) await page.getByLabel(/Motivering till uthyraren/).fill(note);
+    await decision.getByRole("button", { name: button }).click();
+    await expect(page).not.toHaveURL(/fel=/);
+  };
+  const asHost = async () => {
+    await logout(page);
+    await signIn(page, email);
+    await page.goto("/uthyrare");
+  };
+
+  await bookable(true);
+  await asHost();
+  await expect(page.getByRole("heading", { name: "Lisa Lindgren" })).toBeVisible();
+  await expect(setup).toHaveCount(0);
+
+  // The spot loses its approval: the spot step is open again, and the spot can't be booked.
+  await decide(`/admin/platser/${spot.id}`, "Ta bort godkännandet", "Föreningen har dragit tillbaka godkännandet.");
+  await bookable(false);
+  await asHost();
+  await expect(setup).toBeVisible();
+  await expect(step("Legitimera dig med BankID", true)).toBeVisible();
+  await expect(step("Koppla konto för utbetalningar", true)).toBeVisible();
+  await expect(step("Lägg upp en plats med underlag och få den godkänd", false)).toBeVisible();
+  await expect(page.getByText("Ej godkänd", { exact: true })).toBeVisible();
+  await decide(`/admin/platser/${spot.id}`, "Godkänn");
+  await bookable(true);
+
+  // The account loses its approval: BankID and the spot have to be done again.
+  await decide(`/admin/konton/${account.id}`, "Ta bort godkännandet", "Kontot tillhör någon annan.");
+  await bookable(false);
+  await page.goto("/sok?q=G%C3%B6teborg&lat=57.7089&lng=11.9746");
+  await expect(page.getByTestId("search-result").first()).toBeAttached();
+  await expect(page.getByText(title)).toHaveCount(0);
+
+  await asHost();
+  await expect(setup).toBeVisible();
+  await expect(step("Legitimera dig med BankID", false)).toBeVisible();
+  await expect(step("Parklet godkänner kontot", false)).toBeVisible();
+  await expect(page.getByText("Ej godkänt: Kontot tillhör någon annan.")).toBeVisible();
+  await expect(step("Lägg upp en plats med underlag och få den godkänd", false)).toBeVisible();
+  await page.getByRole("button", { name: /^Notiser/ }).click();
+  await expect(page.getByRole("link", { name: /Godkännandet av ditt uthyrarkonto har tagits bort/ })).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  // BankID again sends the account back to Parklet's review; it doesn't approve it.
+  await page.getByRole("link", { name: "Legitimera dig igen" }).click();
+  await expect(page.getByText(/Ditt uthyrarkonto är inte godkänt längre/)).toBeVisible();
+  await page.getByRole("button", { name: "Legitimera med BankID" }).click();
+  await page.getByRole("button", { name: "Godkänn" }).click();
+  await expect(page.getByText("Kontot granskas av Parklet, oftast inom en arbetsdag.")).toBeVisible();
+  await expect(step("Legitimera dig med BankID", true)).toBeVisible();
+  await bookable(false);
+
+  // The admin hears about it and approves the account; the spot is reviewed on its own.
+  await logout(page);
+  await signIn(page, "admin@parklet.test");
+  await page.goto("/");
+  await page.getByRole("button", { name: /^Notiser/ }).click();
+  await expect(page.getByRole("link", { name: /Privat uthyrare att granska igen: Lisa Lindgren/ })).toBeVisible();
+  await decide(`/admin/konton/${account.id}`, "Godkänn");
+  await bookable(false);
+  await asHost();
+  await expect(step("Lägg upp en plats med underlag och få den godkänd", false)).toBeVisible();
+  await decide(`/admin/platser/${spot.id}`, "Godkänn");
+  await bookable(true);
+  await asHost();
+  await expect(setup).toHaveCount(0);
+});

@@ -104,3 +104,8 @@ export function dayOptions(now: Date, count: number): { value: string; label: st
     return { value: d.toFormat("yyyy-MM-dd"), label: i === 0 ? `Idag, ${label}` : i === 1 ? `Imorgon, ${label}` : label };
   });
 }
+
+/** Has this time already passed (allowing a few minutes for someone who just picked "now")? */
+export function isPast(d: Date, graceMinutes = 5): boolean {
+  return d.getTime() < Date.now() - graceMinutes * 60_000;
+}

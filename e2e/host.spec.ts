@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import postgres from "postgres";
-import { E2E_DB, lastMailLink, localAt, login, logout, pickRange, signIn } from "./helpers";
+import { E2E_DB, e2eDb, lastMailLink, localAt, login, logout, pickRange, signIn } from "./helpers";
 
 const fixture = (name: string) => path.resolve("e2e/fixtures", name);
 
@@ -250,4 +250,37 @@ test("a company is checked against Bolagsverket and takes its registered name", 
   await expect(page.getByText("Org.nr 556012-5790")).toBeVisible();
   // An organisation waits for Parklet's verification before its spots can be booked.
   await expect(page.getByRole("heading", { name: "Innan du kan ta emot bokningar" })).toBeVisible();
+});
+
+test("a board member with a Parklet account also finds the approval request in the bell", async ({ page }) => {
+  // A draft copy of Anna's BRF spot, asking the board at an address that has an account.
+  const sql = e2eDb();
+  const title = `Godkännandeplats ${Date.now()}`;
+  await sql`create temp table copy as select * from spots where title = 'BRF-plats i Haga'`;
+  const [spot] = await sql`
+    update copy set id = gen_random_uuid(), title = ${title}, review = 'draft', submitted_at = null,
+      landlord_approval = 'missing', landlord_approval_token_hash = null, landlord_email = 'styrelsen@parklet.test'
+    returning id, host_account_id`;
+  await sql`insert into spots select * from copy`;
+  await sql.end();
+
+  try {
+    await signIn(page, "anna@parklet.test");
+    await page.goto(`/uthyrare/${spot.host_account_id}/platser/${spot.id}`);
+    await page.getByRole("button", { name: "Skicka godkännandeförfrågan" }).click();
+    await expect(page.getByText("Förfrågan är skickad")).toBeVisible();
+    // The e-mail goes out as before.
+    expect(lastMailLink("/godkannande/")).toMatch(/^\/godkannande\//);
+    await logout(page);
+
+    await signIn(page, "styrelsen@parklet.test");
+    await page.goto("/");
+    await page.getByRole("button", { name: /^Notiser/ }).click();
+    await page.getByRole("link", { name: /Godkännande begärt: parkeringsplats på Haga Nygata 20/ }).click();
+    await expect(page.getByRole("heading", { name: "Får parkeringsplatsen hyras ut via Parklet?" })).toBeVisible();
+  } finally {
+    const cleanup = e2eDb();
+    await cleanup`delete from spots where id = ${spot.id}`;
+    await cleanup.end();
+  }
 });

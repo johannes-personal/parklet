@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { requireUser, safeNext } from "@/lib/auth/session";
+import { ownsRejectedHousehold } from "@/server/host-accounts";
 import { identityMode, startVerification, verifyIdentityMock } from "@/server/identity";
 
 export const metadata: Metadata = { title: "Legitimera dig" };
@@ -45,7 +46,8 @@ export default function VerifyPage({ searchParams }: PageProps<"/konto/verifiera
 async function Form({ searchParams }: { searchParams: PageProps<"/konto/verifiera">["searchParams"] }) {
   const { next, fel } = await searchParams;
   const user = await requireUser("/konto/verifiera");
-  if (user.identityVerified) {
+  const again = user.identityVerified && (await ownsRejectedHousehold(user.id));
+  if (user.identityVerified && !again) {
     return <p className="mt-6 rounded-xl bg-ok-soft px-4 py-3 font-medium text-ok">Du är redan legitimerad.</p>;
   }
   const mode = identityMode();
@@ -53,6 +55,7 @@ async function Form({ searchParams }: { searchParams: PageProps<"/konto/verifier
   return (
     <form action={verifyAction} className="mt-6 space-y-4">
       <input type="hidden" name="next" value={typeof next === "string" ? next : "/uthyrare"} />
+      {again ? <p className="rounded-xl bg-canvas px-4 py-3 text-sm">Ditt uthyrarkonto är inte godkänt längre. Legitimera dig igen, så granskar Parklet kontot på nytt.</p> : null}
       {error ? (
         <p role="alert" className="rounded-xl bg-danger-soft px-4 py-3 text-sm font-medium text-danger">
           {error}

@@ -163,12 +163,12 @@ describe("admin decisions", () => {
     const { account } = await makeBookableSpot();
     const status = async () => (await db.select({ s: hostAccounts.verificationStatus }).from(hostAccounts).where(eq(hostAccounts.id, account.id)))[0].s;
     expect(await status()).toBe("verified");
-    expect(await reviewAccount(account.id, "approve", null)).toBe(false);
-    expect(await reviewAccount(account.id, "reject", "x")).toBe(false);
-    expect(await reviewAccount(account.id, "revoke", "Fel organisationsnummer.")).toBe(true);
+    expect(await reviewAccount(account.id, "approve", null)).toBeNull();
+    expect(await reviewAccount(account.id, "reject", "x")).toBeNull();
+    expect(await reviewAccount(account.id, "revoke", "Fel organisationsnummer.")).toEqual({ kind: "household", spotsReset: 1 });
     expect(await status()).toBe("rejected");
     expect((await searchSpots({ center: null, start: null, end: null })).results).toEqual([]);
-    expect(await reviewAccount(account.id, "approve", null)).toBe(true);
+    expect(await reviewAccount(account.id, "approve", null)).toEqual({ kind: "household", spotsReset: 0 });
     expect(await status()).toBe("verified");
   });
 });

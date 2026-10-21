@@ -1,14 +1,14 @@
 import { appUrl } from "@/lib/app-url";
 import "server-only";
 import { api, cols, embed, must, names, parse, parseAll, rpc, toDb } from "@/db/api";
-import { availabilityWindows, documents, hostAccounts, spots, type DocumentRow, type HostAccount, type Spot } from "@/db/schema";
+import { availabilityWindows, documents, hostAccounts, spots, users, type DocumentRow, type HostAccount, type Spot } from "@/db/schema";
 import { normalizeWindows, type AvailabilityWindow } from "@/lib/availability";
 import { scheduleToWindows } from "@/lib/schedule";
 import { generateToken, hashToken } from "@/lib/auth/tokens";
 import type { SpotInput } from "@/lib/validation";
 import { isUuid } from "./ids";
 import { sendEmail } from "./mailer";
-import { notifyAccount, notifyAdmins } from "./notifications";
+import { notifyAccount, notifyAdmins, notifyUsers } from "./notifications";
 import { deleteDocumentFile } from "./storage";
 
 export { isUuid };
@@ -18,6 +18,7 @@ export type SpotWithWindows = Spot & { windows: AvailabilityWindow[] };
 const S = names(spots);
 const A = names(hostAccounts);
 const D = names(documents);
+const U = names(users);
 
 /** Bookable: what search (src/server/search.ts) filters on, as an API query on spots with the account embedded as `account`. */
 export const BOOKABLE_FILTERS = [
@@ -313,6 +314,24 @@ export async function requestLandlordApproval(accountId: string, spotId: string,
     button: { label: "Granska och svara", url: `${appUrl()}/godkannande/${token}` },
     footnote: "Parklet förmedlar parkering mellan privatpersoner, föreningar och företag. Uthyraren får inte hyra ut platsen via Parklet utan ert godkännande.",
   });
+  // The approver needs no account, but one who has one also finds the request in the bell
+  // (no second e-mail: the one above is it).
+  const approver = must<{ id: string }[]>(
+    await api().from("users").select(U.id).eq(U.email, spot.landlordEmail.trim().toLowerCase()).limit(1),
+    "requestLandlordApproval",
+  );
+  if (approver.length) {
+    await notifyUsers(
+      [approver[0].id],
+      {
+        kind: "landlord_approval_requested",
+        title: `Godkännande begärt: parkeringsplats på ${spot.address}`,
+        body: `${requestedBy} vill hyra ut parkeringsplatsen på ${spot.address}, ${spot.city} via Parklet och behöver godkännande från ${who}.`,
+        href: `/godkannande/${token}`,
+      },
+      { email: false },
+    );
+  }
   return { ok: true as const };
 }
 
@@ -435,19 +454,47 @@ export async function reviewSpot(spotId: string, adminId: string, decision: Revi
   return updated.length > 0;
 }
 
-export async function reviewAccount(accountId: string, decision: ReviewDecision, note: string | null) {
-  if (!isUuid(accountId)) return false;
+/** Why an account's spots went back for review when the account lost its approval. */
+export const ACCOUNT_NOT_APPROVED_NOTE = "Uthyrarkontot är inte godkänt längre. Skicka in platsen för granskning igen när kontot är godkänt.";
+
+/**
+ * Applies an admin's decision on an account. One that leaves the account rejected
+ * (a rejection, or a removed approval) starts the host over: the account's approved
+ * and submitted spots go back to "rejected" and have to be submitted and approved
+ * again, and a household's owner has to identify with BankID again (see
+ * recordVerifiedIdentity). Returns the account's kind and how many spots went back,
+ * or null if the decision didn't fit the account's state.
+ */
+export async function reviewAccount(
+  accountId: string,
+  decision: ReviewDecision,
+  note: string | null,
+): Promise<{ kind: HostAccount["kind"]; spotsReset: number } | null> {
+  if (!isUuid(accountId)) return null;
   const { from, to } = ACCOUNT_DECISIONS[decision];
-  const updated = must(
+  const [updated] = must<Pick<HostAccount, "kind">[]>(
     await api()
       .from("host_accounts")
       .update(toDb(hostAccounts, { verificationStatus: to, reviewNote: note, reviewedAt: new Date() }))
       .eq(A.id, accountId)
       .in(A.verificationStatus, from)
-      .select(A.id),
+      .select(cols(hostAccounts, ["kind"])),
     "reviewAccount",
   );
-  return updated.length > 0;
+  if (!updated) return null;
+  let spotsReset = 0;
+  if (to === "rejected") {
+    spotsReset = must(
+      await api()
+        .from("spots")
+        .update(toDb(spots, { review: "rejected", reviewNote: ACCOUNT_NOT_APPROVED_NOTE, reviewedAt: new Date(), submittedAt: null }))
+        .eq(S.hostAccountId, accountId)
+        .in(S.review, ["approved", "pending_review"])
+        .select(S.id),
+      "reviewAccount",
+    ).length;
+  }
+  return { kind: updated.kind, spotsReset };
 }
 
 /** Other spots of the same account at the same address (e.g. created together as "Plats 1…N"). */

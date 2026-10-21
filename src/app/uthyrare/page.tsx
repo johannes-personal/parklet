@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { Suspense } from "react";
+import { AccountDashboard } from "@/components/host/account-dashboard";
 import { HostIntro } from "@/components/host/host-intro";
 import { Badge } from "@/components/status-badge";
 import { getCurrentUser } from "@/lib/auth/session";
@@ -14,8 +14,12 @@ export const metadata: Metadata = {
 
 /**
  * The one way into hosting. Without a host account (or signed out) it explains
- * how renting out works and leads to /uthyrare/nytt; with one it opens that
+ * how renting out works and leads to /uthyrare/nytt; with one it shows that
  * account's dashboard; with several it lists them.
+ *
+ * The single account's dashboard is rendered here, not redirected to: the client
+ * router keeps a redirect it has seen, and after switching user on the same device
+ * the menu's "Uthyrning" sent the next user to the previous user's account.
  */
 export default function HostIndexPage() {
   return (
@@ -29,7 +33,7 @@ async function HostHome() {
   const user = await getCurrentUser();
   const accounts = user ? await listAccountsForUser(user.id) : [];
   if (accounts.length === 0) return <HostIntro />;
-  if (accounts.length === 1) redirect(`/uthyrare/${accounts[0].id}`);
+  if (user && accounts.length === 1) return <AccountDashboard user={user} account={accounts[0]} />;
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-10">
       <h1 className="text-2xl font-bold">Uthyrning</h1>

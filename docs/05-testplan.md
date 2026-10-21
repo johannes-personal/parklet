@@ -127,6 +127,18 @@ Log in as `johannes@jvo.se`, or as `admin@parklet.test` and use the e-mail log.
 5. Invite a co-administrator with a real address.
    - 📧 The invite e-mail has the button **Acceptera inbjudan**.
 
+### Removing an approval
+
+1. As admin, open a host's account (**Uthyrare**), write a reason and click **Ta bort godkännandet**.
+   - The host gets "Godkännandet av ditt uthyrarkonto har tagits bort" (or, for an organisation, "Verifieringen av er organisation har tagits bort").
+   - Its spots can't be booked and are gone from search.
+2. As the host, open **Uthyrning**.
+   - The checklist is back: for a household, BankID and "Parklet godkänner kontot" with the reason; the spot step is open and the spots say "Ej godkänd".
+3. A household: click **Legitimera dig igen** and identify.
+   - The account shows "Kontot granskas av Parklet"; admins get "Privat uthyrare att granska igen: …".
+4. As admin, approve the account, then approve each spot again. Only then is the spot bookable.
+5. Removing only a spot's approval opens the spot step on the host's checklist again.
+
 ## 6. Password reset 📧
 
 1. Log out and click **Glömt lösenordet?**.
