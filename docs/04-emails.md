@@ -14,9 +14,11 @@ rendered, at `/admin/epost`. Addresses on demo domains (`*.test`,
 | Forgotten password | The user | Välj ett nytt lösenord för Parklet | – | Välj nytt lösenord |
 | Invited as co-administrator | The invitee | Erik Berg har bjudit in dig att administrera Kvarteret AB på Parklet | – | Acceptera inbjudan |
 | Organisation sent for verification | All admins | Ny organisation att verifiera: Brf X | ✓ | Granska organisationen |
-| Organisation verified / needs more | Host account members | Er organisation är verifierad på Parklet | ✓ | Öppna i Parklet |
+| Organisation verified / needs more / approval removed | Host account members | Er organisation är verifierad på Parklet | ✓ | Öppna i Parklet |
+| Household approved / not approved / approval removed | The household's owner | Godkännandet av ditt uthyrarkonto har tagits bort | ✓ | Öppna i Parklet |
+| Rejected household identified with BankID again | All admins | Privat uthyrare att granska igen: Anna L | ✓ | Granska kontot |
 | **Spots** | | | | |
-| Approval request to BRF/landlord | The landlord's address (no account needed) | Godkännande för uthyrning av parkeringsplats – Linnégatan 40 | – | Granska och svara |
+| Approval request to BRF/landlord | The landlord's address (no account needed; if the address has a Parklet account, the request is also in that user's bell, without a second e-mail) | Godkännande för uthyrning av parkeringsplats – Linnégatan 40 | ✓ if the address has an account | Granska och svara |
 | Landlord answered | Host account members | Garage X: uthyrningen är godkänd | ✓ | Öppna i Parklet |
 | Spot sent for review (one mail for spots at the same address) | All admins | Ny plats att granska: Garage X (+2 till på samma adress) | ✓ | Granska platsen |
 | Spot approved / needs more | Host account members | Din plats Garage X är godkänd | ✓ | Öppna i Parklet |

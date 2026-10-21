@@ -13,7 +13,7 @@ import {
   uploadDocumentAction,
   withdrawSpotAction,
 } from "@/app/uthyrare/actions";
-import { errProps, FieldError, FormAlert, SubmitButton, type FormState } from "@/components/form";
+import { errProps, FieldError, FormAlert, FormErrorSummary, SubmitButton, type FormState } from "@/components/form";
 
 export function DocumentUploader({
   accountId,
@@ -411,6 +411,7 @@ export function CreateAccountForm({ identityVerified }: { identityVerified: bool
 
       {!identityVerified ? <p className="text-sm text-ink-soft">Du kommer att behöva legitimera dig med BankID innan du kan ta emot bokningar.</p> : null}
       <SubmitButton className="btn-primary btn-lg">Skapa uthyrarkonto</SubmitButton>
+      <FormErrorSummary state={state} />
     </form>
   );
 }

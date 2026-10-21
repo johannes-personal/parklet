@@ -121,6 +121,9 @@ export async function hostTodos(user: CurrentUser): Promise<Todo[]> {
     if (account.kind !== "household" && (account.verificationStatus === "unverified" || account.verificationStatus === "rejected")) {
       todos.push({ key: `verify:${account.id}`, title: `Skicka in underlag för att verifiera ${account.name}`, href: `/uthyrare/${account.id}` });
     }
+    if (account.kind === "household" && account.verificationStatus === "rejected" && role === "owner" && user.identityVerified) {
+      todos.push({ key: `reverify:${account.id}`, title: `Legitimera dig igen så att kontot granskas på nytt${suffix(account.name)}`, href: `/konto/verifiera?next=/uthyrare/${account.id}` });
+    }
     if (account.payoutStatus !== "active" && role === "owner") {
       todos.push({ key: `payout:${account.id}`, title: `Koppla utbetalningskonto${suffix(account.name)}`, href: `/uthyrare/${account.id}` });
     }

@@ -71,6 +71,12 @@ draft ──(required documents present)──► pending_review ──(admin)�
   payouts are connected.
 - **Changing the address, pin or basis** of an approved spot sends it back to review. A
   declined BRF approval pulls an approved spot immediately.
+- **An account that loses its approval starts over.** When an admin rejects an account or
+  removes its approval, its approved and submitted spots go back to "rejected" and each has to
+  be approved again. An organisation sends in its documents again; a household's owner
+  identifies with BankID again, which sends the account to Parklet's review (a new BankID only
+  verifies a household that was never reviewed, so it can't overrule a rejection). Existing
+  bookings stand.
 - **Documents are private.** Their type is sniffed from the bytes (PDF/JPEG/PNG/HEIC only,
   10 MB). They're stored outside the web root and served only to account members and admins,
   with `Content-Security-Policy: sandbox`.
@@ -149,7 +155,8 @@ src/
 tests/unit             Pricing, availability, DST, schedules
 tests/integration      Booking holds, races, search visibility, cancellation, registration (real Postgres)
 e2e/                   Playwright: driver booking, double-booking, host onboarding with BRF approval,
-                       organisation verification and invitations, upload sniffing, smoke (desktop + mobile)
+                       organisation verification and invitations, upload sniffing, review and removed
+                       approvals, access rules, forms keeping their input after errors, smoke (desktop + mobile)
 ```
 
 Security notes:

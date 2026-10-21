@@ -3,7 +3,7 @@
 import { useFieldIds } from "@/components/use-field-ids";
 import { useActionState, useState } from "react";
 import { saveSpotAction } from "@/app/uthyrare/actions";
-import { errProps, FieldError, FormAlert, SubmitButton, type FormState } from "@/components/form";
+import { errProps, FieldError, FormAlert, FormErrorSummary, SubmitButton, type FormState } from "@/components/form";
 import { LocationPicker } from "@/components/map/location-picker";
 import { PlaceSearch, type PickedPlace } from "@/components/place-search";
 import type { Schedule } from "@/lib/schedule";
@@ -336,6 +336,7 @@ export function SpotForm({
         </SubmitButton>
         {!spotId ? <p className="text-sm text-muted">Platsen syns inte för förare förrän den är granskad och godkänd.</p> : null}
       </div>
+      <FormErrorSummary state={state} />
     </form>
   );
 }

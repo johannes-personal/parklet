@@ -2,7 +2,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import * as oidc from "openid-client";
 import { api, cols, embed, must, names, parse, toDb } from "@/db/api";
-import { hostAccountMembers, hostAccounts, identityRequests, users } from "@/db/schema";
+import { hostAccountMembers, hostAccounts, identityRequests, users, type HostAccount } from "@/db/schema";
 
 const R = names(identityRequests);
 const U = names(users);
@@ -11,6 +11,7 @@ const A = names(hostAccounts);
 import { appUrl } from "@/lib/app-url";
 import { encryptField, hasEncryptionKey } from "@/lib/crypto";
 import { normalizePersonnummer } from "@/lib/personnummer";
+import { notifyAdmins } from "./notifications";
 
 /**
  * Electronic identification with Swedish BankID through Idura (formerly
@@ -173,22 +174,49 @@ async function recordVerifiedIdentity(
     "recordVerifiedIdentity",
   );
 
-  // A household account is verified by its owner's identity.
-  const households = must<{ account: { id: string } }[]>(
+  // A household account is verified by its owner's identity, the first time. One that
+  // Parklet has rejected (or whose approval was removed) isn't approved by a new BankID:
+  // that sends it back to Parklet's review instead.
+  const households = must<{ account: Pick<HostAccount, "id" | "name" | "verificationStatus"> }[]>(
     await api()
       .from("host_account_members")
-      .select(embed("account", hostAccounts, ["id"], { inner: true }))
+      .select(embed("account", hostAccounts, ["id", "name", "verificationStatus"], { inner: true }))
       .eq(M.userId, userId)
       .eq(M.role, "owner")
       .eq(`account.${A.kind}`, "household"),
     "recordVerifiedIdentity",
   );
-  const ids = households.map((h) => h.account.id);
-  if (ids.length) {
+  const fresh = households.filter((h) => h.account.verificationStatus === "unverified").map((h) => h.account.id);
+  const rejected = households.filter((h) => h.account.verificationStatus === "rejected").map((h) => h.account);
+  if (fresh.length) {
     must(
-      await api().from("host_accounts").update(toDb(hostAccounts, { verificationStatus: "verified", reviewedAt: new Date() })).in(A.id, ids),
+      await api()
+        .from("host_accounts")
+        .update(toDb(hostAccounts, { verificationStatus: "verified", reviewedAt: new Date() }))
+        .in(A.id, fresh)
+        .eq(A.verificationStatus, "unverified"),
       "recordVerifiedIdentity",
     );
+  }
+  for (const account of rejected) {
+    const resubmitted = must(
+      await api()
+        .from("host_accounts")
+        .update(toDb(hostAccounts, { verificationStatus: "pending" }))
+        .eq(A.id, account.id)
+        .eq(A.verificationStatus, "rejected")
+        .select(A.id),
+      "recordVerifiedIdentity",
+    );
+    if (!resubmitted.length) continue;
+    await notifyAdmins({
+      kind: "admin_account_submitted",
+      title: `Privat uthyrare att granska igen: ${account.name}`,
+      body: `${account.name} har legitimerat sig med BankID igen efter att kontot inte godkändes.`,
+      details: [["Konto", `${account.name} (privatperson)`]],
+      href: `/admin/konton/${account.id}`,
+      cta: "Granska kontot",
+    });
   }
 }
 

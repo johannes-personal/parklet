@@ -61,22 +61,42 @@ export async function reviewAccountAction(formData: FormData) {
   const note = String(formData.get("note") ?? "").trim() || null;
   if (!decision) redirect(`/admin/konton/${id}`);
   if (decision !== "approve" && !note) redirect(`/admin/konton/${id}?fel=motivering`);
-  if (!(await reviewAccount(id, decision, note))) redirect(`/admin/konton/${id}?fel=status`);
-  await notifyAccount(id, {
-    kind: "account_reviewed",
-    title:
-      decision === "approve"
-        ? "Er organisation är verifierad på Parklet"
-        : decision === "reject"
-          ? "Er organisation behöver kompletteras"
-          : "Verifieringen av er organisation har tagits bort",
-    body:
-      decision === "approve"
-        ? "Organisationen är verifierad."
-        : decision === "reject"
-          ? `Vi kunde inte verifiera organisationen än:\n\n${note}`
-          : `Organisationens platser kan inte bokas förrän den är verifierad igen.\n\n${note}`,
-    href: `/uthyrare/${id}`,
-  });
+  const result = await reviewAccount(id, decision, note);
+  if (!result) redirect(`/admin/konton/${id}?fel=status`);
+  await notifyAccount(id, { kind: "account_reviewed", ...accountDecisionMessage(decision, result, note), href: `/uthyrare/${id}` });
   redirect(back(formData, `/admin/konton/${id}`));
+}
+
+/**
+ * What the host is told about a decision on their account. A household is approved
+ * through its owner's BankID, so after a rejection that is what they do again; an
+ * organisation sends in its documents again.
+ */
+function accountDecisionMessage(
+  decision: ReviewDecision,
+  { kind, spotsReset }: { kind: "household" | "association" | "company"; spotsReset: number },
+  note: string | null,
+): { title: string; body: string } {
+  const household = kind === "household";
+  if (decision === "approve") {
+    return household
+      ? { title: "Ditt uthyrarkonto är godkänt på Parklet", body: "Kontot är godkänt. Dina platser kan bokas när de är godkända och utbetalningar är kopplade." }
+      : { title: "Er organisation är verifierad på Parklet", body: "Organisationen är verifierad." };
+  }
+  const redo = household
+    ? "Legitimera dig med BankID igen från ditt uthyrarkonto, så granskar vi kontot på nytt."
+    : "Ladda upp underlagen och skicka in organisationen för granskning igen.";
+  const spots = spotsReset
+    ? `\n\n${spotsReset === 1 ? "Platsen" : `De ${spotsReset} platserna`} behöver också skickas in för granskning igen när kontot är godkänt.`
+    : "";
+  if (decision === "reject") {
+    return {
+      title: household ? "Ditt uthyrarkonto behöver granskas igen" : "Er organisation behöver kompletteras",
+      body: `${household ? "Vi kunde inte godkänna kontot än" : "Vi kunde inte verifiera organisationen än"}:\n\n${note}\n\n${redo}${spots}`,
+    };
+  }
+  return {
+    title: household ? "Godkännandet av ditt uthyrarkonto har tagits bort" : "Verifieringen av er organisation har tagits bort",
+    body: `${household ? "Dina platser" : "Organisationens platser"} kan inte bokas förrän kontot är godkänt igen. Bokningar som redan är gjorda gäller.\n\n${note}\n\n${redo}${spots}`,
+  };
 }

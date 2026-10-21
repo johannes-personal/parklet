@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { e2eDb, signIn } from "./helpers";
+import { e2eDb, login, PASSWORD, signIn } from "./helpers";
 
 /** Ids from the seed (scripts/seed.mts). */
 async function seedIds() {
@@ -106,4 +106,29 @@ test("a spot that can't be booked says so and offers a search nearby", async ({ 
 
   await page.goto("/plats/00000000-0000-4000-8000-000000000000");
   await expect(page.getByRole("heading", { name: "Platsen finns inte" })).toBeVisible();
+});
+
+test("after switching user on the same device, Uthyrning opens the new user's own account", async ({ page }) => {
+  const openHosting = async () => {
+    await page.getByRole("button", { name: "Meny" }).click();
+    await page.getByRole("dialog", { name: "Meny" }).getByRole("link", { name: "Uthyrning" }).click();
+  };
+  // Both have a single host account, which /uthyrare shows directly.
+  await login(page, "ny@parklet.test");
+  await openHosting();
+  await expect(page.getByRole("heading", { name: "Maja Ek", level: 1 })).toBeVisible();
+  await page.getByRole("button", { name: "Meny" }).click();
+  await page.getByRole("button", { name: "Logga ut" }).click();
+  await expect(page).toHaveURL(/\/$/);
+
+  // Signing in again without a page load, as a user does: the router's cache survives.
+  await page.getByRole("button", { name: "Meny" }).click();
+  await page.getByRole("dialog", { name: "Meny" }).getByRole("link", { name: "Logga in" }).click();
+  await page.getByLabel("E-post").fill("anna@parklet.test");
+  await page.getByLabel("Lösenord", { exact: true }).fill(PASSWORD);
+  await page.getByRole("button", { name: "Logga in" }).click();
+  await expect(page).not.toHaveURL(/logga-in/);
+  await openHosting();
+  await expect(page.getByRole("heading", { name: "Anna Lindqvist", level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Du har inte tillgång till sidan" })).toHaveCount(0);
 });

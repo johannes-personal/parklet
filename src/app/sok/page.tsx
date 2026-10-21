@@ -8,7 +8,7 @@ import { loadSpotForViewer, SpotBooking, SpotFacts, SpotHeading } from "@/compon
 import { formatDistance } from "@/lib/geo";
 import { spotFeatures } from "@/lib/labels";
 import { formatSek } from "@/lib/money";
-import { formatDuration, formatRange, parseLocalDateTime } from "@/lib/time";
+import { formatDuration, formatRange, isPast, parseLocalDateTime } from "@/lib/time";
 import { geocode } from "@/server/geocode";
 import { isUuid } from "@/server/ids";
 import { searchSpots } from "@/server/search";
@@ -61,7 +61,8 @@ async function Results({ searchParams }: { searchParams: SP }) {
   }
   const start = parseLocalDateTime(fromRaw);
   const end = parseLocalDateTime(toRaw);
-  const timed = Boolean(start && end && end > start);
+  // Times that have already passed (an old or shared link) are ignored, as in the pickers.
+  const timed = Boolean(start && end && end > start && !isPast(start));
   const outcome = await searchSpots({ center, start: timed ? start : null, end: timed ? end : null });
 
   // The search URL with or without a selected spot.

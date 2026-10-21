@@ -42,6 +42,25 @@ export async function getAccountForMember(accountId: string, userId: string): Pr
   return row ? withRole(row) : null;
 }
 
+/**
+ * Whether the user owns a household account that Parklet has rejected. Its way back
+ * is a new BankID identification, which sends it to review again (see identity.ts),
+ * so such a user may identify again even though they already have.
+ */
+export async function ownsRejectedHousehold(userId: string): Promise<boolean> {
+  const rows = must<unknown[]>(
+    await api()
+      .from("host_account_members")
+      .select(embed("account", hostAccounts, ["id"], { inner: true }))
+      .eq(M.userId, userId)
+      .eq(M.role, "owner")
+      .eq(`account.${A.kind}`, "household")
+      .eq(`account.${A.verificationStatus}`, "rejected"),
+    "ownsRejectedHousehold",
+  );
+  return rows.length > 0;
+}
+
 export async function createHostAccount(input: {
   userId: string;
   kind: HostKind;

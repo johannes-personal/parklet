@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useSyncExternalStore } from "react";
+import { useEffect, useId, useSyncExternalStore } from "react";
 import {
   addMinutes,
   dayOptions,
@@ -58,6 +58,14 @@ export function TimeRangePicker({ from, to, onChange, minNoticeMinutes = 0, name
   const end = parseLocalDateTime(to);
   const earliest = now == null ? null : minNoticeMinutes > 0 ? roundToStep(addMinutes(new Date(now), minNoticeMinutes), "up") : roundToStep(new Date(now));
   const length = start && end && end > start ? Math.round((end.getTime() - start.getTime()) / 60_000) : null;
+
+  // Times that have already passed (an old link, a page left open) can't be shown: the
+  // selects only offer future times, so they would display one thing and hold another.
+  // Start over instead.
+  const past = now != null && start != null && start.getTime() < now - 5 * 60_000;
+  useEffect(() => {
+    if (past) onChange("", "");
+  }, [past, onChange]);
 
   function setStart(next: Date) {
     // Moving the start keeps the chosen length, like a calendar does.
