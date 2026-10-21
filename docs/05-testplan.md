@@ -42,6 +42,7 @@ Markers:
   26. [Access rules](#26-access-rules)
   27. [Phone checks](#27-phone-checks)
   28. [Daily summary](#28-daily-summary-)
+  29. [Your account: details, Mina fordon, deleting it](#29-your-account-details-mina-fordon-deleting-it)
 
 ---
 
@@ -108,6 +109,7 @@ each with a car still to register.
 1. Log out. Open **Hitta parkering**. Search for "Göteborg".
    - The map fills the page and the list floats on the left.
    - The map credits show only as a small **(i)** in the corner; clicking it expands them.
+   - The spots within 3 km come first; when there are fewer than ten, **Andra platser** lists the nearest ones further away ("Längre bort än 3 km, närmast först"), so at least ten are shown when there are that many. Search for "Malmö": Uppfart Västra Hamnen first, the other Malmö spots under **Andra platser**.
 2. Click **Carport nära Liseberg**, in the list or on its pin.
    - The spot opens in a panel on the right, still over the map (the URL gets `plats=`).
    - Signed out, there is no car field yet and the access instructions are hidden.
@@ -121,9 +123,9 @@ each with a car still to register.
    - You come back to the same spot, over the map, with the times kept.
    - Now the car is asked for (**Välj bil**: ABC123 – Volvon, or **Annan bil…**).
 6. Click **Fortsätt till betalning** and pay: with Stripe on, with the test card 4242 4242 4242 4242 (flow 18); otherwise with **Betala … (testläge)**.
-   - "Klart! Din parkering är bokad och betald." and the booking with **Hitta och ta dig in** (the access instructions) and **Vägbeskrivning**.
+   - "Klart! Din parkering är bokad och betald." and the booking with **Hitta och ta dig in** (the access instructions) and **Vägbeskrivning**; **Bokad** says when it was booked.
    - **Bell:** "Bokningsbekräftelse: Carport nära Liseberg".
-   - **E-post (admin log):** the booking confirmation with Plats/Tid/Bil/Totalt betalt/Boknings-id.
+   - **E-post (admin log):** the booking confirmation with Plats/Tid/Bil/Bokad/Totalt betalt/Boknings-id. Under **Visa som mejl**, **Visa bokningen** opens the booking in a new tab.
    - Erik gets "Ny bokning: Carport nära Liseberg" (bell + e-mail log).
 7. Open **Mina bokningar**, open the booking and cancel it (**Avboka**, confirm the dialog).
    - "Bokningen är avbokad och pengarna återbetalas till ditt betalsätt inom några bankdagar."
@@ -161,7 +163,7 @@ Two browsers (or a normal and a private window).
 1. Browser A, as `forare@parklet.test`: search Malmö with a time two days ahead, open **Uppfart Västra Hamnen**, click **Fortsätt till betalning**. Stay on **Betala bokningen** without paying.
    - "Platsen är reserverad åt dig till kl. …" (15 minutes).
 2. Browser B, as `anna@parklet.test`: the same search.
-   - Malmö's only spot is taken: "Inga lediga platser i närheten – visar de närmaste." and Uppfart Västra Hamnen is not listed.
+   - Malmö's only spot is taken: "Inga lediga platser inom 3 km – här är de närmaste." under **Andra platser** and Uppfart Västra Hamnen is not listed.
 3. In B, open the spot's link directly.
    - **Redan bokad** lists the time; the box says "Platsen är redan bokad under en del av tiden."
    - Enter a car (e.g. XYZ987) and click **Fortsätt till betalning**: "Tyvärr, någon annan har redan bokat platsen under den här tiden. Välj en annan tid."
@@ -227,7 +229,7 @@ Register a new account with a real address (📧 optional).
    - Then complete it: the BankID step is ✓. A household needs no review by Parklet.
 3. Connect payouts (flow 21).
 4. Click **Lägg upp en plats**. Step 1, **Platsen**:
-   - **Sök adress** and pick a result, or type **Adress** and **Ort** and click the map to place the pin.
+   - **Sök adress** and pick a result: the field shows the whole address with postnummer and postort, and **Adress** gets the street (also for a named place such as "Malmö Arena"). Or type **Adress** and **Ort** and click the map to place the pin.
    - **Rubrik**, **Typ av plats**, **Pris per timme (kr)**.
    - Under **Din rätt att hyra ut platsen** choose **Jag/vi äger platsen**.
    - Click **Spara och fortsätt till underlag**: "Platsen är sparad."
@@ -570,7 +572,7 @@ After an error, nothing you entered may jump back to its default.
 
 ## 25. The bell, per role
 
-The bell appears for hosts and admins, and for drivers once they have a notification.
+Everyone who is logged in has a bell, straight after logging in or registering, also with nothing in it yet ("Inget nytt än."); it updates itself without a reload.
 
 1. **Driver** (`forare@parklet.test`): booking confirmations, "… är registrerad för …", cancellations by the host. No **Att göra**.
 2. **New host** (`ny@parklet.test`): **Att göra** "Legitimera dig med BankID", "Koppla utbetalningskonto", and "Slutför och skicka in <rubrik>" for a draft spot. Each disappears once done.
@@ -612,3 +614,16 @@ This one can't be triggered from the UI.
 
 - It is sent every morning at 06:00 UTC (08:00 Swedish summer time) to all admins, but only when something is waiting or happened in the last 24 hours.
 - Check `johannes@jvo.se` the next morning for "Parklet: N att granska" or "Parklet: dagens sammanfattning", with the button **Öppna granskningen**.
+
+## 29. Your account: details, Mina fordon, deleting it
+
+1. As `forare@parklet.test`, open **Mina bokningar** and scroll to **Ditt konto**.
+   - Namn, E-post, **Kontotyp: Förare**, BankID "Inte legitimerad (behövs bara för att hyra ut)".
+   - **Mina fordon** with what it is for, and **Bli uthyrare**.
+2. As `erik@parklet.test`: **Kontotyp: Förare och uthyrare**, with his two host accounts (Privatperson, Företag) as links, and **Skapa ett till uthyrarkonto** with why an account can't change type.
+3. Register a new account (a real address works too) and open **Ta bort kontot** under **Ditt konto**.
+   - Without the box ticked: "Bekräfta att du vill ta bort kontot."; with a wrong password: "Fel lösenord.".
+   - With both: "Ditt konto är borttaget", logged out; logging in with the old details fails, and the address can register again.
+4. Refusals: with a coming booking ("Du har kommande bokningar …"), as a host with a coming booking on a spot, as the owner of an account with co-administrators, and as an admin.
+5. A host's deleted account: its spots are paused (admin: **Platser**) and its documents gone; bookings already made stay, without the person's name.
+

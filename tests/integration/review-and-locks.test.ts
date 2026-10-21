@@ -173,30 +173,47 @@ describe("admin decisions", () => {
   });
 });
 
-describe("search far from any spot", () => {
-  it("looks further, and in the end shows the closest spots", async () => {
-    const { spotId } = await makeBookableSpot();
-    // 7 km from the spot in Göteborg: found in the 15 km circle.
-    const near = await searchSpots({ center: { lat: 57.763, lng: 11.97 }, start: null, end: null });
-    expect(near).toMatchObject({ widened: true, radiusM: 15000 });
-    expect(near.results.map((r) => r.id)).toEqual([spotId]);
-    // Kiruna, ~1200 km away: the closest spots wherever they are.
+describe("spots further away", () => {
+  const at = async (lat: number, title: string) => {
+    const [first] = await db.select().from(spots).limit(1);
+    const [row] = await db.insert(spots).values({ ...first, id: undefined, title, lat, createdAt: undefined, updatedAt: undefined }).returning();
+    return row.id;
+  };
+
+  it("are shown as other places, nearest first, also when the circle holds some", async () => {
+    const { spotId: centre } = await makeBookableSpot({ lat: 57.7, lng: 11.97 });
+    // 4.9 km north: outside the 3 km circle, in the same town. 7 km from the second search point.
+    const outskirts = await at(57.744, "Utkanten");
+    const town = await searchSpots({ center: { lat: 57.7, lng: 11.97 }, start: null, end: null });
+    expect(town.results.map((r) => r.id)).toEqual([centre]);
+    expect(town.others.map((r) => r.id)).toEqual([outskirts]);
+
+    // Nothing within 3 km: all are other places.
+    const off = await searchSpots({ center: { lat: 57.807, lng: 11.97 }, start: null, end: null });
+    expect(off.results).toEqual([]);
+    expect(off.others.map((r) => r.id)).toEqual([outskirts, centre]);
+
+    // Kiruna, ~1200 km away: still the closest spots, wherever they are.
     const far = await searchSpots({ center: { lat: 67.855, lng: 20.225 }, start: null, end: null });
-    expect(far).toMatchObject({ widened: true, radiusM: null });
-    expect(far.results.map((r) => r.id)).toEqual([spotId]);
-    expect(far.results[0].distanceM).toBeGreaterThan(1_000_000);
+    expect(far.results).toEqual([]);
+    expect(far.others.map((r) => r.id)).toEqual([outskirts, centre]);
+    expect(far.others[1].distanceM).toBeGreaterThan(1_000_000);
   });
 
-  it("shows at most ten closest spots, nearest first", async () => {
-    await makeBookableSpot();
-    const first = (await db.select().from(spots))[0];
-    // Eleven more spots of the same host, further and further north.
-    for (let i = 1; i <= 11; i++) {
-      await db.insert(spots).values({ ...first, id: undefined, title: `Plats ${i}`, lat: 57.7 + i * 0.5, createdAt: undefined, updatedAt: undefined });
-    }
-    const far = await searchSpots({ center: { lat: 67.855, lng: 20.225 }, start: null, end: null });
-    expect(far.results).toHaveLength(10);
-    const d = far.results.map((r) => r.distanceM!);
-    expect(d).toEqual([...d].sort((a, b) => a - b));
+  it("fill up to ten spots in all, and none are added once the circle holds ten", async () => {
+    await makeBookableSpot({ lat: 57.7, lng: 11.97 });
+    for (let i = 1; i <= 3; i++) await at(57.7 + i * 0.001, `Nära ${i}`);
+    for (let i = 1; i <= 11; i++) await at(57.7 + i * 0.5, `Långt bort ${i}`);
+    const some = await searchSpots({ center: { lat: 57.7, lng: 11.97 }, start: null, end: null });
+    expect(some.results).toHaveLength(4);
+    expect(some.others).toHaveLength(6);
+    const d = some.others.map((r) => r.distanceM!);
+    expect(d).toEqual([...d].sort((x, y) => x - y));
+    expect(d[0]).toBeGreaterThan(3000);
+
+    for (let i = 4; i <= 9; i++) await at(57.7 + i * 0.001, `Nära ${i}`);
+    const enough = await searchSpots({ center: { lat: 57.7, lng: 11.97 }, start: null, end: null });
+    expect(enough.results).toHaveLength(10);
+    expect(enough.others).toEqual([]);
   });
 });

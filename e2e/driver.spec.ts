@@ -94,7 +94,8 @@ test("a slot cannot be booked twice", async ({ browser }, testInfo) => {
   await signIn(b, "anna@parklet.test");
   await b.goto(url);
   // Malmö's only spot is taken, so the search shows the closest free spots elsewhere instead.
-  await expect(b.getByText("Inga lediga platser i närheten – visar de närmaste.")).toBeVisible();
+  await expect(b.getByText("Inga lediga platser inom 3 km – här är de närmaste.")).toBeVisible();
+  await expect(b.getByRole("heading", { name: "Andra platser" })).toBeVisible();
   await expect(b.getByTestId("search-result").first()).toBeVisible();
   await expect(b.getByText("Uppfart Västra Hamnen")).toHaveCount(0);
   await b.goto(spotUrl);
@@ -117,7 +118,7 @@ test("a slot cannot be booked twice", async ({ browser }, testInfo) => {
 test("a town without spots still gets the closest ones", async ({ page }) => {
   await page.goto("/sok?q=Kiruna&lat=67.8557&lng=20.2253");
   await openResults(page);
-  await expect(page.getByText("Inga platser i närheten – visar de närmaste.")).toBeVisible();
+  await expect(page.getByText("Inga platser inom 3 km – här är de närmaste.")).toBeVisible();
   await expect(page.getByTestId("search-result")).toHaveCount(10);
   // Uppsala is the nearest seeded town to Kiruna.
   await expect(page.getByTestId("search-result").first()).toContainText("Uppsala");

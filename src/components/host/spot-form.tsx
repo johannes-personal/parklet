@@ -58,11 +58,13 @@ export function SpotForm({
           id={f("addressSearch")}
           label="Sök adress"
           showNearMe={false}
+          showFullAddress
           placeholder="Gatuadress och ort"
           onPick={(p) => {
             if (!p) return;
             setTarget(p);
-            if (p.detail || p.label) setAddress(p.label);
+            // A named place ("Malmö Arena") still gets its street address in the address field.
+            if (p.street || p.detail || p.label) setAddress(p.street ?? p.label);
             if (p.city) setCity(p.city);
           }}
         />

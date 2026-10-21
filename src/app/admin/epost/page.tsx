@@ -51,12 +51,24 @@ async function Mails() {
           {m.html ? (
             <details className="mt-3">
               <summary className="cursor-pointer text-sm font-medium">Visa som mejl</summary>
-              {/* Sandboxed: the mail's HTML can't run scripts or reach this page. */}
-              <iframe title={`Mejl: ${m.subject}`} srcDoc={m.html} sandbox="" className="mt-2 h-[640px] w-full rounded-lg border border-line" />
+              {/* Sandboxed: the mail's HTML can't run scripts or reach this page. Its links open in a
+                  new tab, as in a mail program (inside the frame Parklet's pages refuse to load). */}
+              <iframe
+                title={`Mejl: ${m.subject}`}
+                srcDoc={inNewTab(m.html)}
+                sandbox="allow-popups allow-popups-to-escape-sandbox"
+                className="mt-2 h-[640px] w-full rounded-lg border border-line"
+              />
             </details>
           ) : null}
         </li>
       ))}
     </ul>
   );
+}
+
+/** The mail's HTML with every link opening in a new tab. */
+function inNewTab(html: string) {
+  const base = '<base target="_blank">';
+  return /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, (head) => head + base) : base + html;
 }

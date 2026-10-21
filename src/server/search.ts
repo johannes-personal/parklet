@@ -25,10 +25,13 @@ const CANDIDATE_KEYS = [
 type Candidate = Pick<Spot, (typeof CANDIDATE_KEYS)[number]>;
 
 export const DEFAULT_RADIUS_M = 3000;
-/** Wider and wider circles when nothing is found nearby; null means anywhere (the closest spots). */
-const WIDER_RADII_M = [15_000, 100_000, null] as const;
-/** How many spots "the closest" shows when there are none in the wider circles. */
-const NEAREST_ANYWHERE = 10;
+/**
+ * A search shows at least this many spots when there are that many: those within
+ * DEFAULT_RADIUS_M, then the nearest ones further away ("Andra platser").
+ */
+export const MIN_SHOWN = 10;
+/** Where the spots further away are looked for, circle by circle; null means anywhere. */
+const OTHER_RADII_M = [15_000, 100_000, null] as const;
 const MAX_RESULTS = 100;
 
 export type SearchResult = Pick<
@@ -41,27 +44,29 @@ export type SearchResult = Pick<
 };
 
 export type SearchOutcome = {
+  /** The spots within DEFAULT_RADIUS_M (all spots without a centre), nearest first. */
   results: SearchResult[];
-  /** The circle the results come from: null without a centre, or when they are simply the closest spots. */
-  radiusM: number | null;
-  /** True when nothing was found within DEFAULT_RADIUS_M and the search looked further. */
-  widened: boolean;
+  /** The nearest spots further away, so that at least MIN_SHOWN are shown in all; nearest first. */
+  others: SearchResult[];
 };
 
+/**
+ * Bookable spots near a point, free for the whole period when one is given. Every spot
+ * the search could show is shown the same way whatever else is free: a spot just outside
+ * the circle is among "the others" rather than appearing only when nothing nearer does.
+ */
 export async function searchSpots(opts: { center: LatLng | null; start: Date | null; end: Date | null }): Promise<SearchOutcome> {
   const { center, start, end } = opts;
-  if (!center) {
-    return { results: await runSearch(null, null, start, end), radiusM: null, widened: false };
+  if (!center) return { results: await runSearch(null, null, start, end), others: [] };
+  const results = await runSearch(center, DEFAULT_RADIUS_M, start, end);
+  if (results.length >= MIN_SHOWN) return { results, others: [] };
+  const near = new Set(results.map((r) => r.id));
+  let others: SearchResult[] = [];
+  for (const radiusM of OTHER_RADII_M) {
+    others = (await runSearch(center, radiusM, start, end)).filter((r) => !near.has(r.id));
+    if (results.length + others.length >= MIN_SHOWN) break;
   }
-  const near = await runSearch(center, DEFAULT_RADIUS_M, start, end);
-  if (near.length > 0) return { results: near, radiusM: DEFAULT_RADIUS_M, widened: false };
-  // Nothing close: look further, and in the end show the closest spots wherever they are,
-  // so a town without spots still gets an answer.
-  for (const radiusM of WIDER_RADII_M) {
-    const results = await runSearch(center, radiusM, start, end);
-    if (results.length > 0) return { results: radiusM ? results : results.slice(0, NEAREST_ANYWHERE), radiusM, widened: true };
-  }
-  return { results: [], radiusM: null, widened: true };
+  return { results, others: others.slice(0, MIN_SHOWN - results.length) };
 }
 
 async function runSearch(center: LatLng | null, radiusM: number | null, start: Date | null, end: Date | null) {

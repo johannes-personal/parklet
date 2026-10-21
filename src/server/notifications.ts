@@ -179,8 +179,13 @@ export async function adminTodos(): Promise<Todo[]> {
 export type BellItem = { id: string; title: string; href: string; createdAt: string; read: boolean };
 export type BellData = { todos: Todo[]; items: BellItem[]; unread: number };
 
-/** Everything the header's bell shows, or null when it shouldn't be shown (people who neither host nor review and have no news). */
-export async function bellData(user: CurrentUser): Promise<BellData | null> {
+/**
+ * What the header's bell shows. Every signed-in user has a bell, empty or not: it is the
+ * bell that keeps itself up to date (the header isn't re-rendered on client-side
+ * navigation), so one that only appeared with the first notification showed up only
+ * after a reload.
+ */
+export async function bellData(user: CurrentUser): Promise<BellData> {
   const host = await isHost(user.id);
   const [hostTasks, adminTasks, items, unread] = await Promise.all([
     host ? hostTodos(user) : [],
@@ -188,7 +193,6 @@ export async function bellData(user: CurrentUser): Promise<BellData | null> {
     listNotifications(user.id),
     unreadCount(user.id),
   ]);
-  if (!host && !user.isAdmin && items.length === 0) return null;
   return {
     todos: [...adminTasks, ...hostTasks],
     items: items.map((n) => ({ id: n.id, title: n.title, href: n.href, createdAt: n.createdAt.toISOString(), read: n.readAt != null })),

@@ -7,10 +7,13 @@ organisations rent out their parking spots when they're not using them.
   of the current site (16 findings, prioritised), how the rebuild fixes each one, and the
   technical overview: stack and why, data and security, the right-to-rent, payment and
   vehicle-registration rules, integrations, tests, and the steps left before launch.
+  Also as a PDF with the screenshots embedded, [docs/01-rapport.pdf](docs/01-rapport.pdf):
+  rebuild it with `npm run docs:pdf` after changing the report. The screenshots of the new
+  version (`docs/images/flow-*.jpg`) are taken from the demo data.
 - **[docs/04-emails.md](docs/04-emails.md)**: every e-mail and notification.
 - **[docs/05-testplan.md](docs/05-testplan.md)**: manual test plan for the main flows.
 
-![MVP home page](docs/images/mvp-home.png)
+![MVP home page](docs/images/flow-01-startsida.jpg)
 
 ## Quick start
 

@@ -160,6 +160,7 @@ export async function announceBooking(bookingId: string) {
     ["Plats", `${spot.title}, ${spot.address}, ${spot.city}`],
     ["Tid", when],
     ["Bil", booking.vehicleReg],
+    ["Bokad", formatDateTime(booking.confirmedAt ?? booking.createdAt)],
   ];
   await notifyAccount(spot.hostAccountId, {
     kind: register ? "vehicle_registration" : "booking_new",
