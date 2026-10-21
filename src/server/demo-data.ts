@@ -24,6 +24,7 @@ import { isDeliverableAddress } from "@/lib/email";
 import { calculatePrice } from "@/lib/pricing";
 import type { Schedule } from "@/lib/schedule";
 import { TZ } from "@/lib/time";
+import { paymentProviderName } from "./payments";
 import { createSpots } from "./spots";
 import { deleteDocumentFiles, storeDocument } from "./storage";
 
@@ -141,6 +142,18 @@ export type DemoResetResult = {
  * DELETE without a filter and the restricting keys (bookings → spots → host
  * accounts, everything → users) would refuse the rest.
  */
+/**
+ * The demo hosts' payout account. With the mock, a made-up one. With Stripe, the demo
+ * hosts share one test-mode Express account that has finished onboarding
+ * (STRIPE_TEST_CONNECTED_ACCOUNT), so their spots can be paid for at once; without
+ * it they start without payouts and connect through Stripe's test onboarding.
+ */
+export function demoPayout(): { payoutStatus: "active" | "not_connected"; payoutAccountRef: string | null } {
+  if (paymentProviderName() !== "stripe") return { payoutStatus: "active", payoutAccountRef: "acct_mock_seed" };
+  const shared = process.env.STRIPE_TEST_CONNECTED_ACCOUNT?.trim();
+  return shared ? { payoutStatus: "active", payoutAccountRef: shared } : { payoutStatus: "not_connected", payoutAccountRef: null };
+}
+
 export async function resetDemoData({ password = DEMO_PASSWORD, keepSessionId = null }: { password?: string; keepSessionId?: string | null } = {}): Promise<DemoResetResult> {
   const U = names(users);
   const admins = must<{ id: string; email: string }[]>(await api().from("users").select(`${U.id},${U.email}`).eq(U.isAdmin, true), "resetDemoData: admins");
@@ -234,8 +247,7 @@ async function loadDemoData(password: string): Promise<Omit<DemoResetResult, "ke
             kind: a.kind,
             name: a.name,
             verificationStatus: "verified",
-            payoutStatus: "active",
-            payoutAccountRef: "acct_mock_seed",
+            ...demoPayout(),
             ...a.extra,
           }),
         ),

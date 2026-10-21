@@ -21,7 +21,7 @@ import {
 } from "@/db/schema";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { hashToken } from "@/lib/auth/tokens";
-import { DEMO_PASSWORD, DEMO_USERS, resetDemoData } from "@/server/demo-data";
+import { DEMO_PASSWORD, DEMO_USERS, demoPayout, resetDemoData } from "@/server/demo-data";
 import { storeDocument } from "@/server/storage";
 import { hoursFromNow, makeAdmin, makeBookableSpot, makeConfirmedBooking, makeHost, makeUser, resetDb } from "./helpers";
 
@@ -183,6 +183,24 @@ describe("resetting the demo data", () => {
     await makeAdmin();
     await resetDemoData();
     expect((await contents()).users).toEqual(DEMO_EMAILS);
+  });
+});
+
+describe("the demo hosts' payouts", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("are the mock's, or under Stripe a shared onboarded test account, or not connected yet", () => {
+    vi.stubEnv("PAYMENT_PROVIDER", "mock");
+    expect(demoPayout()).toEqual({ payoutStatus: "active", payoutAccountRef: "acct_mock_seed" });
+    vi.stubEnv("PAYMENT_PROVIDER", "stripe");
+    vi.stubEnv("STRIPE_SECRET_KEY", "sk_test_demo");
+    vi.stubEnv("STRIPE_WEBHOOK_SECRET", "whsec_demo");
+    vi.stubEnv("STRIPE_TEST_CONNECTED_ACCOUNT", "acct_1DemoShared");
+    expect(demoPayout()).toEqual({ payoutStatus: "active", payoutAccountRef: "acct_1DemoShared" });
+    vi.stubEnv("STRIPE_TEST_CONNECTED_ACCOUNT", "");
+    expect(demoPayout()).toEqual({ payoutStatus: "not_connected", payoutAccountRef: null });
   });
 });
 

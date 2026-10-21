@@ -4,8 +4,6 @@ Run against https://parklet-rebuild.vercel.app after the latest deploy.
 
 Markers:
 - 📧 the flow sends a real e-mail: use an address you can read.
-- ⚙ Stripe wording that isn't final yet. The payment integration is moving from the mock to
-  **Stripe Connect in test mode**; replace each ⚙ placeholder with the real label once it has landed.
 
 ## Contents
 
@@ -31,12 +29,12 @@ Markers:
   15. [Remove a spot's approval](#15-remove-a-spots-approval)
   16. [Remove a household's approval](#16-remove-a-households-approval)
   17. [Organisation: reject, verify, remove, verify again](#17-organisation-reject-verify-remove-verify-again)
-- **Payments (Stripe test mode)** ⚙
-  18. [Paying: success, 3-D Secure, declined](#18-paying-success-3-d-secure-declined-)
-  19. [Leaving the payment: the hold expires](#19-leaving-the-payment-the-hold-expires-)
-  20. [Refunds](#20-refunds-)
-  21. [Host connects payouts with Stripe](#21-host-connects-payouts-with-stripe-)
-  22. [Checking it in the Stripe dashboard](#22-checking-it-in-the-stripe-dashboard-)
+- **Payments (Stripe test mode)**
+  18. [Paying: success, 3-D Secure, declined](#18-paying-success-3-d-secure-declined)
+  19. [Leaving the payment: the reservation runs out](#19-leaving-the-payment-the-reservation-runs-out)
+  20. [Refunds](#20-refunds)
+  21. [Host connects payouts with Stripe](#21-host-connects-payouts-with-stripe)
+  22. [Checking it in the Stripe dashboard](#22-checking-it-in-the-stripe-dashboard)
 - **Everything else**
   23. [Password reset](#23-password-reset-)
   24. [Forms keep what was typed](#24-forms-keep-what-was-typed)
@@ -80,7 +78,7 @@ address (see the flows marked 📧).
 | `johannes@jvo.se` | You: admin and host | 📧 Real admin e-mails and the daily summary |
 
 Notes:
-- Payments: Stripe test mode ⚙ (until it lands: the mock button **Betala … (testläge)**).
+- Payments: Stripe test mode when it is switched on (flows 18–22); otherwise the mock button **Betala … (testläge)** confirms at once.
 - BankID goes through Idura's test environment: you need a **test BankID**.
 - For a new 📧 account, register with a real address you can read (for example `snyggast@jvo.se`, or a `+` alias if your mail supports it). The reset deletes it again.
 - A host can't book a spot of their own host account: the booking box says "Det här är en plats som ditt uthyrarkonto hyr ut." Book as Oskar.
@@ -122,7 +120,7 @@ each with a car still to register.
 5. Click **Logga in och boka** and log in as `forare@parklet.test`.
    - You come back to the same spot, over the map, with the times kept.
    - Now the car is asked for (**Välj bil**: ABC123 – Volvon, or **Annan bil…**).
-6. Click **Fortsätt till betalning** and pay with the test card 4242 4242 4242 4242 (flow 18) ⚙.
+6. Click **Fortsätt till betalning** and pay: with Stripe on, with the test card 4242 4242 4242 4242 (flow 18); otherwise with **Betala … (testläge)**.
    - "Klart! Din parkering är bokad och betald." and the booking with **Hitta och ta dig in** (the access instructions) and **Vägbeskrivning**.
    - **Bell:** "Bokningsbekräftelse: Carport nära Liseberg".
    - **E-post (admin log):** the booking confirmation with Plats/Tid/Bil/Totalt betalt/Boknings-id.
@@ -227,7 +225,7 @@ Register a new account with a real address (📧 optional).
 2. Click **Legitimera dig**, then **Legitimera med BankID**, and identify with a test BankID.
    - Cancel once first: back on the page with "Legitimeringen avbröts. Försök igen när du är redo."
    - Then complete it: the BankID step is ✓. A household needs no review by Parklet.
-3. Connect payouts (flow 21) ⚙.
+3. Connect payouts (flow 21).
 4. Click **Lägg upp en plats**. Step 1, **Platsen**:
    - **Sök adress** and pick a result, or type **Adress** and **Ort** and click the map to place the pin.
    - **Rubrik**, **Typ av plats**, **Pris per timme (kr)**.
@@ -456,49 +454,63 @@ Use the BRF from flow 10 (sent for verification).
 
 ---
 
-# Payments (Stripe test mode) ⚙
+# Payments (Stripe test mode)
 
 Everything here runs against Stripe **test mode**: no real money. Card details for every test
-card: any future expiry date (e.g. 12/34), any CVC (e.g. 123), any postal code.
+card: any future expiry date (e.g. 12/34), any CVC (e.g. 123), any postal code. Stripe's own
+test values are listed on its "Testing" page in the docs; if a value below is refused, use
+the one listed there.
 
-## 18. Paying: success, 3-D Secure, declined ⚙
+These flows need Stripe switched on in the deployment (`PAYMENT_PROVIDER=stripe` and the
+keys; see the README, "Payments"). Without it the payment page shows the mock button
+**Betala … (testläge)**, which confirms at once, and flows 18–22 don't apply. With Stripe on,
+the demo hosts share one finished test account if `STRIPE_TEST_CONNECTED_ACCOUNT` is set (so
+their spots can be paid for straight after **Återställ testdata**); otherwise they start
+without payouts and each connects through flow 21 first.
+
+## 18. Paying: success, 3-D Secure, declined
 
 As `forare@parklet.test`, book **Carport nära Liseberg** for 3 hours (99 kr) and click **Fortsätt till betalning**.
 
-1. **Betala bokningen** shows Parkering 90 kr, Serviceavgift (inkl. moms) 9 kr, Att betala 99 kr.
-   - Click ⚙ *[pay button]*: ⚙ *[Stripe's payment form: hosted Checkout page or embedded form]* opens, for 99 kr.
+1. **Betala bokningen** shows Parkering 90 kr, Serviceavgift (inkl. moms) 9 kr, Att betala 99 kr, "Platsen är reserverad åt dig till kl. …" and "Du betalar på Stripes säkra betalsida …".
+   - Click **Betala 99 kr (testläge)**: Stripe's payment page (Stripe Checkout) opens, in Swedish, for 99 kr, with "Parkering: Carport nära Liseberg" and "Serviceavgift (inkl. moms)".
+   - The reservation time on Parklet's page moves to about 31 minutes from now: the slot stays held for as long as Stripe's page can take the payment.
 2. **Success:** pay with **4242 4242 4242 4242**.
-   - Back on Parklet: "Klart! Din parkering är bokad och betald. …" ⚙ *[any "waiting for the payment to be confirmed" state shown before the webhook arrives]*.
+   - Back on Parklet: "Klart! Din parkering är bokad och betald. Ett kvitto har skickats till din e-post."
    - Bell and e-mail as in flow 1.
 3. **3-D Secure:** a new booking, card **4000 0027 6000 3184**.
-   - Stripe's test authentication page opens. Complete it: the booking is confirmed.
-   - Again with the same card, but fail the authentication: ⚙ *[the message]*; no booking, and the slot is free again once the hold ends (flow 19).
+   - Stripe's test authentication opens. Complete it: the booking is confirmed as in step 2.
+   - Again with the same card, but fail the authentication: Stripe shows the error on its page and you stay there; nothing is booked or charged.
 4. **Declined:** card **4000 0000 0000 9995** (insufficient funds), then **4000 0000 0000 0002** (generic decline).
-   - Stripe shows the decline in the form ⚙ *[wording]*; you can try another card while the hold lasts.
-   - Nothing is booked, nothing is charged.
-5. Paying for someone else's booking: open another driver's `/betala/<id>`: "Bokningen hittades inte".
+   - Stripe shows the decline on its page; you can try another card while the reservation lasts. Finish with 4242: the booking is confirmed.
+5. **Back without paying:** on Stripe's page click **←** (back to Parklet).
+   - "Betalningen avbröts. Ingen betalning har dragits, och platsen är fortfarande reserverad åt dig."
+   - **Betala …** again reopens the same Stripe page (the reservation is not extended again).
+6. Paying for someone else's booking: open another driver's `/betala/<id>`: "Bokningen hittades inte".
 
-## 19. Leaving the payment: the hold expires ⚙
+## 19. Leaving the payment: the reservation runs out
 
-1. Book, reach ⚙ *[the Stripe payment form]*, and close the tab without paying.
-   - Before that, **Betala bokningen** says "Platsen är reserverad åt dig till kl. …" (15 minutes).
-2. Within the 15 minutes, a second driver can't book the slot (flow 3).
-3. After 15 minutes, open `/betala/<id>` again (or **Slutför betalningen** on the booking).
-   - "Reservationen har gått ut. Ingen betalning har dragits." with **Boka igen**.
-   - The second driver can now book the slot.
-4. ⚙ *[What Stripe does with the unpaid session: expired Checkout session / cancelled PaymentIntent; check it in the dashboard.]*
-5. ⚙ *[A payment completed just after the hold expired: "Reservationen hann gå ut innan betalningen genomfördes. Ingen betalning har dragits. Boka igen." — check whether the charge is refunded automatically.]*
+1. Book, click **Fortsätt till betalning** and wait on **Betala bokningen** without clicking pay.
+   - "Platsen är reserverad åt dig till kl. …" (15 minutes).
+   - After 15 minutes, reload: "Reservationen har gått ut. Ingen betalning har dragits." with **Boka igen**. The booking shows **Ej genomförd** and the slot is bookable again.
+2. Book again, open Stripe's page with **Betala …**, and close the tab without paying.
+   - Within the reservation (about 31 minutes), a second driver can't book the slot (flow 3).
+   - Afterwards the booking shows **Ej genomförd** and the second driver can book.
+   - Stripe dashboard: the Checkout Session is **Expired**; no payment.
+3. Cancelling a booking that isn't paid yet also closes its Stripe page: paying there afterwards is refused by Stripe.
+4. A payment that arrives too late (it can't be provoked by hand with a card; covered by the automated tests): if the slot is still free the booking is kept; if someone else has booked it, the driver gets "Betalningen för … återbetalas" and the full amount back.
 
-## 20. Refunds ⚙
+## 20. Refunds
 
 1. Cancel within the free window (flow 5, step 1).
    - Parklet: "… återbetalas till ditt betalsätt inom några bankdagar." and "Återbetalt".
-   - Stripe: the payment shows a full refund of 99 kr ⚙ *[and that the transfer to the host and the application fee are reversed]*.
+   - Stripe: the payment shows a full refund of 99 kr; the transfer to the host is reversed and Parklet's application fee is refunded.
 2. Cancel as the host (flow 5, step 3): the same full refund.
 3. Too late (flow 5, step 2): no refund, no cancel button.
-4. ⚙ *[If the refund fails, the booking stays confirmed (or, if the slot was rebooked, admins get "Återbetalning misslyckades: …" in the bell). Find a way to provoke this in test mode, or skip.]*
+4. Refund a paid booking in Stripe's dashboard instead (**Payments → the payment → Refund**, the full amount): the booking in Parklet becomes cancelled and refunded.
+5. If a refund fails at Stripe, admins get "Återbetalning misslyckades hos Stripe" in the bell (this can't be provoked by hand; covered by the automated tests).
 
-## 21. Host connects payouts with Stripe ⚙
+## 21. Host connects payouts with Stripe
 
 Log in as `ny@parklet.test` (Maja: no BankID, no payouts).
 
@@ -506,26 +518,28 @@ Log in as `ny@parklet.test` (Maja: no BankID, no payouts).
    - The checklist step **Koppla konto för utbetalningar** says "Legitimera dig först." until BankID is done.
    - An approved spot without payouts shows "Kan inte bokas: utbetalningskonto saknas" on the account page, isn't in search, and admin shows "Nej – Utbetalning saknas".
    - Only the account's owner can connect payouts; a co-administrator sees "Kontots ägare kopplar utbetalningskontot."
-2. Identify with BankID, then click ⚙ *[connect payouts button]*.
-   - Stripe's onboarding opens ⚙ *[Express onboarding]*. Fill it in with Stripe's test data: test phone number and SMS code **000 000**, test IBAN **SE35 5000 0000 0549 1000 0003**, and the test values Stripe offers for identity.
-3. Leave the onboarding halfway and come back.
-   - ⚙ *[The step is not done; the button to continue reads …]*.
-4. Finish the onboarding.
-   - Back on Parklet: ⚙ *["Utbetalningskontot är kopplat." or a pending state until Stripe confirms]*; the step gets its ✓ and "Koppla utbetalningskonto" leaves **Att göra**.
-   - In admin, **Uthyrare** shows **Utbetalning: Kopplad**.
-   - With an approved spot, it is now bookable.
+2. Identify with BankID, then click **Koppla utbetalningskonto**.
+   - Stripe's registration opens (an Express account), with Maja's e-mail and name filled in.
+   - Stripe's test data: phone **000 000 0000** with SMS code **000000**; date of birth **1901-01-01**; address line **address_full_match**; ID number **000000000** where asked; **Use test document** if an ID document is asked for; bank account (IBAN) **SE35 5000 0000 0549 1000 0003**.
+3. Leave the registration halfway (close it, or **←** back to Parklet).
+   - "Registreringen hos Stripe är inte klar. Fortsätt där du slutade när du vill." The step reads "Registreringen hos Stripe är påbörjad men inte klar." with **Fortsätt hos Stripe**.
+4. Finish the registration.
+   - Back on Parklet: "Utbetalningskontot är kopplat." and the step gets its ✓, or "Tack! Stripe kontrollerar uppgifterna. …" until Stripe is done; then the bell says "Utbetalningskontot är kopplat".
+   - If Stripe wants more: "Stripe behöver fler uppgifter innan utbetalningar kan göras." with **Komplettera hos Stripe**, and the bell says "Stripe behöver fler uppgifter för utbetalningar".
+   - In admin, **Uthyrare** shows **Utbetalning: Kopplad**. With an approved spot, it is now bookable.
+5. On the account page, the payouts card has **Öppna Stripe**: it opens Maja's Stripe Express dashboard (balance and payouts).
 
-## 22. Checking it in the Stripe dashboard ⚙
+## 22. Checking it in the Stripe dashboard
 
 Open the Stripe dashboard in **test mode** after flows 18–21.
 
 1. **Payments:** the 99 kr payment from flow 18, step 2.
-   - ⚙ *[Description/metadata with the booking id]*.
-   - Application fee: **9 kr** (Parklet's service fee); transfer of **90 kr** to the host's connected account (Erik).
+   - Description "Parklet: Carport nära Liseberg, <time>, <car>"; metadata `booking_id`.
+   - Application fee: **9 kr** (Parklet's service fee); transfer of **90 kr** to the host's connected account.
    - The declined and failed-3-D Secure attempts show as failed, with the reason.
-2. **Connect → Connected accounts:** Maja's account from flow 21, with charges and payouts enabled.
-3. **Refunds:** the cancelled bookings from flow 20 ⚙ *[with the transfer reversed and the application fee refunded]*.
-4. **Developers → Webhooks:** `payment_intent.succeeded` (and ⚙ *[account.updated / other events]*) delivered with status 200.
+2. **Connect → Accounts:** one Express account per host that connected (Maja's from flow 21), with its status (Enabled, Pending or Restricted). **Connect → Collected fees** lists the application fees.
+3. **Refunds:** the cancelled bookings from flow 20, with the transfer reversed and the application fee refunded.
+4. **Developers → Webhooks:** deliveries with status 200 for `checkout.session.completed`, `checkout.session.expired` and `charge.refunded` (endpoint for your account) and `account.updated` (endpoint for connected accounts).
 5. The minimum fee: a 1-hour booking on **Uppfart Västra Hamnen** (12 kr) has an application fee of **5 kr**.
 
 ---
@@ -590,7 +604,7 @@ On a phone (or the browser's phone view), around 375 px wide.
 6. The time selects and length buttons are easy to hit; the booking box stays usable with the keyboard open.
 7. Uploading a document offers the camera or the photo library; a photo just over 4 MB is refused with "Filen är större än 4 MB …".
 8. Admin lists turn into stacked rows.
-9. ⚙ The Stripe payment form and onboarding fit the screen, and 3-D Secure works there.
+9. Stripe's payment page and registration fit the screen, and 3-D Secure works there.
 
 ## 28. Daily summary 📧
 

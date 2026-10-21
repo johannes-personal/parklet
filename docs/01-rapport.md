@@ -577,12 +577,22 @@ Google Pay, Klarna och Swish, återbetalningar och utbetalningar.
 
 | Steg | Så fungerar det |
 |---|---|
-| Uthyrare ansluter | Ett anslutet Stripe-konto (Express). Stripe kontrollerar identitet och bankkonto; utbetalningar sker först när Stripe har godkänt kontot |
+| Uthyrare ansluter | Kontots ägare klickar **Koppla utbetalningskonto** och fyller i Stripes egen registrering (ett anslutet Express-konto, förifyllt med namn, e-post och organisationsnummer). Stripe kontrollerar identitet och bankkonto. Platserna kan bokas först när Stripe har godkänt kontot (`charges_enabled` och `payouts_enabled`); dessförinnan visar översikten om Stripe granskar eller behöver fler uppgifter, med en knapp tillbaka till Stripe |
 | Bokning | En bokning med status "väntar på betalning" håller platsen i 15 minuter |
-| Betalning | En betalning på plattformen där Parklets serviceavgift dras av (`application_fee_amount`) och resten går till uthyrarens konto (`transfer_data.destination`) |
-| Bekräftelse | **Bara** när Stripe meddelar att betalningen lyckats (signerat meddelande till servern, `payment_intent.succeeded`, som tål att komma flera gånger), aldrig för att förarens webbläsare kommit tillbaka. Utgångna hållningar bekräftas inte |
-| Avbokning | Återbetalning via Stripe, som även återför överföringen och avgiften |
-| Utbetalning | Rekommendation: vänta tills bokningen är slut, så att tvister kan hanteras. Intäkterna syns i uthyrarens översikt |
+| Betalning | Föraren betalar på Stripes betalsida (Stripe Checkout, på svenska, i kronor) med de betalsätt som är påslagna hos Stripe: kort, Apple Pay, Google Pay, Klarna m.fl. Parklet ser aldrig kortuppgifterna. När betalsidan öppnas förlängs reservationen till betalsidans livslängd (31 minuter, Stripes minimum är 30), så platsen är reserverad så länge betalningen kan genomföras |
+| Pengarna | En betalning på plattformen (*destination charge*): uthyraren får parkeringspriset (`transfer_data.destination`), Parklet behåller serviceavgiften (`application_fee_amount`) och betalar Stripes avgift ur den |
+| Bekräftelse | När föraren kommer tillbaka från Stripe hämtar servern betalningens status direkt från Stripe, och Stripes signerade händelser (`checkout.session.completed` m.fl.) bekräftar också. Det som kommer först gäller; båda tål att komma flera gånger. Webbläsarens egna uppgifter litas aldrig på |
+| Avbruten eller sen betalning | Betalas inget släpps platsen när betalsidan går ut. Kommer en betalning ändå för sent behålls bokningen bara om platsen fortfarande är ledig (databasen gör dubbelbokningar omöjliga); annars betalas pengarna tillbaka automatiskt och föraren meddelas |
+| Avbokning | Återbetalning via Stripe enligt avbokningsreglerna, som även återför överföringen till uthyraren och Parklets avgift. En återbetalning som görs direkt i Stripes kontrollpanel avbokar bokningen |
+| Utbetalning | I dag förs pengarna över till uthyrarens Stripe-konto vid betalningen och betalas ut enligt Stripes vanliga schema. Villkoren säger att uthyraren får betalt efter bokningen; före lansering behöver det beslutas (fördröjd utbetalning, eller separata överföringar efter bokningens slut) |
+
+**Öppna frågor om betalningarna.** Parklet är säljare (*merchant of record*) på varje
+betalning, vilket påverkar moms, kvitton och integritetspolicyn (som ska nämna Stripe som
+personuppgiftsbiträde); stäm av med redovisningskonsult och jurist. Vid en avbokning förlorar
+Parklet Stripes transaktionsavgift, och om uthyraren redan fått sina pengar utbetalda kan en
+återföring göra uthyrarens saldo negativt; den förlusten bär Parklet. Bostadsrättsföreningar
+registreras hos Stripe som ideell organisation (`non_profit`), vilket bör bekräftas med en
+riktig förening.
 
 **Andra skyldigheter som följer med.**
 
@@ -605,7 +615,7 @@ Google Pay, Klarna och Swish, återbetalningar och utbetalningar.
 |---|---|---|---|
 | **BankID via Idura** | Inloggning med OpenID Connect; ger verifierat namn och personnummer (`IDURA_*`, `IDENTITY_ENCRYPTION_KEY`) | Fungerar mot Iduras testmiljö; utan inställningar används en testversion som godkänner direkt | Idura-abonnemang och produktionscertifikat |
 | **Bolagsverket** | Slår upp organisationsnummer: finns det, registrerat namn, juridisk form, avregistrerad eller under avveckling (`BOLAGSVERKET_*`) | I drift. Utan inloggningsuppgifter hoppas kontrollen över och bara den manuella granskningen gäller | Bolagsverkets betal-API kan dessutom bekräfta att den BankID-verifierade personen får teckna organisationen, vilket i de flesta fall gör dokumentgranskningen onödig |
-| **Stripe Connect** | Betalningar och utbetalningar (se 4.4) | I testläge tills vidare | Skarpt läge, aktivering av plattformskontot hos Stripe, beslut om utbetalningstidpunkt |
+| **Stripe Connect** | Betalningar och utbetalningar (se 4.4): Stripe Checkout, Express-konton för uthyrare, signerade händelser till `/api/stripe/webhook` (`PAYMENT_PROVIDER=stripe`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`) | Byggt och testat mot en simulerad Stripe; körs i testläge när nycklarna är inlagda. Utan dem används en testversion som godkänner direkt | Skarpt läge, aktivering av plattformskontot hos Stripe, beslut om utbetalningstidpunkt |
 | **Resend** | Skickar e-post. All e-post sparas även i tabellen `mail_outbox` och kan läsas av administratörer på `/admin/epost`; demoadresser (`@parklet.test`) skickas aldrig | Kopplat | Verifierad avsändardomän (parklet.se) |
 | **Kartor** | MapLibre med OpenFreeMaps vektorkartor; MapLibre levereras från Parklets egen server | I drift | Inget krav; MapTiler/Stadia om avtalad drifttid önskas |
 | **Adressökning** | Photon (OpenStreetMap) via Parklets server (`/api/geocode`), begränsat till Sverige. Ligger tjänsten nere returneras inga förslag i stället för ett fel | Använder den publika instansen photon.komoot.io | Egen Photon-instans eller kommersiell tjänst (Mapbox Search, Lantmäteriet) |
@@ -647,9 +657,9 @@ Tre lärdomar om Next.js 16 och React 19 som påverkar fortsatt utveckling:
 | Nivå | Verktyg | Vad som täcks |
 |---|---|---|
 | Enhetstester (`tests/unit`) | Vitest | Prisberäkning, tillgänglighet, sommar- och vintertid, scheman, kryptering, Bolagsverkets svar, e-postmallar, filtyper |
-| Integrationstester (`tests/integration`) | Vitest mot en riktig Postgres via PostgREST | Hållningar och samtidiga bokningar, synlighet i sökningen, avbokning, bilregistrering, påminnelser, morgonsammanfattning, hyresvärdens godkännande, granskning och borttagna godkännanden, behörigheter, radnivåsäkerhet |
-| End-to-end (`e2e/`) | Playwright mot ett produktionsbygge, dator och mobil | Förarens bokning, dubbelbokning, uthyrare med BRF-godkännande, verifiering av organisationer och inbjudningar, kontroll av filtyp vid uppladdning, granskning och borttagna godkännanden, behörigheter, formulär som behåller sitt innehåll, genomgång av alla länkar. BankID och Bolagsverket ersätts av lokala testtjänster (`e2e/fake-idp.mjs`, `e2e/fake-bolagsverket.mjs`) |
-| Live-tester (`tests/live`) | Vitest mot riktiga tjänster | Bolagsverkets API. Körs varje måndag i GitHub Actions ("Live integrations") med uppgifter från repots hemligheter, och hoppas över utan dem |
+| Integrationstester (`tests/integration`) | Vitest mot en riktig Postgres via PostgREST | Hållningar och samtidiga bokningar, synlighet i sökningen, avbokning, bilregistrering, påminnelser, morgonsammanfattning, hyresvärdens godkännande, granskning och borttagna godkännanden, betalningar och utbetalningar via Stripe (signerade händelser, dubbletter, utgångna och sena betalningar, återbetalningar, avgifter), återställning av testdata, behörigheter, radnivåsäkerhet |
+| End-to-end (`e2e/`) | Playwright mot ett produktionsbygge, dator och mobil | Förarens bokning, dubbelbokning, uthyrare med BRF-godkännande, verifiering av organisationer och inbjudningar, kontroll av filtyp vid uppladdning, granskning och borttagna godkännanden, behörigheter, formulär som behåller sitt innehåll, betalning och utbetalningskonto via Stripe, genomgång av alla länkar. BankID, Bolagsverket och Stripe ersätts av lokala testtjänster (`e2e/fake-idp.mjs`, `e2e/fake-bolagsverket.mjs`, `e2e/fake-stripe.mjs`), så att den riktiga koden för kopplingarna körs |
+| Live-tester (`tests/live`) | Vitest mot riktiga tjänster | Bolagsverkets API och Stripes testläge. Körs varje måndag i GitHub Actions ("Live integrations") med uppgifter från repots hemligheter, och hoppas över utan dem |
 
 GitHub Actions kör vid varje ändring lint, typkontroll, enhets- och integrationstester, bygge och
 end-to-end-tester. En manuell testplan för huvudflödena finns i [05-testplan.md](05-testplan.md).
@@ -681,7 +691,7 @@ Föreslagen ordning efter lansering:
 
 1. **Betalningar i skarpt läge.** Stripe Connect går från testläge till skarpt läge: aktiverat
    plattformskonto, signerade händelser från Stripe i produktion, beslut om när uthyrare får
-   betalt och kvitton med moms och Parklets avgift var för sig.
+   betalt och kvitton med moms och Parklets avgift var för sig (se de öppna frågorna i 4.4).
 2. **BankID i produktion.** Idura-abonnemang och produktionscertifikat.
 3. **E-post från parklet.se.** Verifierad avsändardomän i Resend (`MAIL_FROM`).
 4. **Juridik.** Jurist granskar användarvillkor och integritetspolicy (i dag utkast), frågan om
