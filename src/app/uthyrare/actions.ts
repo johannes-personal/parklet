@@ -19,6 +19,8 @@ import {
   submitAccountForReview,
 } from "@/server/host-accounts";
 import { lookupOrganisation } from "@/server/company-registry";
+import { paymentProviderName } from "@/server/payments";
+import { payoutDashboardUrl, startPayoutOnboarding } from "@/server/payouts";
 import {
   announceSubmittedSpots,
   createSpots,
@@ -90,9 +92,34 @@ export async function createAccountAction(_prev: FormState, formData: FormData):
 export async function connectPayoutsAction(formData: FormData) {
   const accountId = String(formData.get("accountId"));
   const { user, account } = await requireMember(accountId);
-  if (account.role !== "owner" || !user.identityVerified) redirect(`/uthyrare/${accountId}`);
-  await connectPayoutsMock(accountId);
-  redirect(`/uthyrare/${accountId}?utbetalning=1`);
+  if (account.role !== "owner" || !user.identityVerified || account.payoutStatus === "active") redirect(`/uthyrare/${accountId}`);
+  if (paymentProviderName() === "mock") {
+    await connectPayoutsMock(accountId);
+    redirect(`/uthyrare/${accountId}?utbetalning=active`);
+  }
+  // Stripe's hosted onboarding; it sends the owner back to /uthyrare/<id>/utbetalningar/klar.
+  let url: string;
+  try {
+    url = await startPayoutOnboarding(account, user);
+  } catch (err) {
+    console.error("[payouts] could not start onboarding", accountId, err);
+    redirect(`/uthyrare/${accountId}?utbetalning=fel`);
+  }
+  redirect(url);
+}
+
+/** The owner's way into their Stripe Express dashboard (payouts, bank account). */
+export async function payoutDashboardAction(formData: FormData) {
+  const accountId = String(formData.get("accountId"));
+  const { account } = await requireMember(accountId);
+  if (account.role !== "owner") redirect(`/uthyrare/${accountId}`);
+  let url: string | null = null;
+  try {
+    url = await payoutDashboardUrl(account);
+  } catch (err) {
+    console.error("[payouts] could not create a dashboard link", accountId, err);
+  }
+  redirect(url ?? `/uthyrare/${accountId}?utbetalning=fel`);
 }
 
 export async function submitAccountAction(_prev: FormState, formData: FormData): Promise<FormState> {

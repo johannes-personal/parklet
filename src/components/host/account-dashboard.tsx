@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { markRegisteredAction } from "@/app/bokning-actions";
-import { connectPayoutsAction, toggleSpotAction } from "@/app/uthyrare/actions";
+import { connectPayoutsAction, payoutDashboardAction, toggleSpotAction } from "@/app/uthyrare/actions";
 import { DocumentUploader, InviteForm, SubmitAccountForm } from "@/components/host/forms";
 import { Badge, BookingStatusBadge } from "@/components/status-badge";
 import type { CurrentUser } from "@/lib/auth/session";
@@ -15,7 +15,18 @@ import {
   listMembers,
   listPendingInvitations,
 } from "@/server/host-accounts";
+import { paymentProviderName } from "@/server/payments";
+import { isStripeAccountRef, refreshPendingPayouts } from "@/server/payouts";
 import { listAccountSpots } from "@/server/spots";
+
+/** What the dashboard says after the owner comes back from Stripe (?utbetalning=<status>). */
+const PAYOUT_NOTICE: Record<string, { ok: boolean; text: string }> = {
+  active: { ok: true, text: "Utbetalningskontot är kopplat." },
+  pending: { ok: true, text: "Tack! Stripe kontrollerar uppgifterna. Det brukar gå på några minuter, ibland ett par bankdagar. Vi meddelar dig när kontot är klart." },
+  onboarding: { ok: false, text: "Registreringen hos Stripe är inte klar. Fortsätt där du slutade när du vill." },
+  restricted: { ok: false, text: "Stripe behöver fler uppgifter innan utbetalningar kan kopplas." },
+  fel: { ok: false, text: "Vi kunde inte nå Stripe just nu. Försök igen om en stund." },
+};
 
 function Step({ done, title, children }: { done: boolean; title: string; children?: React.ReactNode }) {
   return (
@@ -43,8 +54,13 @@ function Step({ done, title, children }: { done: boolean; title: string; childre
  * someone with a single account (rendered there rather than redirected to, so a
  * cached redirect can't send the next user who signs in on the device to it).
  */
-export async function AccountDashboard({ user, account, payoutsConnected = false }: { user: CurrentUser; account: AccountWithRole; payoutsConnected?: boolean }) {
+export async function AccountDashboard({ user, account: loaded, payoutNotice }: { user: CurrentUser; account: AccountWithRole; payoutNotice?: string }) {
+  // Stripe may have finished verifying since the last webhook: look again while it's pending.
+  const account = { ...loaded, payoutStatus: await refreshPendingPayouts(loaded) };
   const accountId = account.id;
+  const notice = payoutNotice ? PAYOUT_NOTICE[payoutNotice] : undefined;
+  const viaStripe = paymentProviderName() === "stripe";
+  const owner = account.role === "owner";
   const isOrg = account.kind !== "household";
   const [spots, bookings, docs, members, invites] = await Promise.all([
     listAccountSpots(accountId),
@@ -78,9 +94,12 @@ export async function AccountDashboard({ user, account, payoutsConnected = false
         </Link>
       </div>
 
-      {payoutsConnected ? (
-        <p role="status" className="rounded-xl border border-ok/20 bg-ok-soft px-4 py-3 font-medium text-ok">
-          Utbetalningskontot är kopplat.
+      {notice ? (
+        <p
+          role="status"
+          className={`rounded-xl border px-4 py-3 font-medium ${notice.ok ? "border-ok/20 bg-ok-soft text-ok" : "border-warn/40 bg-warn-soft text-warn"}`}
+        >
+          {notice.text}
         </p>
       ) : null}
 
@@ -128,19 +147,7 @@ export async function AccountDashboard({ user, account, payoutsConnected = false
               </Step>
             ) : null}
             <Step done={payouts} title="Koppla konto för utbetalningar">
-              {!payouts ? (
-                account.role === "owner" && user.identityVerified ? (
-                  <form action={connectPayoutsAction} className="space-y-2">
-                    <input type="hidden" name="accountId" value={accountId} />
-                    <p>
-                      Utbetalningar sköts av vår licensierade betalpartner, som kontrollerar identitet och bankkonto enligt penningtvättsreglerna.
-                    </p>
-                    <button className="btn-secondary">Koppla utbetalningskonto (testläge)</button>
-                  </form>
-                ) : (
-                  <p>{account.role !== "owner" ? "Kontots ägare kopplar utbetalningskontot." : "Legitimera dig först."}</p>
-                )
-              ) : null}
+              {!payouts ? <PayoutStep account={account} user={user} viaStripe={viaStripe} /> : null}
             </Step>
             <Step done={anyApproved} title="Lägg upp en plats med underlag och få den godkänd">
               {spots.length === 0 ? (
@@ -152,6 +159,21 @@ export async function AccountDashboard({ user, account, payoutsConnected = false
               ) : null}
             </Step>
           </ol>
+        </section>
+      ) : null}
+
+      {payouts && viaStripe && owner && isStripeAccountRef(account.payoutAccountRef) ? (
+        <section className="card flex flex-wrap items-center justify-between gap-4 p-5 sm:p-6" aria-labelledby="payouts">
+          <div>
+            <h2 id="payouts" className="text-lg font-semibold">
+              Utbetalningar
+            </h2>
+            <p className="mt-1 text-sm text-ink-soft">Stripe betalar ut intäkterna till {isOrg ? "ert" : "ditt"} bankkonto. Där ser du utbetalningar och kan byta bankkonto.</p>
+          </div>
+          <form action={payoutDashboardAction}>
+            <input type="hidden" name="accountId" value={accountId} />
+            <button className="btn-secondary">Öppna Stripe</button>
+          </form>
         </section>
       ) : null}
 
@@ -278,6 +300,46 @@ export async function AccountDashboard({ user, account, payoutsConnected = false
           </div>
         </section>
       ) : null}
+
+      {/* With one account /uthyrare shows this dashboard, so this is the way to a second one. */}
+      <p className="text-sm text-muted">
+        Hyr du också ut för en förening eller ett företag?{" "}
+        <Link href="/uthyrare/nytt" className="link">
+          Skapa ett till uthyrarkonto
+        </Link>
+      </p>
+    </div>
+  );
+}
+
+/** The payout step while it isn't done: what Stripe is waiting for, and the owner's button. */
+function PayoutStep({ account, user, viaStripe }: { account: AccountWithRole; user: CurrentUser; viaStripe: boolean }) {
+  const owner = account.role === "owner";
+  const status = account.payoutStatus;
+  const explanation: Record<string, string> = {
+    onboarding: "Registreringen hos Stripe är påbörjad men inte klar.",
+    pending: "Stripe kontrollerar uppgifterna. Det brukar gå på några minuter, ibland ett par bankdagar. Vi meddelar dig när kontot är klart.",
+    restricted: "Stripe behöver fler uppgifter innan utbetalningar kan göras.",
+  };
+  const button = status === "onboarding" ? "Fortsätt hos Stripe" : status === "restricted" ? "Komplettera hos Stripe" : viaStripe ? "Koppla utbetalningskonto" : "Koppla utbetalningskonto (testläge)";
+  return (
+    <div className="space-y-2">
+      {explanation[status] ? <p className={status === "restricted" ? "font-medium text-warn" : undefined}>{explanation[status]}</p> : null}
+      {status === "pending" ? null : !owner ? (
+        <p>Kontots ägare kopplar utbetalningskontot.</p>
+      ) : !user.identityVerified ? (
+        <p>Legitimera dig först.</p>
+      ) : (
+        <form action={connectPayoutsAction} className="space-y-2">
+          <input type="hidden" name="accountId" value={account.id} />
+          {status === "not_connected" ? (
+            <p>
+              Utbetalningar sköts av vår licensierade betalpartner{viaStripe ? " Stripe" : ""}, som kontrollerar identitet och bankkonto enligt penningtvättsreglerna.
+            </p>
+          ) : null}
+          <button className="btn-secondary">{button}</button>
+        </form>
+      )}
     </div>
   );
 }

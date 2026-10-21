@@ -2,15 +2,15 @@
 
 import { useActionState } from "react";
 import { FormAlert, SubmitButton, type FormState } from "@/components/form";
-import { cancelBookingAction, payMockAction } from "./bokning-actions";
+import { cancelBookingAction, payMockAction, startCheckoutAction } from "./bokning-actions";
 
-export function PayButton({ bookingId, label }: { bookingId: string; label: string }) {
-  const [state, action] = useActionState<FormState, FormData>(payMockAction, null);
+export function PayButton({ bookingId, label, provider }: { bookingId: string; label: string; provider: string }) {
+  const [state, action] = useActionState<FormState, FormData>(provider === "stripe" ? startCheckoutAction : payMockAction, null);
   return (
     <form action={action} className="space-y-3">
       <FormAlert state={state} />
       <input type="hidden" name="bookingId" value={bookingId} />
-      <SubmitButton className="btn-primary btn-lg w-full" pendingText="Genomför betalning…">
+      <SubmitButton className="btn-primary btn-lg w-full" pendingText={provider === "stripe" ? "Öppnar betalningen…" : "Genomför betalning…"}>
         {label}
       </SubmitButton>
     </form>

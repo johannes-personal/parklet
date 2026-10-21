@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { demoResetEnabled } from "@/lib/demo";
 
 const TABS = [
   { href: "/admin", label: "Att granska", exact: true },
   { href: "/admin/platser", label: "Platser" },
   { href: "/admin/konton", label: "Uthyrare" },
   { href: "/admin/epost", label: "E-post" },
+  ...(demoResetEnabled() ? [{ href: "/admin/testdata", label: "Testdata" }] : []),
 ];
 
 export function AdminTabs() {

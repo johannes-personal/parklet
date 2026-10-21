@@ -115,7 +115,13 @@ export const vehicles = pgTable(
  */
 export const hostKindEnum = pgEnum("host_kind", ["household", "association", "company"]);
 export const verificationStatusEnum = pgEnum("verification_status", ["unverified", "pending", "verified", "rejected"]);
-export const payoutStatusEnum = pgEnum("payout_status", ["not_connected", "active"]);
+/**
+ * Mirrors the host's Stripe connected account (src/server/payouts.ts):
+ * not_connected (no account yet), onboarding (started, details not submitted),
+ * pending (submitted, Stripe is verifying), restricted (Stripe needs more
+ * information, or has disabled the account), active (charges and payouts enabled).
+ */
+export const payoutStatusEnum = pgEnum("payout_status", ["not_connected", "onboarding", "pending", "restricted", "active"]);
 
 export const hostAccounts = pgTable("host_accounts", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -134,7 +140,7 @@ export const hostAccounts = pgTable("host_accounts", {
   verificationStatus: verificationStatusEnum("verification_status").notNull().default("unverified"),
   reviewNote: text("review_note"),
   reviewedAt: ts("reviewed_at"),
-  /** Payout account (Stripe Connect in production). Payouts require completed KYC. */
+  /** Payout account: the Stripe connected account (acct_…), or a mock ref. Payouts require completed KYC. */
   payoutStatus: payoutStatusEnum("payout_status").notNull().default("not_connected"),
   payoutAccountRef: text("payout_account_ref"),
   createdAt: createdAt(),
@@ -376,7 +382,10 @@ export const bookings = pgTable(
     feeOre: integer("fee_ore").notNull(),
     totalOre: integer("total_ore").notNull(),
     paymentProvider: text("payment_provider").notNull(),
+    /** The charge: Stripe's PaymentIntent (pi_…) once paid, or the mock's ref. Refunds go through it. */
     paymentRef: text("payment_ref"),
+    /** Stripe Checkout Session (cs_…) the driver pays through; its expiry is the hold's. */
+    checkoutSessionId: text("checkout_session_id"),
     paymentStatus: paymentStatusEnum("payment_status").notNull().default("unpaid"),
     createdAt: createdAt(),
     confirmedAt: ts("confirmed_at"),
@@ -386,6 +395,8 @@ export const bookings = pgTable(
   (t) => [
     index("bookings_spot_id_idx").on(t.spotId, t.startsAt),
     index("bookings_driver_id_idx").on(t.driverId, t.startsAt),
+    uniqueIndex("bookings_checkout_session_key").on(t.checkoutSessionId),
+    index("bookings_payment_ref_idx").on(t.paymentRef),
     check("bookings_range_valid", sql`${t.endsAt} > ${t.startsAt}`),
     // The exclusion constraint that makes double booking impossible lives in
     // a custom migration (drizzle-kit cannot express EXCLUDE constraints):
@@ -401,6 +412,17 @@ export const bookings = pgTable(
 export const appSecrets = pgTable("app_secrets", {
   name: text("name").primaryKey(),
   value: text("value").notNull(),
+  createdAt: createdAt(),
+});
+
+/**
+ * Stripe webhook events that have been handled, so a redelivered event is
+ * acknowledged without running again. Handlers are idempotent on their own as
+ * well; this saves the API calls and notifications a second run would repeat.
+ */
+export const stripeEvents = pgTable("stripe_events", {
+  id: text("id").primaryKey(),
+  type: text("type").notNull(),
   createdAt: createdAt(),
 });
 
@@ -431,4 +453,5 @@ export type Vehicle = typeof vehicles.$inferSelect;
 export type DocumentRow = typeof documents.$inferSelect;
 export type SpotType = (typeof spotTypeEnum.enumValues)[number];
 export type HostKind = (typeof hostKindEnum.enumValues)[number];
+export type PayoutStatus = (typeof payoutStatusEnum.enumValues)[number];
 export type DocumentKind = (typeof documentKindEnum.enumValues)[number];

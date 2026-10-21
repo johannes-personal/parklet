@@ -1,6 +1,6 @@
 import "server-only";
 import { api, embed, fromDb, must, names, rpc } from "@/db/api";
-import { hostAccountMembers, hostAccounts, spots, users, type HostAccount, type HostKind, type Spot } from "@/db/schema";
+import { hostAccountMembers, hostAccounts, spots, users, type HostAccount, type HostKind, type PayoutStatus, type Spot } from "@/db/schema";
 
 /**
  * Search and filters for Parklet's admins: every spot and every host
@@ -67,7 +67,7 @@ export type AccountFilters = {
   q?: string;
   kind?: "household" | "association" | "company";
   verification?: "unverified" | "pending" | "verified" | "rejected";
-  payout?: "active" | "not_connected";
+  payout?: PayoutStatus;
   sort?: "created" | "name" | "spots";
   page?: number;
 };

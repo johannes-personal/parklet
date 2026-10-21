@@ -124,8 +124,12 @@ export async function hostTodos(user: CurrentUser): Promise<Todo[]> {
     if (account.kind === "household" && account.verificationStatus === "rejected" && role === "owner" && user.identityVerified) {
       todos.push({ key: `reverify:${account.id}`, title: `Legitimera dig igen så att kontot granskas på nytt${suffix(account.name)}`, href: `/konto/verifiera?next=/uthyrare/${account.id}` });
     }
-    if (account.payoutStatus !== "active" && role === "owner") {
+    // While Stripe is verifying ("pending") there is nothing for the owner to do.
+    if ((account.payoutStatus === "not_connected" || account.payoutStatus === "onboarding") && role === "owner") {
       todos.push({ key: `payout:${account.id}`, title: `Koppla utbetalningskonto${suffix(account.name)}`, href: `/uthyrare/${account.id}` });
+    }
+    if (account.payoutStatus === "restricted" && role === "owner") {
+      todos.push({ key: `payout:${account.id}`, title: `Komplettera uppgifterna för utbetalningar${suffix(account.name)}`, href: `/uthyrare/${account.id}` });
     }
   }
   for (const s of spotRows) {
@@ -167,7 +171,7 @@ export async function adminTodos(): Promise<Todo[]> {
   const todos: Todo[] = [];
   if (spotsPending.n > 0) todos.push({ key: "admin:spots", title: `Granska ${spotsPending.n === 1 ? "en plats" : `${spotsPending.n} platser`}`, href: "/admin" });
   if (accountsPending.n > 0) {
-    todos.push({ key: "admin:accounts", title: `Verifiera ${accountsPending.n === 1 ? "en organisation" : `${accountsPending.n} organisationer`}`, href: "/admin" });
+    todos.push({ key: "admin:accounts", title: `Granska ${accountsPending.n === 1 ? "ett uthyrarkonto" : `${accountsPending.n} uthyrarkonton`}`, href: "/admin" });
   }
   return todos;
 }

@@ -7,7 +7,7 @@ import { formatSek } from "@/lib/money";
 import { formatDateTime, formatDuration, formatRange } from "@/lib/time";
 import { isUuid } from "./ids";
 import { notifyAccount, notifyAdmins, notifyUsers } from "./notifications";
-import { getPaymentProvider } from "./payments";
+import { getPaymentProvider, paymentProviderName } from "./payments";
 import { getSpotWithAccount, isBookable, type SpotWithWindows } from "./spots";
 
 export const MAX_BOOKING_DAYS = 30;
@@ -101,7 +101,7 @@ export async function createBooking(input: {
       p_base_ore: price.baseOre,
       p_fee_ore: price.feeOre,
       p_total_ore: price.totalOre,
-      p_payment_provider: getPaymentProvider().name,
+      p_payment_provider: paymentProviderName(),
       p_hold_minutes: HOLD_MINUTES,
     });
     return { ok: true, bookingId };
@@ -114,9 +114,9 @@ export async function createBooking(input: {
 }
 
 /**
- * Called when the provider reports a successful payment (the mock checkout
- * page, or the Stripe `payment_intent.succeeded` webhook in production).
- * Idempotent: confirming twice is a no-op.
+ * The mock checkout's confirmation. Idempotent: confirming twice is a no-op.
+ * Stripe payments are confirmed by settleCheckoutSession (src/server/checkout.ts),
+ * which also handles a payment arriving after the hold.
  */
 export async function confirmPayment(bookingId: string, paymentRef: string): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!isUuid(bookingId)) return { ok: false, error: "Bokningen finns inte." };
@@ -141,7 +141,7 @@ export async function confirmPayment(bookingId: string, paymentRef: string): Pro
 }
 
 /** Tell the host about a new booking (and the car to register), and send the driver a confirmation. */
-async function announceBooking(bookingId: string) {
+export async function announceBooking(bookingId: string) {
   const row = must(
     await api()
       .from("bookings")
@@ -296,6 +296,9 @@ export async function cancelBooking(bookingId: string, userId: string, now = new
   if (!booking) return { ok: false, error: "Bokningen finns inte." };
   if (booking.status === "pending_payment" && booking.driverId === userId) {
     must(await api().from("bookings").update({ [B.status]: "expired" }).eq(B.id, booking.id).eq(B.status, "pending_payment"), "cancelBooking");
+    // Close Stripe's page too. A payment that slips through anyway is kept if the slot is
+    // still free and refunded if not (src/server/checkout.ts).
+    if (booking.checkoutSessionId) await getPaymentProvider(booking.paymentProvider).closeCheckout?.(booking.checkoutSessionId);
     return { ok: true };
   }
   if (booking.status !== "confirmed") return { ok: false, error: "Bokningen är inte aktiv." };
@@ -323,7 +326,7 @@ export async function cancelBooking(bookingId: string, userId: string, now = new
   if (updated.length === 0) return { ok: false, error: "Bokningen är inte aktiv." };
   if (booking.paymentRef && booking.paymentStatus === "paid") {
     try {
-      await getPaymentProvider().refund({ ref: booking.paymentRef, amountOre: booking.totalOre });
+      await getPaymentProvider(booking.paymentProvider).refund({ ref: booking.paymentRef, amountOre: booking.totalOre });
     } catch (err) {
       await undoCancellation(booking, err);
       throw err;

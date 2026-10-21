@@ -41,7 +41,7 @@ export async function sendAdminDigest(now = new Date()) {
       ? [`Platser:\n${d.pending_spots.map((s) => `• ${s.title} – ${appUrl()}/admin/platser/${s.id}`).join("\n")}${d.pending_spot_count > d.pending_spots.length ? `\n… och ${d.pending_spot_count - d.pending_spots.length} till` : ""}`]
       : []),
     ...(d.pending_accounts.length
-      ? [`Organisationer:\n${d.pending_accounts.map((a) => `• ${a.name} – ${appUrl()}/admin/konton/${a.id}`).join("\n")}${d.pending_account_count > d.pending_accounts.length ? `\n… och ${d.pending_account_count - d.pending_accounts.length} till` : ""}`]
+      ? [`Uthyrarkonton:\n${d.pending_accounts.map((a) => `• ${a.name} – ${appUrl()}/admin/konton/${a.id}`).join("\n")}${d.pending_account_count > d.pending_accounts.length ? `\n… och ${d.pending_account_count - d.pending_accounts.length} till` : ""}`]
       : []),
   ];
   const details: [string, string][] = [

@@ -29,10 +29,16 @@ rendered, at `/admin/epost`. Addresses on demo domains (`*.test`,
 | Driver cancelled | Host account members | Avbokning: Garage X | ✓ | Öppna i Parklet |
 | Host cancelled | Driver | Din bokning av Garage X är avbokad | ✓ | Öppna i Parklet |
 | Car registered by host | Driver | ABC123 är registrerad för Garage X | ✓ | Öppna i Parklet |
-| 2 h before start, car not registered | Host account members | Påminnelse: registrera ABC123 före kl. 10:00 | ✓ | Öppna i Parklet |
+| 3 h before start, car not registered | Host account members | Påminnelse: registrera ABC123 före kl. 10:00 | ✓ | Öppna i Parklet |
 | Start time passed, car not registered | Driver | ABC123 är inte registrerad än – vänta med att parkera | ✓ | Öppna i Parklet |
 | Start time passed, car not registered | Host account members | Bokningen har börjat – ABC123 är inte registrerad | ✓ | Öppna i Parklet |
 | Start time passed, car not registered | All admins | Bil ej registrerad vid start: Garage X | ✓ (bell only) | – |
+| **Payments and payouts (Stripe)** | | | | |
+| Payout account approved by Stripe | Host account members | Utbetalningskontot är kopplat | ✓ | Öppna i Parklet |
+| Stripe needs more information | Host account members | Stripe behöver fler uppgifter för utbetalningar | ✓ | Komplettera uppgifterna |
+| Payment arrived after the hold, slot taken: refunded | Driver | Betalningen för Garage X återbetalas | ✓ | Öppna i Parklet |
+| Refund failed (at cancellation, or later at Stripe) | All admins | Återbetalning misslyckades: Garage X / Återbetalning misslyckades hos Stripe | ✓ | Öppna i Parklet |
+| A payment that doesn't belong to the booking, refunded | All admins | Oväntad betalning återbetald: Garage X | ✓ | Öppna i Parklet |
 | **Admins** | | | | |
 | Every morning (06:00 UTC), if anything to report | All admins | Parklet: 3 att granska / Parklet: dagens sammanfattning | – | Öppna granskningen |
 

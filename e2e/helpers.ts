@@ -73,3 +73,27 @@ export async function openResults(page: Page) {
   const toggle = page.getByRole("button", { name: "Visa lista" });
   if (await toggle.isVisible()) await toggle.click();
 }
+
+/* ------------------------------------------------------------- Stripe (fake) */
+
+/** e2e/fake-stripe.mjs, which the app's real Stripe code talks to. */
+export const FAKE_STRIPE = "http://localhost:3104";
+
+/** A test control of the fake (see /__ in e2e/fake-stripe.mjs), e.g. "sessions/<id>/expire". */
+export async function fakeStripe(path: string, body: object = {}) {
+  const res = await fetch(`${FAKE_STRIPE}/__/${path}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  if (!res.ok) throw new Error(`fake Stripe ${path}: ${res.status}`);
+  return res.json();
+}
+
+/** Everything the fake has seen and made: accounts, sessions, payments, refunds, events. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Stripe objects, as the fake keeps them
+export async function stripeState(): Promise<Record<string, any>> {
+  return (await fetch(`${FAKE_STRIPE}/__/state`)).json();
+}
+
+/** On Stripe's (fake) hosted Checkout: pay with the test card. */
+export async function payOnStripe(page: Page) {
+  await expect(page.getByRole("heading", { name: "Fake Stripe Checkout" })).toBeVisible();
+  await page.getByRole("button", { name: "Betala", exact: true }).click();
+}

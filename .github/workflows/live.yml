@@ -3,7 +3,8 @@ name: Live integrations
 # Tests against real external services (tests/live/), kept out of the PR checks so
 # an outage elsewhere never blocks a merge. Needs the repository secrets
 # BOLAGSVERKET_CLIENT_ID and BOLAGSVERKET_CLIENT_SECRET (and optionally the variable
-# BOLAGSVERKET_ENV=test); without them the tests skip.
+# BOLAGSVERKET_ENV=test), and STRIPE_TEST_SECRET_KEY (a test-mode key, sk_test_…; optionally
+# the variable STRIPE_TEST_CONNECTED_ACCOUNT); without them the tests skip.
 on:
   workflow_dispatch:
   schedule:
@@ -18,6 +19,9 @@ jobs:
       BOLAGSVERKET_CLIENT_ID: ${{ secrets.BOLAGSVERKET_CLIENT_ID }}
       BOLAGSVERKET_CLIENT_SECRET: ${{ secrets.BOLAGSVERKET_CLIENT_SECRET }}
       BOLAGSVERKET_ENV: ${{ vars.BOLAGSVERKET_ENV }}
+      # Test mode only: the test refuses to run with anything but a test key.
+      STRIPE_SECRET_KEY: ${{ secrets.STRIPE_TEST_SECRET_KEY }}
+      STRIPE_TEST_CONNECTED_ACCOUNT: ${{ vars.STRIPE_TEST_CONNECTED_ACCOUNT }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

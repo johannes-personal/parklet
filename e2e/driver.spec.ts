@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { e2eDb, localAt, login, openResults, pickRange, signIn } from "./helpers";
+import { e2eDb, localAt, login, openResults, payOnStripe, pickRange, signIn, stripeState } from "./helpers";
 
 test("driver books, pays, sees instructions and cancels", async ({ page }, testInfo) => {
   // A retry uses another day: a failed attempt may have left a paid booking on the slot.
@@ -44,6 +44,9 @@ test("driver books, pays, sees instructions and cancels", async ({ page }, testI
   await form.getByRole("button", { name: "Fortsätt till betalning" }).click();
   await expect(page.getByRole("heading", { name: "Betala bokningen" })).toBeVisible();
   await page.getByRole("button", { name: /Betala .* \(testläge\)/ }).click();
+  // Stripe's hosted Checkout (the fake): the price in öre, the same 99 kr.
+  await expect(page.getByTestId("checkout-total")).toHaveText("99.00 kr");
+  await payOnStripe(page);
 
   await expect(page.getByText("Din parkering är bokad och betald")).toBeVisible();
   await expect(page.getByText("Platsen är märkt med en P-skylt.")).toBeVisible();
@@ -56,9 +59,17 @@ test("driver books, pays, sees instructions and cancels", async ({ page }, testI
   await expect(page.getByText("Bokningen är avbokad")).toBeVisible();
   await expect(page.getByText(/99\s*kr återbetalas till ditt betalsätt/)).toBeVisible();
   const sql = e2eDb();
-  const [row] = await sql`select status, payment_status from bookings where id = ${bookingId}`;
+  const [row] = await sql`select status, payment_status, payment_ref from bookings where id = ${bookingId}`;
   await sql.end();
-  expect(row).toEqual({ status: "cancelled", payment_status: "refunded" });
+  expect(row).toMatchObject({ status: "cancelled", payment_status: "refunded" });
+
+  // At Stripe: a destination charge to the host's account with Parklet's 9 kr as the
+  // application fee, and the whole of it refunded, transfer and fee included.
+  const stripe = await stripeState();
+  expect(stripe.paymentIntents[row.payment_ref]).toMatchObject({ amount: 9900, currency: "sek", application_fee_amount: 900, transfer_data: { destination: "acct_mock_seed" } });
+  expect(Object.values(stripe.refunds as Record<string, { payment_intent: string }>).filter((r) => r.payment_intent === row.payment_ref)).toMatchObject([
+    { amount: 9900, _reverse_transfer: true, _refund_application_fee: true },
+  ]);
 });
 
 test("a slot cannot be booked twice", async ({ browser }, testInfo) => {
@@ -96,6 +107,7 @@ test("a slot cannot be booked twice", async ({ browser }, testInfo) => {
 
   // Clean up so the slot is free again (keeps retries and repeated runs independent).
   await a.getByRole("button", { name: /Betala .* \(testläge\)/ }).click();
+  await payOnStripe(a);
   await expect(a.getByText("Din parkering är bokad och betald")).toBeVisible();
   a.once("dialog", (d) => d.accept());
   await a.getByRole("button", { name: "Avboka" }).click();

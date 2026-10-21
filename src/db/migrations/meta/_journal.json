@@ -85,6 +85,13 @@
       "when": 1792494710981,
       "tag": "0011_landlord_requires_registration",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1792575724018,
+      "tag": "0012_stripe_connect",
+      "breakpoints": true
     }
   ]
 }
