@@ -15,7 +15,8 @@
     "db:migrate": "node --env-file-if-exists=.env --import tsx scripts/migrate.mts",
     "db:seed": "node --env-file-if-exists=.env --conditions=react-server --import tsx scripts/seed.mts",
     "db:api": "node --env-file-if-exists=.env scripts/postgrest.mjs",
-    "postinstall": "node scripts/copy-maplibre.mjs"
+    "postinstall": "node scripts/copy-maplibre.mjs",
+    "docs:pdf": "node scripts/report-pdf.mjs"
   },
   "dependencies": {
     "@supabase/postgrest-js": "2.117.2",
@@ -41,6 +42,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.4.1",
     "jose": "^6.2.12",
+    "marked": "18.0.14",
     "postgres": "^3.4.9",
     "tailwindcss": "^4",
     "tsx": "^4.23.15",

@@ -261,8 +261,6 @@ hämtas på två ställen i koden.
 
 ## 3. Så löser den nya versionen dem
 
-![Den nya startsidan](images/mvp-home.png)
-
 | Nr | Problem | I den nya versionen |
 |---|---|---|
 | 1 | Inget att boka | Startsidan förklarar tjänsten och värvar uthyrare. En tom sökning länkar till "Hyr ut den på Parklet". Demodata finns i fyra städer (Göteborg, Stockholm, Uppsala, Malmö). Hittas inget inom 3 km letar sökningen vidare (15 km, 10 mil och till sist de närmaste platserna var de än finns) och säger att den gjort det |
@@ -285,46 +283,135 @@ hämtas på två ställen i koden.
 Därtill gör den nya versionen sådant som dagens Parklet inte gör alls. Så här upplevs den av de
 tre grupperna som använder den.
 
+Bilderna nedan är tagna i den nya versionen med demodata (demobannern överst visar att
+betalningar och BankID är i testläge).
+
 ### Föraren
 
-![Sökning i den nya versionen](images/mvp-search.png)
+**1. Sök.** Föraren söker på adress, stad eller "Nära mig", med eller utan tid. Tiden väljs i
+femminutersteg med snabbval för längden (1 tim, 2 tim … 1 dygn), och passerade tider erbjuds inte.
 
-- Söker på adress, stad eller "Nära mig", med eller utan tid. Med en tid visas bara platser som
-  är lediga **hela** perioden, med totalpriset.
-- Platsens sida visar karta, egenskaper, öppettider i klartext ("mån–fre 07:00–18:00"), när den
-  är upptagen, avbokningsvillkor och en markering om att uthyraren är verifierad.
-- Bokningen visar priset direkt, låter föraren välja en sparad bil eller skriva ett
-  registreringsnummer och håller platsen i 15 minuter medan föraren betalar. Bekräftelsen
-  innehåller instruktioner för att komma in och vägbeskrivning.
-- "Mina bokningar" och "Mina fordon". Avbokning är kostnadsfri inom platsens avbokningsfönster.
-- Om platsen kräver att bilen registreras hos föreningen ser föraren om det är gjort, och får
-  besked om det inte är klart när parkeringen börjar.
+![Startsidan med sökrutan](images/flow-01-startsida.jpg)
+*Bild 1. Startsidan: sökningen direkt på första sidan, kartan i bakgrunden.*
+
+**2. Välj en plats.** Med en tid visas bara platser som är lediga **hela** perioden, med totalpriset
+för just den tiden, både i listan och som prislappar på kartan.
+
+![Sökresultat på karta och i lista](images/flow-02-sok.jpg)
+*Bild 2. Sökresultat i Göteborg för en vald tid: lista till vänster, prislappar på kartan.*
+
+**3. Se platsen och priset.** Platsen öppnas i en panel över kartan, så att föraren inte tappar sin
+sökning. Panelen visar typ och egenskaper, öppettider i klartext ("mån–fre 07:00–18:00"), när
+platsen är upptagen, avbokningsvillkor och priset uppdelat på parkering och serviceavgift. Länken
+till platsen kan kopieras och delas, med de valda tiderna.
+
+![Platsen öppen i en panel över kartan](images/flow-03-plats.jpg)
+*Bild 3. Platsen med tidväljare och pris. Den som inte är inloggad loggar in och kommer tillbaka
+hit med tiderna kvar.*
+
+**4. Betala.** Föraren väljer en sparad bil eller skriver ett registreringsnummer. Platsen hålls i
+15 minuter medan föraren betalar; när Stripes betalsida öppnas hålls den så länge betalsidan går
+att använda. I demon ersätts betalsidan av en knapp i testläge.
+
+![Betalningssidan](images/flow-04-betala.jpg)
+*Bild 4. Sammanställning före betalning, med hur länge platsen är reserverad.*
+
+**5. Bekräftelsen.** Efter betalningen visas bokningen med instruktioner för att hitta och ta sig
+in, vägbeskrivning och till när avbokningen är kostnadsfri. Ett kvitto skickas med e-post.
+
+![Bokningsbekräftelse](images/flow-05-bokad.jpg)
+*Bild 5. Bokad och betald: instruktioner, vägbeskrivning och avbokning.*
+
+**6. Mina bokningar.** Kommande och tidigare bokningar samlas på ett ställe, och sparade bilar
+under "Mina fordon". Om platsen kräver att bilen registreras hos föreningen ser föraren om det är
+gjort, och får besked om det inte är klart när parkeringen börjar.
+
+![Mina bokningar](images/flow-06-mina-bokningar.jpg)
+*Bild 6. Förarens bokningar. Klockan i menyn visar nya notiser.*
+
+**7. I mobilen.** Hela tjänsten fungerar i mobilen: sökresultaten ligger som ett ark över kartan och
+platsens sida anpassar sig till skärmen.
+
+<img src="images/flow-07-mobil-plats.jpg" alt="Platsens sida i mobilen" width="260">
+
+*Bild 7. En plats i mobilen, med karta, pris och öppettider.*
 
 ### Uthyraren (privatperson, bostadsrättsförening eller företag)
 
-![Uthyrarens översikt](images/mvp-host-dashboard.png)
+**1. Bli uthyrare.** Uthyraren väljer om det är en privatperson, en bostadsrättsförening eller ett
+företag. För föreningar och företag kontrolleras organisationsnumret mot Bolagsverket och det
+registrerade namnet hämtas därifrån.
 
-- En checklista leder genom stegen: legitimera sig med BankID, koppla utbetalningskonto, lägga
-  upp platsen, ladda upp underlag och skicka in för granskning. Översikten visar platser med
-  granskningsstatus och intäkter, bokningar och listan **"Bilar att registrera"**.
-- Platsen läggs upp med adressökning och en nål som går att flytta på kartan, typ och
-  egenskaper, öppettider (färdiga mallar eller egna tider per veckodag, även över midnatt),
-  timpris med tak per dygn, kortaste bokning, framförhållning, avbokningsfönster,
-  instruktioner, och om platsen ska synas i sökningen eller bara via länk.
-- Den som hyr sin plats anger om den hyrs av en **bostadsrättsförening eller hyresvärd**.
-  Parklet skickar då en förfrågan till föreningen eller hyresvärden, som godkänner med ett klick
-  i e-postmeddelandet. Har mottagaren redan ett Parklet-konto syns förfrågan även i dennes
-  notisklocka.
-- Föreningar och företag kan skapa "Plats 1–20" på en gång med samma villkor och underlag, och
-  bjuda in fler administratörer via e-post. Organisationsnumret kontrolleras mot Bolagsverket.
-- Uthyraren får besked via e-post och notisklockan när en plats godkänns, när någon bokar, och
-  om en bil behöver registreras (med påminnelse tre timmar före start).
+![Bli uthyrare](images/flow-09-bli-uthyrare.jpg)
+*Bild 8. Vem hyr ut? Tre sorters uthyrare, med var sitt flöde.*
+
+**2. Checklistan.** Översikten leder genom stegen: legitimera sig med BankID, koppla
+utbetalningskonto hos Stripe, lägga upp platsen med underlag och få den godkänd. Varje steg
+förklarar vad som väntar och bockas av när det är klart.
+
+![Checklistan för en ny uthyrare](images/flow-08-checklista.jpg)
+*Bild 9. En ny uthyrare: inget är klart än, och varje steg har sin knapp.*
+
+**3. Lägg upp platsen.** Platsen läggs upp med adressökning och en nål som går att flytta på
+kartan, typ och egenskaper, öppettider (färdiga mallar eller egna tider per veckodag, även över
+midnatt), timpris med tak per dygn, kortaste bokning, framförhållning, avbokningsfönster,
+instruktioner, och om platsen ska synas i sökningen eller bara via länk. Uthyraren anger också
+sin **rätt att hyra ut** platsen: äger den, eller hyr den av en bostadsrättsförening eller en
+hyresvärd.
+
+![Platsformuläret: rätten att hyra ut](images/flow-10-platsformular.jpg)
+*Bild 10. Den som hyr sin plats anger av vem; föreningen tillfrågas i nästa steg.*
+
+**4. Underlag och godkännande.** Platsen visar vilka underlag som krävs för just den rätten
+(lagfart, hyresavtal, föreningens godkännande) och vad som saknas innan den kan skickas in.
+Föreningens eller hyresvärdens godkännande kan begäras med en knapp, eller laddas upp som ett
+skriftligt godkännande.
+
+![Underlagen för en hyrd plats](images/flow-11-underlag.jpg)
+*Bild 11. Hyresavtalet är uppladdat och förfrågan till föreningen skickad; det som saknas står
+längst ned.*
+
+**5. Föreningen svarar.** Styrelsen får ett e-postmeddelande med en länk och svarar med ett klick,
+utan att skapa konto. Den ser platsen och den BankID-legitimerade uthyraren, och kan ange att
+tillfälliga hyresgästers bilar måste registreras hos föreningen. Har mottagaren redan ett
+Parklet-konto syns förfrågan även i dennes notisklocka.
+
+![Föreningens godkännande](images/flow-12-foreningens-godkannande.jpg)
+*Bild 12. Sidan styrelsen kommer till från e-postmeddelandet.*
+
+**6. Översikten.** Översikten visar platserna med granskningsstatus, kommande bokningar och
+intäkter, och bokningarna. Föreningar och företag kan skapa "Plats 1–20" på en gång med samma
+villkor och underlag, och bjuda in fler administratörer via e-post.
+
+![Uthyrarens översikt](images/flow-13-uthyrarens-oversikt.jpg)
+*Bild 13. En privat uthyrare med platser i olika skeden: godkända, under granskning och utkast.*
+
+**7. Bilar att registrera.** Kräver föreningen att bilarna registreras får uthyraren förarens
+registreringsnummer i en lista och bockar av när bilen är registrerad, med påminnelse tre timmar
+före start om det inte är gjort.
+
+![Bilar att registrera](images/flow-14-bilar-att-registrera.jpg)
+*Bild 14. Föreningens lista över bilar att registrera före kommande bokningar.*
+
+**8. Notiser.** Uthyraren får besked via e-post och notisklockan när föreningen svarat, när en plats
+godkänns, när någon bokar och om en bil behöver registreras. Klockan visar också det som återstår
+att göra.
+
+![Notisklockan](images/flow-18-notiser.jpg)
+*Bild 15. Notisklockan: "Att göra" överst, händelser under.*
 
 ### Parklet själva (administratörer)
 
-- **Granskningskö** för organisationer och platser, med dokumentvisare och Bolagsverkets svar.
+- **Granskningskö** för uthyrarkonton och platser, med dokumentvisare och Bolagsverkets svar.
   Varje beslut är *godkänn*, *avslå* (med en motivering som mejlas till uthyraren) eller *ta bort
   godkännandet*.
+
+![Granskningskön](images/flow-15-granskningsko.jpg)
+*Bild 16. Det som väntar på granskning.*
+
+![Granskning av en plats](images/flow-16-granska-plats.jpg)
+*Bild 17. En plats under granskning: uppgifter, föreningens godkännande, krav, dokument och beslut.*
+
 - **Att ta bort ett godkännande får verkan direkt.** Tar man bort en plats godkännande försvinner
   den ur sökningen. Tar man bort ett kontos godkännande går kontots platser tillbaka till "ej
   godkänd" och måste godkännas på nytt; en förening eller ett företag skickar in sina underlag
@@ -334,9 +421,18 @@ tre grupperna som använder den.
   att boka (till exempel "Utbetalning saknas").
 - **Notisklocka** med det som väntar ("Granska 3 platser"), och en **e-postlogg** där all e-post
   tjänsten skickat går att läsa som den såg ut.
+
+![E-postloggen](images/flow-17-epostlogg.jpg)
+*Bild 18. E-postloggen med förfrågan till föreningen.*
+
 - **Morgonsammanfattning** via e-post: vad som väntar på granskning och hur länge, samt det
   senaste dygnets bokningar, avbokningar, bilar som inte registrerats i tid och nya platser,
   uthyrare och användare. Den skickas bara när det finns något att berätta.
+- **Återställ testdata** (bara i demon): lägger tillbaka demokontona med deras platser, bokningar
+  och dokument, så att ett test kan börja om från samma läge.
+
+![Återställ testdata](images/flow-19-testdata.jpg)
+*Bild 19. Testdata-fliken med demokontona.*
 
 Alla e-postmeddelanden och notiser finns listade i [04-emails.md](04-emails.md).
 
