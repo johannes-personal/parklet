@@ -6,7 +6,7 @@ import type { FormState } from "@/components/form";
 import { requireUser } from "@/lib/auth/session";
 import { cancelBooking, confirmPayment, getBookingForUser, markVehicleRegistered } from "@/server/bookings";
 import { startCheckout } from "@/server/checkout";
-import { getPaymentProvider } from "@/server/payments";
+import { getPaymentProvider, paymentProviderName } from "@/server/payments";
 
 /** Mock checkout: stands in for Stripe's hosted payment page + `payment_intent.succeeded` webhook. */
 export async function payMockAction(_prev: FormState, formData: FormData): Promise<FormState> {
@@ -15,7 +15,9 @@ export async function payMockAction(_prev: FormState, formData: FormData): Promi
   const booking = await getBookingForUser(id, user.id);
   if (!booking || booking.driverId !== user.id) return { error: "Bokningen finns inte." };
   const provider = getPaymentProvider(booking.paymentProvider);
-  if (!provider.simulateSuccess) return { error: "Betalning sker via betalleverantören." };
+  // Only while the mock is the provider: a mock booking left over from before switching to
+  // Stripe must not be confirmed without paying.
+  if (!provider.simulateSuccess || paymentProviderName() !== "mock") return { error: "Betalning sker via betalleverantören." };
   const { ref } = await provider.simulateSuccess(id);
   const result = await confirmPayment(id, ref);
   if (!result.ok) return { error: result.error };

@@ -77,30 +77,7 @@ export async function startCheckout(bookingId: string, driver: { id: string; ema
   const destination = await destinationFor(booking.spot.hostAccountId);
   if (!destination) return { ok: false, error: "Uthyraren kan inte ta emot betalningar just nu. Ingen betalning har dragits." };
 
-  const description = `${booking.spot.title}, ${formatRange(booking.startsAt, booking.endsAt)}, ${booking.vehicleReg}`;
-  const metadata = { booking_id: booking.id };
-  const session = await getStripe().checkout.sessions.create({
-    mode: "payment",
-    locale: "sv",
-    currency: "sek",
-    customer_email: driver.email,
-    client_reference_id: booking.id,
-    metadata,
-    line_items: [
-      { quantity: 1, price_data: { currency: "sek", unit_amount: booking.baseOre, product_data: { name: `Parkering: ${booking.spot.title}`, description } } },
-      { quantity: 1, price_data: { currency: "sek", unit_amount: booking.feeOre, product_data: { name: "Serviceavgift (inkl. moms)" } } },
-    ],
-    payment_intent_data: {
-      // The host gets the parking price, Parklet keeps its service fee.
-      application_fee_amount: booking.feeOre,
-      transfer_data: { destination },
-      description: `Parklet: ${description}`,
-      metadata,
-    },
-    expires_at: Math.floor(now.getTime() / 1000) + CHECKOUT_SESSION_SECONDS,
-    success_url: `${appUrl()}/betala/${booking.id}/klar?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${appUrl()}/betala/${booking.id}?avbruten=1`,
-  });
+  const session = await getStripe().checkout.sessions.create(checkoutSessionParams(booking, destination, driver.email, now));
 
   // The hold now ends with the session. Only while the hold is still valid, and only
   // one session per booking (two quick clicks: the other session is closed again).
@@ -120,6 +97,39 @@ export async function startCheckout(bookingId: string, driver: { id: string; ema
   const again = await loadBooking(booking.id);
   if (again?.checkoutSessionId && again.status === "pending_payment") return reuse(again.checkoutSessionId, booking.id);
   return { ok: false, error: EXPIRED };
+}
+
+/** The Checkout Session for a booking: SEK in öre, Swedish, the fee to Parklet and the rest to the host. */
+export function checkoutSessionParams(
+  booking: Pick<Booking, "id" | "startsAt" | "endsAt" | "vehicleReg" | "baseOre" | "feeOre"> & { spot: { title: string } },
+  destination: string,
+  email: string,
+  now = new Date(),
+): Stripe.Checkout.SessionCreateParams {
+  const description = `${booking.spot.title}, ${formatRange(booking.startsAt, booking.endsAt)}, ${booking.vehicleReg}`;
+  const metadata = { booking_id: booking.id };
+  return {
+    mode: "payment",
+    locale: "sv",
+    currency: "sek",
+    customer_email: email,
+    client_reference_id: booking.id,
+    metadata,
+    line_items: [
+      { quantity: 1, price_data: { currency: "sek", unit_amount: booking.baseOre, product_data: { name: `Parkering: ${booking.spot.title}`, description } } },
+      { quantity: 1, price_data: { currency: "sek", unit_amount: booking.feeOre, product_data: { name: "Serviceavgift (inkl. moms)" } } },
+    ],
+    payment_intent_data: {
+      // The host gets the parking price, Parklet keeps its service fee.
+      application_fee_amount: booking.feeOre,
+      transfer_data: { destination },
+      description: `Parklet: ${description}`,
+      metadata,
+    },
+    expires_at: Math.floor(now.getTime() / 1000) + CHECKOUT_SESSION_SECONDS,
+    success_url: `${appUrl()}/betala/${booking.id}/klar?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${appUrl()}/betala/${booking.id}?avbruten=1`,
+  };
 }
 
 async function reuse(sessionId: string, bookingId: string): Promise<StartResult> {

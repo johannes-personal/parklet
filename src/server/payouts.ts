@@ -50,37 +50,42 @@ async function createConnectedAccount(account: HostAccount, owner: { id: string;
     await api().from("users").select(`name,identityName:${U.identityName}`).eq(U.id, owner.id).maybeSingle(),
     "createConnectedAccount",
   );
-  // The name as BankID states it, when known.
-  const [firstName, ...rest] = (person?.identityName || person?.name || "").trim().split(/\s+/);
   const created = await getStripe().accounts.create(
-    {
-      country: "SE",
-      default_currency: "sek",
-      email: owner.email,
-      // Express: Stripe collects the details and gives the host its Express dashboard;
-      // Parklet pays Stripe's fees and carries losses (refunds, disputes) on its charges.
-      controller: {
-        stripe_dashboard: { type: "express" },
-        fees: { payer: "application" },
-        losses: { payments: "application" },
-        requirement_collection: "stripe",
-      },
-      capabilities: { card_payments: { requested: true }, transfers: { requested: true } },
-      business_type: BUSINESS_TYPE[account.kind],
-      business_profile: {
-        // 7523: parking lots and garages.
-        mcc: "7523",
-        product_description: "Uthyrning av parkeringsplats via Parklet",
-      },
-      ...(account.kind === "household"
-        ? { individual: { email: owner.email, first_name: firstName || undefined, last_name: rest.join(" ") || undefined } }
-        : { company: { name: account.name, ...(account.orgNumber ? { tax_id: account.orgNumber.replace(/\D/g, "") } : {}) } }),
-      metadata: { host_account_id: account.id },
-    },
+    // The name as BankID states it, when known.
+    connectedAccountParams(account, owner.email, person?.identityName || person?.name || ""),
     // Two quick clicks create one account.
     { idempotencyKey: `connect-account:${account.id}` },
   );
   return created.id;
+}
+
+/** A host account's Express account: Swedish, in SEK, prefilled with what Parklet knows. */
+export function connectedAccountParams(account: Pick<HostAccount, "id" | "kind" | "name" | "orgNumber">, email: string, personName: string): Stripe.AccountCreateParams {
+  const [firstName, ...rest] = personName.trim().split(/\s+/);
+  return {
+    country: "SE",
+    default_currency: "sek",
+    email,
+    // Express: Stripe collects the details and gives the host its Express dashboard;
+    // Parklet pays Stripe's fees and carries losses (refunds, disputes) on its charges.
+    controller: {
+      stripe_dashboard: { type: "express" },
+      fees: { payer: "application" },
+      losses: { payments: "application" },
+      requirement_collection: "stripe",
+    },
+    capabilities: { card_payments: { requested: true }, transfers: { requested: true } },
+    business_type: BUSINESS_TYPE[account.kind],
+    business_profile: {
+      // 7523: parking lots and garages.
+      mcc: "7523",
+      product_description: "Uthyrning av parkeringsplats via Parklet",
+    },
+    ...(account.kind === "household"
+      ? { individual: { email, first_name: firstName || undefined, last_name: rest.join(" ") || undefined } }
+      : { company: { name: account.name, ...(account.orgNumber ? { tax_id: account.orgNumber.replace(/\D/g, "") } : {}) } }),
+    metadata: { host_account_id: account.id },
+  };
 }
 
 /**

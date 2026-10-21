@@ -4,6 +4,7 @@ import { closeDb, db } from "./direct-db";
 import { hostAccounts, users } from "@/db/schema";
 import { appUrl } from "@/lib/app-url";
 import { createHostAccount, getAccountForMember } from "@/server/host-accounts";
+import { hostTodos } from "@/server/notifications";
 import { payoutDashboardUrl, payoutStatusOf, refreshPendingPayouts, startPayoutOnboarding, syncPayoutAccount } from "@/server/payouts";
 import { makeUser, notificationsOf, resetDb } from "./helpers";
 import { deliver, withFakeStripe } from "./stripe-helpers";
@@ -112,6 +113,22 @@ describe("connecting payouts", () => {
     // Stripe takes the payouts away again: spots stop being bookable.
     expect(await update("restricted")).toBe("restricted");
     expect((await notificationsOf(user.id)).at(-1)?.body).toContain("Dina platser kan inte bokas");
+  });
+
+  it("asks the owner for something in the bell only when there is something to do", async () => {
+    const { user, account } = await owner();
+    const me = { id: user.id, name: user.name, email: user.email, isAdmin: false, identityVerified: true };
+    const payoutTodos = async () => (await hostTodos(me)).filter((t) => t.key.startsWith("payout:")).map((t) => t.title);
+    expect(await payoutTodos()).toEqual(["Koppla utbetalningskonto"]);
+    await startPayoutOnboarding(account, user);
+    expect(await payoutTodos()).toEqual(["Koppla utbetalningskonto"]);
+    const ref = (await accountRow(account.id)).payoutAccountRef!;
+    await stripe.control(`accounts/${ref}/pending`);
+    await syncPayoutAccount(ref);
+    expect(await payoutTodos()).toEqual([]);
+    await stripe.control(`accounts/${ref}/restricted`);
+    await syncPayoutAccount(ref);
+    expect(await payoutTodos()).toEqual(["Komplettera uppgifterna för utbetalningar"]);
   });
 
   it("goes by Stripe's current account, not the event, so a late event can't undo a newer state", async () => {
