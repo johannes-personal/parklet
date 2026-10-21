@@ -263,7 +263,7 @@ hämtas på två ställen i koden.
 
 | Nr | Problem | I den nya versionen |
 |---|---|---|
-| 1 | Inget att boka | Startsidan förklarar tjänsten och värvar uthyrare. En tom sökning länkar till "Hyr ut den på Parklet". Demodata finns i fyra städer (Göteborg, Stockholm, Uppsala, Malmö). Hittas inget inom 3 km letar sökningen vidare (15 km, 10 mil och till sist de närmaste platserna var de än finns) och säger att den gjort det |
+| 1 | Inget att boka | Startsidan förklarar tjänsten och värvar uthyrare. En tom sökning länkar till "Hyr ut den på Parklet". Demodata finns i fyra städer (Göteborg, Stockholm, Uppsala, Malmö). Sökningen visar platserna inom 3 km och under **Andra platser** de närmaste längre bort, så att minst tio platser visas när det finns så många |
 | 2 | Juridik | Sidor för användarvillkor och integritetspolicy (utkast som ska granskas av jurist), kryssruta för samtycke vid registrering, personnummer hämtas via BankID och skrivs aldrig in |
 | 3 | Döda länkar | En tjänst på en domän. Alla länkar kontrolleras av ett automatiskt test |
 | 4 | Platssökning | Ett riktigt sökfält som går att skriva i direkt. Positionen används bara när man själv trycker på "Nära mig". Om adresstjänsten ligger nere går det fortfarande att söka på stad |
@@ -295,7 +295,9 @@ femminutersteg med snabbval för längden (1 tim, 2 tim … 1 dygn), och passera
 *Bild 1. Startsidan: sökningen direkt på första sidan, kartan i bakgrunden.*
 
 **2. Välj en plats.** Med en tid visas bara platser som är lediga **hela** perioden, med totalpriset
-för just den tiden, både i listan och som prislappar på kartan.
+för just den tiden, både i listan och som prislappar på kartan. Först kommer platserna inom 3 km;
+finns det färre än tio visas de närmaste längre bort under **Andra platser**, så att föraren alltid
+ser minst tio platser när det finns så många.
 
 ![Sökresultat på karta och i lista](images/flow-02-sok.jpg)
 *Bild 2. Sökresultat i Göteborg för en vald tid: lista till vänster, prislappar på kartan.*
@@ -323,7 +325,9 @@ in, vägbeskrivning och till när avbokningen är kostnadsfri. Ett kvitto skicka
 *Bild 5. Bokad och betald: instruktioner, vägbeskrivning och avbokning.*
 
 **6. Mina bokningar.** Kommande och tidigare bokningar samlas på ett ställe, och sparade bilar
-under "Mina fordon". Om platsen kräver att bilen registreras hos föreningen ser föraren om det är
+under "Mina fordon". Varje bokning visar när den gjordes. Under **Ditt konto** ser användaren sitt
+namn, sin e-postadress och kontotyp (förare, eller förare och uthyrare med sina uthyrarkonton), och
+kan ta bort kontot: personuppgifterna tas bort, medan bokningarna sparas utan namn för bokföringen. Om platsen kräver att bilen registreras hos föreningen ser föraren om det är
 gjort, och får besked om det inte är klart när parkeringen börjar.
 
 ![Mina bokningar](images/flow-06-mina-bokningar.jpg)

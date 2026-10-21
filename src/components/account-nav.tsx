@@ -33,7 +33,7 @@ export async function AccountNav() {
       <Link href="/mina-bokningar" className="hidden max-w-40 truncate text-zinc-300 transition-colors hover:text-white sm:inline">
         {user.name.split(" ")[0]}
       </Link>
-      {bell ? <NotificationBell initial={bell} /> : null}
+      <NotificationBell initial={bell} />
       <MenuDrawer user={{ name: user.name, isAdmin: user.isAdmin }} />
     </>
   );

@@ -97,6 +97,8 @@ async function BookingDetails({ params, searchParams }: PageProps<"/bokning/[id]
         <Item label="Boknings-id">
           <span className="font-mono text-sm">{b.id.slice(0, 8).toUpperCase()}</span>
         </Item>
+        <Item label="Bokad">{formatDateTime(b.confirmedAt ?? b.createdAt)}</Item>
+        {b.cancelledAt ? <Item label="Avbokad">{formatDateTime(b.cancelledAt)}</Item> : null}
       </dl>
 
       {b.status === "confirmed" ? (

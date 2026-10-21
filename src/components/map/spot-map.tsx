@@ -5,7 +5,16 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { createMap, loadMap, type MapLibre } from "./maplibre";
 
-export type MapSpot = { id: string; lat: number; lng: number; label: string; href: string; title: string };
+export type MapSpot = {
+  id: string;
+  lat: number;
+  lng: number;
+  label: string;
+  href: string;
+  title: string;
+  /** False for a pin the view isn't fitted to (a spot far away): it is drawn, but doesn't zoom the map out. */
+  fit?: boolean;
+};
 /** Space covered by panels floating over the map, in pixels, for phones and wider screens. */
 export type MapInsets = Record<"narrow" | "wide", { top: number; right: number; bottom: number; left: number }>;
 
@@ -85,7 +94,8 @@ export function SpotMap({
 
       if (fitted.current === viewKey) return;
       fitted.current = viewKey;
-      const points: [number, number][] = spots.map((s) => [s.lng, s.lat]);
+      const fit = spots.filter((s) => s.fit !== false);
+      const points: [number, number][] = (fit.length ? fit : spots).map((s) => [s.lng, s.lat]);
       if (center) points.push([center.lng, center.lat]);
       if (points.length > 1) {
         const bounds = points.reduce((b, p) => b.extend(p), new maplibregl.LngLatBounds(points[0], points[0]));

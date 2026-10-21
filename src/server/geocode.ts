@@ -1,7 +1,17 @@
 import "server-only";
 import { SWEDEN_BBOX, type LatLng } from "@/lib/geo";
 
-export type Place = { label: string; detail: string; lat: number; lng: number; city: string | null };
+export type Place = {
+  label: string;
+  detail: string;
+  lat: number;
+  lng: number;
+  city: string | null;
+  /** "Vegagatan 12", when the place has a street address. */
+  street: string | null;
+  /** The whole address as written on a letter: "Malmö Arena, Hyllie Stationstorg 2, 215 32 Malmö". */
+  full: string;
+};
 
 const base = () => process.env.GEOCODER_URL ?? "https://photon.komoot.io";
 
@@ -16,7 +26,9 @@ function toPlace(f: PhotonFeature): Place {
   const label = p.name && p.name !== p.street ? p.name : (street ?? p.city ?? p.name ?? "Okänd plats");
   const city = p.city ?? p.town ?? p.village ?? p.county ?? null;
   const detail = [street && street !== label ? street : null, p.postcode, city].filter(Boolean).join(", ");
-  return { label, detail, lat: f.geometry.coordinates[1], lng: f.geometry.coordinates[0], city };
+  const postal = [p.postcode, city].filter(Boolean).join(" ");
+  const full = [label, street && street !== label ? street : null, postal && postal !== label ? postal : null].filter(Boolean).join(", ");
+  return { label, detail, lat: f.geometry.coordinates[1], lng: f.geometry.coordinates[0], city, street, full };
 }
 
 /** Forward geocoding restricted to Sweden. Never throws: returns [] if the geocoder is unavailable. */

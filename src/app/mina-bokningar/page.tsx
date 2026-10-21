@@ -2,10 +2,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { BookingStatusBadge } from "@/components/status-badge";
-import { requireUser } from "@/lib/auth/session";
+import { requireUser, type CurrentUser } from "@/lib/auth/session";
 import { formatSek } from "@/lib/money";
 import { formatRange } from "@/lib/time";
 import { listDriverBookings, type BookingWithSpot } from "@/server/bookings";
+import { HOST_KIND_LABEL, listAccountsForUser } from "@/server/host-accounts";
+import { DeleteAccountForm } from "./delete-account-form";
 
 export const metadata: Metadata = { title: "Mina bokningar" };
 
@@ -15,6 +17,9 @@ export default function MyBookingsPage() {
       <h1 className="text-2xl font-bold">Mina bokningar</h1>
       <Suspense fallback={<div className="card mt-6 h-40 animate-pulse" />}>
         <List />
+      </Suspense>
+      <Suspense fallback={<div className="card mt-10 h-40 animate-pulse" />}>
+        <Account />
       </Suspense>
     </div>
   );
@@ -71,5 +76,77 @@ function Section({ title, items, empty }: { title: string; items: BookingWithSpo
         </ul>
       )}
     </section>
+  );
+}
+
+/** Who is signed in, what kind of account it is, and what can be done with it. */
+async function Account() {
+  const user: CurrentUser = await requireUser("/mina-bokningar");
+  const hostAccounts = await listAccountsForUser(user.id);
+  return (
+    <section className="card mt-10 p-5 sm:p-6" aria-labelledby="konto">
+      <h2 id="konto" className="text-lg font-semibold">
+        Ditt konto
+      </h2>
+      <dl className="mt-3 divide-y divide-line text-sm">
+        <Row label="Namn">{user.name}</Row>
+        <Row label="E-post">{user.email}</Row>
+        <Row label="Kontotyp">
+          {hostAccounts.length === 0 ? (
+            "Förare"
+          ) : (
+            <>
+              Förare och uthyrare
+              <ul className="mt-1 space-y-0.5">
+                {hostAccounts.map((a) => (
+                  <li key={a.id}>
+                    <Link href={`/uthyrare/${a.id}`} className="link">
+                      {a.name}
+                    </Link>{" "}
+                    <span className="text-muted">
+                      – {HOST_KIND_LABEL[a.kind]}, {a.role === "owner" ? "ägare" : "administratör"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          {user.isAdmin ? <span className="block text-muted">Administratör hos Parklet</span> : null}
+        </Row>
+        <Row label="BankID">{user.identityVerified ? "Legitimerad" : "Inte legitimerad (behövs bara för att hyra ut)"}</Row>
+      </dl>
+
+      <div className="mt-5 space-y-4 text-sm">
+        <div>
+          <Link href="/fordon" className="font-semibold link">
+            Mina fordon
+          </Link>
+          <p className="text-ink-soft">Spara bilarnas registreringsnummer, så väljer du bil med ett klick när du bokar.</p>
+        </div>
+        <div>
+          <Link href="/uthyrare/nytt" className="font-semibold link">
+            {hostAccounts.length ? "Skapa ett till uthyrarkonto" : "Bli uthyrare"}
+          </Link>
+          <p className="text-ink-soft">
+            {hostAccounts.length
+              ? "Ett uthyrarkonto byter inte typ, eftersom privatpersoner, föreningar och företag verifieras på olika sätt. Hyr du ut för en förening eller ett företag skapar du ett konto av den typen."
+              : "Hyr ut din egen plats som privatperson, eller platser för en bostadsrättsförening eller ett företag."}
+          </p>
+        </div>
+        <details className="rounded-xl border border-line p-4">
+          <summary className="cursor-pointer font-semibold text-danger">Ta bort kontot</summary>
+          <DeleteAccountForm />
+        </details>
+      </div>
+    </section>
+  );
+}
+
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="grid gap-1 py-2 sm:grid-cols-[8rem_1fr]">
+      <dt className="text-muted">{label}</dt>
+      <dd>{children}</dd>
+    </div>
   );
 }

@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { CITIES } from "@/lib/geo";
 
-export type PickedPlace = { label: string; lat: number; lng: number; city?: string | null; detail?: string };
+export type PickedPlace = { label: string; lat: number; lng: number; city?: string | null; detail?: string; street?: string | null; full?: string };
 type Suggestion = PickedPlace & { detail: string };
 
 /**
@@ -17,6 +17,7 @@ export function PlaceSearch({
   placeholder = "Adress, område eller stad",
   onPick,
   showNearMe = true,
+  showFullAddress = false,
 }: {
   id: string;
   label: string;
@@ -24,6 +25,8 @@ export function PlaceSearch({
   placeholder?: string;
   onPick: (p: PickedPlace | null) => void;
   showNearMe?: boolean;
+  /** After a pick, show the whole address (street, postnummer and postort) rather than just its name. */
+  showFullAddress?: boolean;
 }) {
   const listId = useId();
   const [query, setQuery] = useState(defaultValue);
@@ -56,7 +59,7 @@ export function PlaceSearch({
   }, [query, defaultValue]);
 
   function pick(s: Suggestion | PickedPlace) {
-    setQuery(s.label);
+    setQuery(showFullAddress && s.full ? s.full : s.label);
     setOpen(false);
     setActive(-1);
     onPick(s);
