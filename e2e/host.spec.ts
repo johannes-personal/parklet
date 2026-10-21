@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import postgres from "postgres";
-import { E2E_DB, e2eDb, lastMailLink, localAt, login, logout, pickRange, signIn } from "./helpers";
+import { E2E_DB, e2eDb, lastMailLink, localAt, login, logout, payOnStripe, pickRange, signIn } from "./helpers";
 
 const fixture = (name: string) => path.resolve("e2e/fixtures", name);
 
@@ -45,8 +45,11 @@ test("a new host onboards, proves the right to rent via BRF approval, and gets a
   expect(stored.personnummer_encrypted).toMatch(/^v1\./);
   expect(stored.personnummer_encrypted).not.toContain("199001012384");
 
-  // Payouts (mock)
-  await page.getByRole("button", { name: "Koppla utbetalningskonto (testläge)" }).click();
+  // Payouts: Stripe Connect onboarding (the fake), prefilled with the BankID name.
+  await page.getByRole("button", { name: "Koppla utbetalningskonto" }).click();
+  await expect(page.getByRole("heading", { name: "Fake Stripe Connect" })).toBeVisible();
+  await expect(page.getByText("Namn: Lisa Uthyrare")).toBeVisible();
+  await page.getByRole("button", { name: "Skicka in uppgifter" }).click();
   await expect(page.getByText("Utbetalningskontot är kopplat.")).toBeVisible();
   const accountUrl = new URL(page.url()).pathname;
 
@@ -136,6 +139,7 @@ test("a new host onboards, proves the right to rent via BRF approval, and gets a
   await pickRange(form, localAt(3, 10), localAt(3, 12));
   await page.getByRole("button", { name: "Fortsätt till betalning" }).click();
   await page.getByRole("button", { name: /Betala .* \(testläge\)/ }).click();
+  await payOnStripe(page);
   await expect(page.getByText("Väntar på att uthyraren registrerar bilen")).toBeVisible();
   const bookingUrl = new URL(page.url()).pathname;
   await logout(page);

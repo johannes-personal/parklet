@@ -5,6 +5,10 @@ const PORT = 3100;
 const IDP = "http://localhost:3101";
 const REGISTRY = "http://localhost:3102";
 const API = "http://localhost:3103";
+const STRIPE = "http://localhost:3104";
+// Shared with e2e/fake-stripe.mjs, which signs its webhooks with it; test-only values.
+const STRIPE_KEY = "sk_test_e2e";
+const STRIPE_WEBHOOK_SECRET = "whsec_e2e";
 // The local API's service key (Playwright can't import the ES module itself).
 const SERVICE_KEY = execFileSync(process.execPath, ["scripts/postgrest.mjs", "--print-key"]).toString().trim();
 const E2E_DB = process.env.E2E_DATABASE_URL ?? "postgres://parklet:parklet@localhost:5432/parklet_e2e";
@@ -48,6 +52,18 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
     },
     {
+      // Stands in for Stripe (Connect, Checkout, refunds) and delivers signed webhooks; see e2e/fake-stripe.mjs.
+      command: `node e2e/fake-stripe.mjs`,
+      url: `${STRIPE}/health`,
+      reuseExistingServer: !process.env.CI,
+      env: {
+        FAKE_STRIPE_PORT: "3104",
+        FAKE_STRIPE_API_KEY: STRIPE_KEY,
+        FAKE_STRIPE_WEBHOOK_SECRET: STRIPE_WEBHOOK_SECRET,
+        FAKE_STRIPE_WEBHOOK_URL: `http://localhost:${PORT}/api/stripe/webhook`,
+      },
+    },
+    {
       // Supabase's HTTP API for the e2e database: the app reaches its data only through it.
       // Starts before global-setup migrates; the last migration tells it to reload.
       command: `node scripts/postgrest.mjs --port 3103`,
@@ -77,6 +93,12 @@ export default defineConfig({
         BOLAGSVERKET_CLIENT_SECRET: "e2e-secret",
         BOLAGSVERKET_TOKEN_URL: `${REGISTRY}/oauth2/token`,
         BOLAGSVERKET_BASE_URL: `${REGISTRY}/vardefulla-datamangder/v1`,
+        // The real Stripe code path, against the fake.
+        PAYMENT_PROVIDER: "stripe",
+        STRIPE_SECRET_KEY: STRIPE_KEY,
+        STRIPE_WEBHOOK_SECRET,
+        STRIPE_API_BASE: STRIPE,
+        STRIPE_SUPPRESS_NOTICES: "true",
       },
     },
   ],
