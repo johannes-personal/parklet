@@ -209,9 +209,8 @@ As `forare@parklet.test`, on **Carport nära Liseberg** (free cancellation until
 # Becoming a host
 
 The way in: **Meny → Hyr ut → Uthyrning**. Without a host account it explains hosting and
-**Kom igång** leads to **Bli uthyrare**. With one account it opens that account; with several
-it lists them, with **Skapa ett till uthyrarkonto**. A user who already has exactly one account
-has no button for a second: open `/uthyrare/nytt` directly.
+**Kom igång** leads to **Bli uthyrare**. With one account it shows that account's dashboard, which ends with a
+link **Skapa ett till uthyrarkonto**; with several it lists them, with the same link.
 
 The account's checklist **Innan du kan ta emot bokningar** stays until BankID, payouts and one
 approved spot are done.
@@ -377,10 +376,10 @@ Log in as `johannes@jvo.se`, or as `admin@parklet.test` and use the e-mail log.
 
 1. **Bell:**
    - The red number counts new events. It **disappears when you open the bell** and stays gone after you navigate.
-   - "Att göra" lists "Granska N platser" / "Verifiera N organisationer" ("en plats", "en organisation" for one). When only tasks remain, the bell shows a yellow dot.
+   - "Att göra" lists "Granska N platser" / "Granska N uthyrarkonton" ("en plats", "ett uthyrarkonto" for one). When only tasks remain, the bell shows a yellow dot.
 2. 📧 Check the inbox for "Ny plats att granska: …", with the button **Granska platsen**.
 3. **Granskning:** the tabs are *Att granska · Platser · Uthyrare · E-post*.
-   - **Att granska** lists **Organisationer (N)** (households sent back for review are listed here too) and **Platser (N)**.
+   - **Att granska** lists **Uthyrarkonton (N)** (organisations, and households sent back for review) and **Platser (N)**.
 4. **Platser:**
    - Search for part of a title, an address, an org. number or a spot ID.
    - Try the filters: Grund, Ort, Bokningsbar, Sortera.
@@ -561,7 +560,7 @@ The bell appears for hosts and admins, and for drivers once they have a notifica
 2. **New host** (`ny@parklet.test`): **Att göra** "Legitimera dig med BankID", "Koppla utbetalningskonto", and "Slutför och skicka in <rubrik>" for a draft spot. Each disappears once done.
 3. **Host with several accounts** (`erik@parklet.test`): tasks carry the account's name in brackets.
 4. **BRF board** (`styrelsen@parklet.test`): "Registrera en bil" / "Registrera N bilar"; "Godkännande begärt: …" when a member asks the board's address.
-5. **Admin:** "Granska N platser", "Verifiera N organisationer", and events such as "Ny plats att granska: …".
+5. **Admin:** "Granska N platser", "Granska N uthyrarkonton", and events such as "Ny plats att granska: …".
 6. For all: the red number clears when the bell opens; a click on an item opens its page and closes the bell; Escape closes it.
 
 ## 26. Access rules

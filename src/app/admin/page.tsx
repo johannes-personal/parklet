@@ -37,7 +37,7 @@ async function Queue() {
   return (
     <div className="mt-8 space-y-8">
       <section>
-        <h2 className="text-lg font-semibold">Organisationer ({pendingAccounts.length})</h2>
+        <h2 className="text-lg font-semibold">Uthyrarkonton ({pendingAccounts.length})</h2>
         {pendingAccounts.length === 0 ? (
           <p className="mt-2 text-sm text-muted">Inget att granska.</p>
         ) : (

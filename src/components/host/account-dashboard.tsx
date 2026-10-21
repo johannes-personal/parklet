@@ -278,6 +278,14 @@ export async function AccountDashboard({ user, account, payoutsConnected = false
           </div>
         </section>
       ) : null}
+
+      {/* With one account /uthyrare shows this dashboard, so this is the way to a second one. */}
+      <p className="text-sm text-muted">
+        Hyr du också ut för en förening eller ett företag?{" "}
+        <Link href="/uthyrare/nytt" className="link">
+          Skapa ett till uthyrarkonto
+        </Link>
+      </p>
     </div>
   );
 }

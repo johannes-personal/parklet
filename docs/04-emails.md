@@ -29,7 +29,7 @@ rendered, at `/admin/epost`. Addresses on demo domains (`*.test`,
 | Driver cancelled | Host account members | Avbokning: Garage X | ✓ | Öppna i Parklet |
 | Host cancelled | Driver | Din bokning av Garage X är avbokad | ✓ | Öppna i Parklet |
 | Car registered by host | Driver | ABC123 är registrerad för Garage X | ✓ | Öppna i Parklet |
-| 2 h before start, car not registered | Host account members | Påminnelse: registrera ABC123 före kl. 10:00 | ✓ | Öppna i Parklet |
+| 3 h before start, car not registered | Host account members | Påminnelse: registrera ABC123 före kl. 10:00 | ✓ | Öppna i Parklet |
 | Start time passed, car not registered | Driver | ABC123 är inte registrerad än – vänta med att parkera | ✓ | Öppna i Parklet |
 | Start time passed, car not registered | Host account members | Bokningen har börjat – ABC123 är inte registrerad | ✓ | Öppna i Parklet |
 | Start time passed, car not registered | All admins | Bil ej registrerad vid start: Garage X | ✓ (bell only) | – |

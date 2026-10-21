@@ -167,7 +167,7 @@ export async function adminTodos(): Promise<Todo[]> {
   const todos: Todo[] = [];
   if (spotsPending.n > 0) todos.push({ key: "admin:spots", title: `Granska ${spotsPending.n === 1 ? "en plats" : `${spotsPending.n} platser`}`, href: "/admin" });
   if (accountsPending.n > 0) {
-    todos.push({ key: "admin:accounts", title: `Verifiera ${accountsPending.n === 1 ? "en organisation" : `${accountsPending.n} organisationer`}`, href: "/admin" });
+    todos.push({ key: "admin:accounts", title: `Granska ${accountsPending.n === 1 ? "ett uthyrarkonto" : `${accountsPending.n} uthyrarkonton`}`, href: "/admin" });
   }
   return todos;
 }

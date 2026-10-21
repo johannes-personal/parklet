@@ -318,7 +318,7 @@ tre grupperna som använder den.
 - Föreningar och företag kan skapa "Plats 1–20" på en gång med samma villkor och underlag, och
   bjuda in fler administratörer via e-post. Organisationsnumret kontrolleras mot Bolagsverket.
 - Uthyraren får besked via e-post och notisklockan när en plats godkänns, när någon bokar, och
-  om en bil behöver registreras (med påminnelse två timmar före start).
+  om en bil behöver registreras (med påminnelse tre timmar före start).
 
 ### Parklet själva (administratörer)
 
