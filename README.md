@@ -134,6 +134,19 @@ Live demo: **https://parklet-rebuild.vercel.app**
   `EXECUTE` from `PUBLIC`, `anon` and `authenticated`, as 0010 does; `tests/integration/api.test.ts`
   checks it.
 
+## Hosts' data: registered cars and deleting
+
+- **Registered cars** (`spot_vehicle_approvals`, `src/server/vehicle-approvals.ts`): for a spot
+  that requires the association's registration, marking a booking's car as registered keeps it
+  for the spot; the next booking with it is registered from the start, and other bookings
+  waiting with it are done at once. Hosts see and edit the list on the spot's page.
+- **Deleting** (`src/server/host-deletion.ts`): a host deletes a spot or a whole host account at
+  any stage, except while bookings are still to come. Bookings are kept seven years for the
+  bookkeeping, so a spot or account that has been booked is archived (`deleted_at`: paused,
+  without members, documents or registered cars, out of every list) instead of removed; one
+  never booked is removed. The person's own account deletion (Mina sidor) does the same for
+  the host accounts they own.
+
 ## Payments (Stripe Connect)
 
 Parklet never holds drivers' money: Stripe does, under its licence, and pays the hosts. Code:
@@ -162,6 +175,9 @@ Parklet never holds drivers' money: Stripe does, under its licence, and pays the
   webhook never arrives. Pressing "Betala" again reuses the open session. A payment that still
   arrives for a released booking is kept if the slot is free and refunded in full if someone
   else has it: the database's exclusion constraint decides, so there is never a double booking.
+- **Return URLs** (after paying, cancelling, onboarding) use the address the person is on
+  (`src/server/request-origin.ts`), not `APP_URL`: the session cookie belongs to that host, so
+  coming back to another alias of the deployment would ask them to log in again.
 - **Confirmation** happens on the return URL (`/betala/<id>/klar`, from Stripe's own record of
   the session) and from the webhook, whichever comes first; both are idempotent, and handled
   events are recorded in `stripe_events`.

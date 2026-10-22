@@ -9,15 +9,21 @@ import { requireUser } from "@/lib/auth/session";
 import { parseSekToOre } from "@/lib/money";
 import { normalizeOrgNumber } from "@/lib/org-number";
 import { scheduleSchema } from "@/lib/schedule";
-import { emailSchema, fieldErrors, spotSchema, type SpotInput } from "@/lib/validation";
+import { emailSchema, fieldErrors, normalizeVehicleReg, spotSchema, type SpotInput } from "@/lib/validation";
 import {
   acceptInvitation,
+  cancelInvitation,
   connectPayoutsMock,
   createHostAccount,
   getAccountForMember,
   inviteAdmin,
+  reinvite,
+  removeMember,
   submitAccountForReview,
+  transferOwnership,
 } from "@/server/host-accounts";
+import { deleteHostAccount, deleteSpot } from "@/server/host-deletion";
+import { approveVehicle, revokeVehicle } from "@/server/vehicle-approvals";
 import { lookupOrganisation } from "@/server/company-registry";
 import { paymentProviderName } from "@/server/payments";
 import { payoutDashboardUrl, startPayoutOnboarding } from "@/server/payouts";
@@ -232,7 +238,7 @@ export async function toggleSpotAction(formData: FormData) {
   const accountId = String(formData.get("accountId"));
   await requireMember(accountId);
   await setSpotStatus(accountId, String(formData.get("spotId")), formData.get("status") === "paused" ? "paused" : "active");
-  revalidatePath(`/uthyrare/${accountId}`);
+  revalidatePath(`/uthyrare/${accountId}`, "layout");
 }
 
 export async function submitSpotAction(_prev: FormState, formData: FormData): Promise<FormState> {
@@ -254,7 +260,7 @@ export async function submitSpotAction(_prev: FormState, formData: FormData): Pr
   const extra = submitted.length - 1;
   revalidatePath(`/uthyrare/${accountId}/platser/${spotId}`);
   return {
-    success: `${extra ? `${extra + 1} platser är` : "Platsen är"} inskickad${extra ? "e" : ""} för granskning. Vi meddelar dig när de är godkända.`,
+    success: `${extra ? `${extra + 1} parkeringsplatser är` : "Platsen är"} inskickad${extra ? "e" : ""} för granskning. Vi meddelar dig när de är godkända.`,
   };
 }
 
@@ -332,4 +338,86 @@ export async function deleteDocumentAction(_prev: FormState, formData: FormData)
   if (!result.ok) return { error: result.error };
   revalidatePath(`/uthyrare/${accountId}/platser/${spotId}`);
   return { success: "Dokumentet är borttaget." };
+}
+
+/* ------------------------------------------------------- registered cars */
+
+export async function approveVehicleAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const accountId = String(formData.get("accountId"));
+  const spotId = String(formData.get("spotId"));
+  const { user } = await requireMember(accountId);
+  const spot = await getSpot(spotId);
+  if (!spot || spot.hostAccountId !== accountId) return { error: "Parkeringsplatsen finns inte." };
+  const reg = normalizeVehicleReg(String(formData.get("reg") ?? ""));
+  if (!reg) return { fieldErrors: { reg: "Ange ett giltigt registreringsnummer, t.ex. ABC123." }, values: { reg: String(formData.get("reg") ?? "") } };
+  const waiting = await approveVehicle(spotId, reg, user.id);
+  revalidatePath(`/uthyrare/${accountId}`, "layout");
+  return {
+    success: `${reg} är registrerad för platsen.${waiting ? ` ${waiting === 1 ? "En bokning" : `${waiting} bokningar`} med bilen är nu klar${waiting === 1 ? "" : "a"}, och föraren har fått besked.` : ""}`,
+  };
+}
+
+export async function revokeVehicleAction(formData: FormData) {
+  const accountId = String(formData.get("accountId"));
+  const spotId = String(formData.get("spotId"));
+  await requireMember(accountId);
+  const spot = await getSpot(spotId);
+  if (spot && spot.hostAccountId === accountId) await revokeVehicle(spotId, String(formData.get("reg") ?? ""));
+  revalidatePath(`/uthyrare/${accountId}`, "layout");
+}
+
+/* -------------------------------------------------------------- deleting */
+
+export async function deleteSpotAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const accountId = String(formData.get("accountId"));
+  await requireMember(accountId);
+  if (formData.get("confirm") !== "on") return { error: "Bekräfta att du vill ta bort parkeringsplatsen." };
+  const result = await deleteSpot(accountId, String(formData.get("spotId")));
+  if (!result.ok) return { error: result.error };
+  revalidatePath(`/uthyrare/${accountId}`, "layout");
+  redirect(`/uthyrare/${accountId}/platser?borttagen=1`);
+}
+
+export async function deleteHostAccountAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const accountId = String(formData.get("accountId"));
+  const { user } = await requireMember(accountId);
+  if (formData.get("confirm") !== "on") return { error: "Bekräfta att du vill ta bort uthyrarkontot." };
+  const result = await deleteHostAccount(accountId, user.id);
+  if (!result.ok) return { error: result.error };
+  revalidatePath("/", "layout");
+  redirect("/mina-sidor?uthyrarkonto=borttaget");
+}
+
+/* -------------------------------------------------------- administrators */
+
+export async function memberAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const accountId = String(formData.get("accountId"));
+  const { user, account } = await requireMember(accountId);
+  const op = String(formData.get("op"));
+  const target = String(formData.get("userId") ?? "");
+  const invitation = String(formData.get("invitationId") ?? "");
+  let result: { ok: true } | { ok: false; error: string };
+  let success = "";
+  if (op === "remove") {
+    result = await removeMember(accountId, user.id, target);
+    success = target === user.id ? "Du har lämnat kontot." : "Administratören är borttagen.";
+  } else if (op === "owner") {
+    result = await transferOwnership(accountId, user.id, target);
+    success = "Kontot har en ny ägare. Du är kvar som administratör.";
+  } else if (op === "cancel") {
+    await cancelInvitation(accountId, invitation);
+    result = { ok: true };
+    success = "Inbjudan är tillbakadragen.";
+  } else if (op === "resend") {
+    const email = emailSchema.safeParse(formData.get("email") ?? "");
+    if (!email.success) return { fieldErrors: { email: "Ange en giltig e-postadress." }, values: { email: String(formData.get("email") ?? "") } };
+    result = await reinvite(account, user, invitation, email.data);
+    success = `Ny inbjudan skickad till ${email.data}. Den gamla länken gäller inte längre.`;
+  } else {
+    return { error: "Okänd åtgärd." };
+  }
+  if (!result.ok) return { error: result.error };
+  if (op === "remove" && target === user.id) redirect("/uthyrare");
+  revalidatePath(`/uthyrare/${accountId}`, "layout");
+  return { success };
 }

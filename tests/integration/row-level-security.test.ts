@@ -2,7 +2,7 @@ import { createHmac } from "node:crypto";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { closeDb, db } from "./direct-db";
-import { appSecrets, documentBlobs, documents, hostInvitations, identityRequests, passwordResetTokens, sessions, stripeEvents } from "@/db/schema";
+import { appSecrets, documentBlobs, documents, hostInvitations, identityRequests, passwordResetTokens, sessions, stripeEvents, spotVehicleApprovals } from "@/db/schema";
 import { LOCAL_JWT_SECRET } from "../../scripts/postgrest.mjs";
 import { TEST_API_PORT } from "../support/env";
 import { hoursFromNow, makeBookableSpot, makeConfirmedBooking, makeUser, resetDb } from "./helpers";
@@ -48,6 +48,7 @@ async function seedEverything() {
   await db.insert(hostInvitations).values({ id: "invite-hash", hostAccountId: account.id, email: "ny@example.com", invitedBy: host.id, expiresAt: later });
   await db.insert(appSecrets).values({ name: "cron", value: "the-cron-secret" });
   await db.insert(stripeEvents).values({ id: "evt_test", type: "checkout.session.completed" });
+  await db.insert(spotVehicleApprovals).values({ spotId, reg: "ABC123", approvedBy: host.id });
   return { spotId, driver };
 }
 

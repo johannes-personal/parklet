@@ -4,6 +4,7 @@ import { hostAccounts, spots, type Spot } from "@/db/schema";
 import { isWithinWindows, type AvailabilityWindow } from "@/lib/availability";
 import { boundingBox, distanceMeters, type LatLng } from "@/lib/geo";
 import { calculatePrice, type PriceBreakdown } from "@/lib/pricing";
+import { matchesFilters, NO_FILTERS, type SearchFilters } from "@/lib/search-filters";
 import { BOOKABLE_FILTERS } from "./spots";
 
 const S = names(spots);
@@ -55,26 +56,29 @@ export type SearchOutcome = {
  * the search could show is shown the same way whatever else is free: a spot just outside
  * the circle is among "the others" rather than appearing only when nothing nearer does.
  */
-export async function searchSpots(opts: { center: LatLng | null; start: Date | null; end: Date | null }): Promise<SearchOutcome> {
+export async function searchSpots(opts: { center: LatLng | null; start: Date | null; end: Date | null; filters?: SearchFilters }): Promise<SearchOutcome> {
   const { center, start, end } = opts;
-  if (!center) return { results: await runSearch(null, null, start, end), others: [] };
-  const results = await runSearch(center, DEFAULT_RADIUS_M, start, end);
+  const filters = opts.filters ?? NO_FILTERS;
+  if (!center) return { results: await runSearch(null, null, start, end, filters), others: [] };
+  const results = await runSearch(center, DEFAULT_RADIUS_M, start, end, filters);
   if (results.length >= MIN_SHOWN) return { results, others: [] };
   const near = new Set(results.map((r) => r.id));
   let others: SearchResult[] = [];
   for (const radiusM of OTHER_RADII_M) {
-    others = (await runSearch(center, radiusM, start, end)).filter((r) => !near.has(r.id));
+    others = (await runSearch(center, radiusM, start, end, filters)).filter((r) => !near.has(r.id));
     if (results.length + others.length >= MIN_SHOWN) break;
   }
   return { results, others: others.slice(0, MIN_SHOWN - results.length) };
 }
 
-async function runSearch(center: LatLng | null, radiusM: number | null, start: Date | null, end: Date | null) {
+async function runSearch(center: LatLng | null, radiusM: number | null, start: Date | null, end: Date | null, filters: SearchFilters) {
   let query = api()
     .from("spots")
     .select(`${cols(spots, CANDIDATE_KEYS)},${embed("account", hostAccounts, ["id"], { inner: true })}`)
     .eq(S.visibility, "public");
   for (const [column, value] of BOOKABLE_FILTERS) query = query.eq(column, value);
+  if (filters.types.length) query = query.in(S.spotType, filters.types);
+  if (filters.ev) query = query.eq(S.evCharging, true);
   if (center && radiusM) {
     const box = boundingBox(center, radiusM);
     query = query.gte(S.lat, box.minLat).lte(S.lat, box.maxLat).gte(S.lng, box.minLng).lte(S.lng, box.maxLng);
@@ -83,6 +87,8 @@ async function runSearch(center: LatLng | null, radiusM: number | null, start: D
 
   let rows = candidates.map(({ account, ...c }) => (void account, { ...c, distanceM: center ? distanceMeters(center, c) : null }));
   if (center && radiusM) rows = rows.filter((r) => r.distanceM! <= radiusM);
+  // "Under tak" also counts garages and carports, which the query can't say in one filter.
+  if (filters.covered) rows = rows.filter((r) => matchesFilters(r, filters));
 
   if (start && end && end > start && rows.length) {
     // One call for all candidates: their opening hours and which are taken in the period.

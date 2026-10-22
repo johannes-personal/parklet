@@ -167,7 +167,9 @@ test("a household that loses its approval starts over, and its spots can't be bo
   await expect(step("Legitimera dig med BankID", true)).toBeVisible();
   await expect(step("Koppla konto för utbetalningar", true)).toBeVisible();
   await expect(step("Lägg upp en plats med underlag och få den godkänd", false)).toBeVisible();
-  await expect(page.getByText("Ej godkänd", { exact: true })).toBeVisible();
+  // The host finds it under Granska, with the reason.
+  await page.goto(`/uthyrare/${account.id}/granska`);
+  await expect(page.getByText("Ej godkänd: Föreningen har dragit tillbaka godkännandet.")).toBeVisible();
   await decide(`/admin/platser/${spot.id}`, "Godkänn");
   await bookable(true);
 

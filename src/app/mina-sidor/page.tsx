@@ -24,6 +24,9 @@ export default function MyPage({ searchParams }: PageProps<"/mina-sidor">) {
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-10">
       <h1 className="text-2xl font-bold">Mina sidor</h1>
+      <Suspense fallback={null}>
+        <Notice searchParams={searchParams} />
+      </Suspense>
       <Suspense fallback={<div className="card mt-6 h-40 animate-pulse" />}>
         <Account />
       </Suspense>
@@ -36,6 +39,17 @@ export default function MyPage({ searchParams }: PageProps<"/mina-sidor">) {
         </Suspense>
       </section>
     </div>
+  );
+}
+
+/** After deleting a host account (src/app/uthyrare/actions.ts). */
+async function Notice({ searchParams }: { searchParams: PageProps<"/mina-sidor">["searchParams"] }) {
+  const sp = await searchParams;
+  if (one(sp.uthyrarkonto) !== "borttaget") return null;
+  return (
+    <p role="status" className="mt-4 rounded-xl border border-ok/20 bg-ok-soft px-4 py-3 font-medium text-ok">
+      Uthyrarkontot är borttaget.
+    </p>
   );
 }
 
@@ -186,7 +200,7 @@ async function Account() {
           <p className="text-ink-soft">
             {hostAccounts.length
               ? "Ett uthyrarkonto byter inte typ, eftersom privatpersoner, föreningar och företag verifieras på olika sätt. Hyr du ut för en förening eller ett företag skapar du ett konto av den typen."
-              : "Hyr ut din egen plats som privatperson, eller platser för en bostadsrättsförening eller ett företag."}
+              : "Hyr ut din egen plats som privatperson, eller parkeringsplatser för en bostadsrättsförening eller ett företag."}
           </p>
         </div>
         <details className="rounded-xl border border-line p-4">

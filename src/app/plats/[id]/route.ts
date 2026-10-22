@@ -15,7 +15,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const times = { from: url.searchParams.get("from") ?? undefined, to: url.searchParams.get("to") ?? undefined };
   const spot = isUuid(id)
     ? must<{ id: string; lat: number; lng: number; city: string } | null>(
-        await api().from("spots").select(cols(spots, ["id", "lat", "lng", "city"])).eq(names(spots).id, id).maybeSingle(),
+        await api().from("spots").select(cols(spots, ["id", "lat", "lng", "city"])).eq(names(spots).id, id).is(names(spots).deletedAt, null).maybeSingle(),
         "spotRedirect",
       )
     : null;

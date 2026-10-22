@@ -42,7 +42,7 @@ export function MenuDrawer({ user }: Props) {
             title: "Administration",
             links: [
               { href: "/admin", label: "Granskning" },
-              { href: "/admin/platser", label: "Platser och uthyrare" },
+              { href: "/admin/platser", label: "Parkeringsplatser och uthyrare" },
               { href: "/admin/bokningar", label: "Bokningar" },
             ],
           },

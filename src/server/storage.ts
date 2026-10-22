@@ -2,6 +2,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { MAX_DOCUMENT_BYTES, TOO_LARGE } from "@/lib/documents";
 import { serviceHeaders } from "@/db/api";
 
 /**
@@ -21,8 +22,6 @@ const root = () =>
     ? path.resolve(/*turbopackIgnore: true*/ process.env.DOCUMENT_STORAGE_DIR)
     : path.join(process.cwd(), "storage", "documents");
 
-/** Vercel functions accept request bodies up to 4.5 MB, so uploads stay below that. */
-export const MAX_DOCUMENT_BYTES = 4 * 1024 * 1024;
 
 const SIGNATURES: { mime: string; ext: string; test: (b: Buffer) => boolean }[] = [
   { mime: "application/pdf", ext: "pdf", test: (b) => b.subarray(0, 5).toString("latin1") === "%PDF-" },
@@ -44,7 +43,7 @@ export type StoredFile = { storageKey: string; mimeType: string; sizeBytes: numb
 
 export async function storeDocument(bytes: Buffer): Promise<StoredFile | { error: string }> {
   if (bytes.length === 0) return { error: "Filen är tom." };
-  if (bytes.length > MAX_DOCUMENT_BYTES) return { error: "Filen är större än 4 MB. Ta ett foto med lägre upplösning eller ladda upp en PDF." };
+  if (bytes.length > MAX_DOCUMENT_BYTES) return { error: TOO_LARGE };
   const type = sniffMime(bytes);
   if (!type) return { error: "Ladda upp en PDF eller en bild (JPG, PNG eller HEIC)." };
   const storageKey = `${new Date().toISOString().slice(0, 7)}/${randomUUID()}.${type.ext}`;

@@ -67,7 +67,7 @@ async function Results({ searchParams }: { searchParams: PageProps<"/admin/konto
         <div className="grid gap-3 sm:grid-cols-3">
           <Select label="Typ" name="typ" value={f.kind} options={Object.entries(HOST_KIND_LABEL)} />
           <Select label="Utbetalning" name="utbetalning" value={f.payout} options={Object.entries(PAYOUT_LABEL)} />
-          <Select label="Sortera" name="sortera" value={f.sort} all="Senast skapad" options={[["name", "Namn A–Ö"], ["spots", "Flest platser"]]} />
+          <Select label="Sortera" name="sortera" value={f.sort} all="Senast skapad" options={[["name", "Namn A–Ö"], ["spots", "Flest parkeringsplatser"]]} />
         </div>
       </FilterForm>
 
@@ -101,7 +101,7 @@ async function Results({ searchParams }: { searchParams: PageProps<"/admin/konto
                 <th className="px-4 py-2.5 font-semibold">Verifiering</th>
                 <th className="px-4 py-2.5 font-semibold">Utbetalning</th>
                 <th className="px-4 py-2.5 text-right font-semibold" title="Godkända av alla">
-                  Platser
+                  Parkeringsplatser
                 </th>
                 <th className="px-4 py-2.5 font-semibold">Skapad</th>
               </tr>

@@ -6,7 +6,8 @@ import { SearchForm } from "@/components/search-form";
 import { SpotMap, type MapSpot } from "@/components/map/spot-map";
 import { loadSpotForViewer, SpotBooking, SpotFacts, SpotHeading } from "@/components/spot/spot-details";
 import { formatDistance } from "@/lib/geo";
-import { spotFeatures } from "@/lib/labels";
+import { SPOT_TYPE_LABEL, spotFeatures } from "@/lib/labels";
+import { filtersFromParams, hasFilters, NO_FILTERS, setFilterParams, SPOT_TYPES, type SearchFilters } from "@/lib/search-filters";
 import { formatSek } from "@/lib/money";
 import { formatDuration, formatRange, isPast, parseLocalDateTime } from "@/lib/time";
 import { spotHref } from "@/lib/spot-link";
@@ -68,7 +69,8 @@ async function Results({ searchParams }: { searchParams: SP }) {
   const end = parseLocalDateTime(toRaw);
   // Times that have already passed (an old or shared link) are ignored, as in the pickers.
   const timed = Boolean(start && end && end > start && !isPast(start));
-  const outcome = await searchSpots({ center, start: timed ? start : null, end: timed ? end : null });
+  const filters = filtersFromParams(sp);
+  const outcome = await searchSpots({ center, start: timed ? start : null, end: timed ? end : null, filters });
 
   // The search URL with or without a selected spot.
   const base = new URLSearchParams();
@@ -81,6 +83,7 @@ async function Results({ searchParams }: { searchParams: SP }) {
     base.set("from", fromRaw!);
     base.set("to", toRaw!);
   }
+  setFilterParams(base, filters);
   const hrefFor = (id: string | null) => {
     const p = new URLSearchParams(base);
     if (id) p.set("plats", id);
@@ -103,13 +106,13 @@ async function Results({ searchParams }: { searchParams: SP }) {
     <div aria-live="polite">
       <h1 className="font-bold">
         {shown.length === 0
-          ? "Inga lediga platser hittades"
+          ? "Inga lediga parkeringsplatser hittades"
           : outcome.results.length === 0
-            ? `Inga ${timed ? "lediga " : ""}platser inom 3 km`
-            : `${outcome.results.length} ${outcome.results.length === 1 ? "plats" : "platser"}${timed ? " lediga hela tiden" : ""}${center ? " inom 3 km" : ""}`}
+            ? `Inga ${timed ? "lediga " : ""}parkeringsplatser inom 3 km`
+            : `${outcome.results.length} ${outcome.results.length === 1 ? "parkeringsplats" : "parkeringsplatser"}${timed ? " lediga hela tiden" : ""}${center ? " inom 3 km" : ""}`}
       </h1>
       <p className="truncate text-sm text-muted">
-        {q ?? "Alla platser"}
+        {q ?? "Alla parkeringsplatser"}
         {timed ? ` · ${formatRange(start!, end!)}` : ""}
       </p>
     </div>
@@ -141,14 +144,18 @@ async function Results({ searchParams }: { searchParams: SP }) {
               <SearchForm compact initial={{ q, lat: center?.lat, lng: center?.lng, from: timed ? fromRaw : undefined, to: timed ? toRaw : undefined }} />
             </div>
           </details>
+          <FilterChips base={base} filters={filters} />
           <div className="space-y-3 p-3">
-            {!timed ? <p className="px-1 text-sm text-muted">Välj tid för att bara se platser som är lediga då och få totalpriset.</p> : null}
+            {!timed ? <p className="px-1 text-sm text-muted">Välj tid för att bara se parkeringsplatser som är lediga då och få totalpriset.</p> : null}
             {timed ? (
               <p className="px-1 text-sm text-muted">Pris för {formatDuration(Math.round((end!.getTime() - start!.getTime()) / 60000))}, inklusive serviceavgift.</p>
             ) : null}
             {shown.length === 0 ? (
               <div className="px-1 text-ink-soft">
-                <p>Prova en annan tid, ett större område eller en närliggande stad.</p>
+                <p>
+                  {hasFilters(filters) ? "Inga parkeringsplatser med de valda filtren. Ta bort ett filter, eller prova" : "Prova"} en annan tid, ett större område eller
+                  en närliggande stad.
+                </p>
                 <p className="mt-2">
                   Har du själv en plats här?{" "}
                   <Link href="/uthyrare" className="link">
@@ -169,10 +176,10 @@ async function Results({ searchParams }: { searchParams: SP }) {
                 {outcome.others.length ? (
                   <section aria-labelledby="andra-platser" className={outcome.results.length ? "pt-2" : undefined}>
                     <h2 id="andra-platser" className="px-1 font-semibold">
-                      Andra platser
+                      Andra parkeringsplatser
                     </h2>
                     <p className="mb-2 px-1 text-sm text-muted">
-                      {outcome.results.length ? "Längre bort än 3 km, närmast först." : `Inga ${timed ? "lediga " : ""}platser inom 3 km – här är de närmaste.`}
+                      {outcome.results.length ? "Längre bort än 3 km, närmast först." : `Inga ${timed ? "lediga " : ""}parkeringsplatser inom 3 km – här är de närmaste.`}
                     </p>
                     <ul className="space-y-2">
                       {outcome.others.map((r) => (
@@ -192,6 +199,46 @@ async function Results({ searchParams }: { searchParams: SP }) {
         ) : null}
       </div>
     </>
+  );
+}
+
+const FILTER_CHIPS: { label: string; on: (f: SearchFilters) => boolean; toggle: (f: SearchFilters) => SearchFilters }[] = [
+  ...SPOT_TYPES.map((t) => ({
+    label: SPOT_TYPE_LABEL[t],
+    on: (f: SearchFilters) => f.types.includes(t),
+    toggle: (f: SearchFilters) => ({ ...f, types: f.types.includes(t) ? f.types.filter((x) => x !== t) : [...f.types, t] }),
+  })),
+  { label: "Under tak", on: (f) => f.covered, toggle: (f) => ({ ...f, covered: !f.covered }) },
+  { label: "Elbilsladdning", on: (f) => f.ev, toggle: (f) => ({ ...f, ev: !f.ev }) },
+];
+
+/** The tags shown on each result, as filters: each one a link that turns it on or off. */
+function FilterChips({ base, filters }: { base: URLSearchParams; filters: SearchFilters }) {
+  const href = (f: SearchFilters) => {
+    const p = new URLSearchParams(base);
+    setFilterParams(p, f);
+    return `/sok?${p}`;
+  };
+  return (
+    <nav aria-label="Filter" className="flex flex-wrap gap-1.5 border-b border-line px-4 py-3">
+      {FILTER_CHIPS.map((c) => (
+        <Link
+          key={c.label}
+          href={href(c.toggle(filters))}
+          scroll={false}
+          aria-current={c.on(filters) ? "true" : undefined}
+          className="rounded-full border border-line px-3 py-1 text-sm text-ink-soft hover:border-line-strong hover:text-ink aria-[current]:border-ink aria-[current]:bg-ink aria-[current]:font-semibold aria-[current]:text-white"
+        >
+          {c.on(filters) ? <span className="sr-only">Filter på: </span> : null}
+          {c.label}
+        </Link>
+      ))}
+      {hasFilters(filters) ? (
+        <Link href={href(NO_FILTERS)} scroll={false} className="px-2 py-1 text-sm text-muted underline-offset-2 hover:underline">
+          Rensa filter
+        </Link>
+      ) : null}
+    </nav>
   );
 }
 
@@ -241,7 +288,7 @@ async function SelectedSpot({ id, closeHref, returnTo, from, to }: { id: string;
         <h2 className="text-xl font-bold">{title}</h2>
         <p className="mt-2 text-ink-soft">
           {exists
-            ? "Uthyraren har pausat platsen eller håller på att ändra den. Det finns ofta andra lediga platser i närheten, på kartan och i listan."
+            ? "Uthyraren har pausat platsen eller håller på att ändra den. Det finns ofta andra lediga parkeringsplatser i närheten, på kartan och i listan."
             : "Platsen har tagits bort, eller så är länken fel."}
         </p>
       </SpotPanel>

@@ -152,12 +152,12 @@ export async function listMembers(accountId: string): Promise<{ userId: string; 
 }
 
 export async function listPendingInvitations(accountId: string) {
-  return parseAll<typeof hostInvitations, { email: string; expiresAt: Date }>(
+  return parseAll<typeof hostInvitations, { id: string; email: string; expiresAt: Date; createdAt: Date }>(
     hostInvitations,
     must(
       await api()
         .from("host_invitations")
-        .select(cols(hostInvitations, ["email", "expiresAt"]))
+        .select(cols(hostInvitations, ["id", "email", "expiresAt", "createdAt"]))
         .eq(I.hostAccountId, accountId)
         .is(I.acceptedAt, null)
         .gt(I.expiresAt, new Date().toISOString()),
@@ -186,7 +186,7 @@ export async function inviteAdmin(account: HostAccount, invitedBy: { id: string;
   await sendEmail(email, `${invitedBy.name} har bjudit in dig att administrera ${account.name} på Parklet`, {
     heading: `Bli administratör för ${account.name}`,
     paragraphs: [
-      `${invitedBy.name} vill att du blir administratör för uthyrarkontot "${account.name}" på Parklet. Som administratör kan du lägga upp och ändra platser, se bokningar och registrera bilar.`,
+      `${invitedBy.name} vill att du blir administratör för uthyrarkontot "${account.name}" på Parklet. Som administratör kan du lägga upp och ändra parkeringsplatser, se bokningar och registrera bilar.`,
       "Inbjudan gäller i 7 dagar. Har du inget Parklet-konto skapar du ett när du accepterar.",
     ],
     button: { label: "Acceptera inbjudan", url },
@@ -219,4 +219,59 @@ export async function acceptInvitation(token: string, user: { id: string; email:
   const accountId = await rpc<string | null>("parklet_accept_invitation", { p_invitation_id: found.invitation.id, p_user_id: user.id });
   if (!accountId) return { ok: false as const, error: "Inbjudan är ogiltig eller har gått ut." };
   return { ok: true as const, accountId };
+}
+
+/* ------------------------------------------------------- administrators */
+
+type MemberResult = { ok: true } | { ok: false; error: string };
+
+async function roleOf(accountId: string, userId: string): Promise<MembershipRole | null> {
+  const row = must<{ role: MembershipRole } | null>(
+    await api().from("host_account_members").select("role").eq(M.hostAccountId, accountId).eq(M.userId, userId).maybeSingle(),
+    "roleOf",
+  );
+  return row?.role ?? null;
+}
+
+/** Takes back an invitation that hasn't been accepted (any administrator may). */
+export async function cancelInvitation(accountId: string, invitationId: string) {
+  must(await api().from("host_invitations").delete().eq(I.id, invitationId).eq(I.hostAccountId, accountId).is(I.acceptedAt, null), "cancelInvitation");
+}
+
+/** Sends an invitation again, to the same address or a corrected one; the old link stops working. */
+export async function reinvite(account: HostAccount, invitedBy: { id: string; name: string }, invitationId: string, email: string): Promise<MemberResult> {
+  const old = must<unknown[]>(
+    await api().from("host_invitations").delete().eq(I.id, invitationId).eq(I.hostAccountId, account.id).is(I.acceptedAt, null).select(I.id),
+    "reinvite",
+  );
+  if (!old.length) return { ok: false, error: "Inbjudan finns inte längre." };
+  await inviteAdmin(account, invitedBy, email);
+  return { ok: true };
+}
+
+/**
+ * Removes an administrator. The owner removes others; an administrator may leave on
+ * their own. The owner can't leave: they hand the account over first, or delete it.
+ */
+export async function removeMember(accountId: string, actorId: string, userId: string): Promise<MemberResult> {
+  const [actor, target] = await Promise.all([roleOf(accountId, actorId), roleOf(accountId, userId)]);
+  if (!actor || !target) return { ok: false, error: "Personen är inte administratör för kontot." };
+  if (target === "owner") return { ok: false, error: "Ägaren kan inte tas bort. Lämna över kontot till en annan administratör först, eller ta bort kontot." };
+  if (actor !== "owner" && actorId !== userId) return { ok: false, error: "Bara kontots ägare kan ta bort andra administratörer." };
+  must(await api().from("host_account_members").delete().eq(M.hostAccountId, accountId).eq(M.userId, userId), "removeMember");
+  return { ok: true };
+}
+
+/**
+ * Hands the account over to another administrator, who becomes its owner (connects
+ * payouts, may delete it); the previous owner stays as an administrator.
+ */
+export async function transferOwnership(accountId: string, ownerId: string, userId: string): Promise<MemberResult> {
+  const [actor, target] = await Promise.all([roleOf(accountId, ownerId), roleOf(accountId, userId)]);
+  if (actor !== "owner") return { ok: false, error: "Bara kontots ägare kan lämna över det." };
+  if (target !== "admin") return { ok: false, error: "Personen är inte administratör för kontot." };
+  // The new owner first, so the account never is without one.
+  must(await api().from("host_account_members").update({ role: "owner" }).eq(M.hostAccountId, accountId).eq(M.userId, userId), "transferOwnership");
+  must(await api().from("host_account_members").update({ role: "admin" }).eq(M.hostAccountId, accountId).eq(M.userId, ownerId), "transferOwnership");
+  return { ok: true };
 }

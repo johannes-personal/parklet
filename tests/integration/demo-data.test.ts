@@ -232,8 +232,8 @@ describe("the admin's reset button", () => {
     await signIn(owner.id, "owner-token");
     const state = await resetDemoDataAction();
     expect(state?.success).toBe(
-      "Testdatan är återställd. Borttaget: 4 användare, 3 uthyrarkonton, 2 platser, 1 bokning, 1 dokument. " +
-        "Skapat: 6 användare, 5 uthyrarkonton, 17 platser, 3 bokningar, 1 dokument. 1 administratör med riktig e-postadress fick vara kvar.",
+      "Testdatan är återställd. Borttaget: 4 användare, 3 uthyrarkonton, 2 parkeringsplatser, 1 bokning, 1 dokument. " +
+        "Skapat: 6 användare, 5 uthyrarkonton, 17 parkeringsplatser, 3 bokningar, 1 dokument. 1 administratör med riktig e-postadress fick vara kvar.",
     );
     expect(cookieJar.get("parklet_session")).toBe("owner-token");
     expect(await db.select({ userId: sessions.userId }).from(sessions)).toEqual([{ userId: owner.id }]);

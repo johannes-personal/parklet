@@ -58,7 +58,7 @@ describe("deleting your own account", () => {
     const booking = await makeConfirmedBooking(spotId, driver.id, hoursFromNow(24), hoursFromNow(26));
 
     // A booking on the host's spot is still to come.
-    expect(await deleteOwnAccount(host.id, PASSWORD)).toEqual({ ok: false, error: expect.stringContaining("på dina platser") });
+    expect(await deleteOwnAccount(host.id, PASSWORD)).toEqual({ ok: false, error: expect.stringContaining("på dina parkeringsplatser") });
 
     await happened(booking.id);
     expect(await deleteOwnAccount(host.id, PASSWORD)).toEqual({ ok: true });

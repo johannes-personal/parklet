@@ -144,6 +144,8 @@ export const hostAccounts = pgTable("host_accounts", {
   payoutStatus: payoutStatusEnum("payout_status").notNull().default("not_connected"),
   payoutAccountRef: text("payout_account_ref"),
   createdAt: createdAt(),
+  /** Deleted by its owner. Kept (without members) only because bookings refer to its spots. */
+  deletedAt: ts("deleted_at"),
 });
 
 export const memberRoleEnum = pgEnum("member_role", ["owner", "admin"]);
@@ -251,6 +253,8 @@ export const spots = pgTable(
 
     createdAt: createdAt(),
     updatedAt: ts("updated_at").notNull().defaultNow(),
+    /** Deleted by the host. Kept (paused, hidden) only because bookings refer to it. */
+    deletedAt: ts("deleted_at"),
   },
   (t) => [
     index("spots_lat_lng_idx").on(t.lat, t.lng),
@@ -263,6 +267,24 @@ export const spots = pgTable(
     check("spots_lng_range", sql`${t.lng} BETWEEN -180 AND 180`),
     check("spots_landlord_kind", sql`(${t.rightBasis} = 'rents') = (${t.landlordKind} IS NOT NULL)`),
   ],
+);
+
+/**
+ * Cars the host has registered in the association's parking system for a spot that
+ * requires it. A booking of the spot with one of these is registered from the start.
+ */
+export const spotVehicleApprovals = pgTable(
+  "spot_vehicle_approvals",
+  {
+    spotId: uuid("spot_id")
+      .notNull()
+      .references(() => spots.id, { onDelete: "cascade" }),
+    /** Normalised like vehicles.reg: upper case, no spaces. */
+    reg: text("reg").notNull(),
+    approvedAt: ts("approved_at").notNull().defaultNow(),
+    approvedBy: uuid("approved_by").references(() => users.id, { onDelete: "set null" }),
+  },
+  (t) => [primaryKey({ columns: [t.spotId, t.reg] })],
 );
 
 export const availabilityWindows = pgTable(
@@ -459,6 +481,7 @@ export type Spot = typeof spots.$inferSelect;
 export type Booking = typeof bookings.$inferSelect;
 export type Vehicle = typeof vehicles.$inferSelect;
 export type DocumentRow = typeof documents.$inferSelect;
+export type MailOutbox = typeof mailOutbox.$inferSelect;
 export type SpotType = (typeof spotTypeEnum.enumValues)[number];
 export type HostKind = (typeof hostKindEnum.enumValues)[number];
 export type PayoutStatus = (typeof payoutStatusEnum.enumValues)[number];

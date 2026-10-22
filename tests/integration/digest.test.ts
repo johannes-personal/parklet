@@ -45,14 +45,14 @@ describe("the admins' daily summary", () => {
     expect(mail.map((m) => m.to).sort()).toEqual(admins.map((a) => a.email).sort());
     for (const m of mail) {
       expect(m.subject).toBe("Parklet: 2 att granska");
-      expect(m.text).toContain("1 plats och 1 organisation väntar på granskning, den äldsta sedan ");
+      expect(m.text).toContain("1 parkeringsplats och 1 organisation väntar på granskning, den äldsta sedan ");
       expect(m.text).toContain(`• Testplats – http://localhost:3000/admin/platser/${spotId}`);
       expect(m.text).toContain(`• Brf Väntar – http://localhost:3000/admin/konton/${pending.id}`);
       for (const line of [
         `Nya bokningar: 1 (${formatSek(booking.totalOre)})`,
         "Avbokningar: 0",
         "Bilar ej registrerade vid start: 0",
-        "Nya platser: 1",
+        "Nya parkeringsplatser: 1",
         "Nya uthyrarkonton: 2",
         "Nya användare: 3",
       ]) {

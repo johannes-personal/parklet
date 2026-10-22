@@ -7,6 +7,7 @@ import { BookingStatusBadge } from "@/components/status-badge";
 import { BookingUnavailable } from "@/components/booking-unavailable";
 import { requireUser } from "@/lib/auth/session";
 import { formatSek } from "@/lib/money";
+import { spotHref } from "@/lib/spot-link";
 import { formatDateTime, formatRange } from "@/lib/time";
 import { driverCancellationDeadline, getBookingForUser } from "@/server/bookings";
 
@@ -65,6 +66,11 @@ async function BookingDetails({ params, searchParams }: PageProps<"/bokning/[id]
       <p className="mt-1 text-ink-soft">
         {b.spot.address}, {b.spot.city}
       </p>
+      {isDriver ? (
+        <Link href={spotHref(b.spot)} className="link mt-2 inline-block text-sm font-medium">
+          Visa parkeringsplatsen och boka igen
+        </Link>
+      ) : null}
 
       <dl className="card mt-6 divide-y divide-line">
         <Item label="Tid">{formatRange(b.startsAt, b.endsAt)}</Item>

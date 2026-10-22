@@ -32,7 +32,7 @@ async function Content({ params }: P) {
       <Link href={`/uthyrare/${accountId}`} className="link text-sm">
         ← {account.name}
       </Link>
-      <h1 className="mt-2 text-2xl font-bold">Lägg upp {account.kind === "household" ? "din plats" : "platser"}</h1>
+      <h1 className="mt-2 text-2xl font-bold">Lägg upp {account.kind === "household" ? "din plats" : "parkeringsplatser"}</h1>
       <div className="mt-3">
         <SpotSteps current={1} done={0} />
       </div>

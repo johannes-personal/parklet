@@ -35,10 +35,10 @@ export async function sendAdminDigest(now = new Date()) {
   const oldest = d.oldest_waiting ? new Date(d.oldest_waiting) : null;
   const paragraphs = [
     waiting
-      ? `${d.pending_spot_count} ${d.pending_spot_count === 1 ? "plats" : "platser"} och ${d.pending_account_count} ${d.pending_account_count === 1 ? "organisation" : "organisationer"} väntar på granskning${oldest ? `, den äldsta sedan ${formatDateTime(oldest)}` : ""}.`
+      ? `${d.pending_spot_count} ${d.pending_spot_count === 1 ? "parkeringsplats" : "parkeringsplatser"} och ${d.pending_account_count} ${d.pending_account_count === 1 ? "organisation" : "organisationer"} väntar på granskning${oldest ? `, den äldsta sedan ${formatDateTime(oldest)}` : ""}.`
       : "Inget väntar på granskning.",
     ...(d.pending_spots.length
-      ? [`Platser:\n${d.pending_spots.map((s) => `• ${s.title} – ${appUrl()}/admin/platser/${s.id}`).join("\n")}${d.pending_spot_count > d.pending_spots.length ? `\n… och ${d.pending_spot_count - d.pending_spots.length} till` : ""}`]
+      ? [`Parkeringsplatser:\n${d.pending_spots.map((s) => `• ${s.title} – ${appUrl()}/admin/platser/${s.id}`).join("\n")}${d.pending_spot_count > d.pending_spots.length ? `\n… och ${d.pending_spot_count - d.pending_spots.length} till` : ""}`]
       : []),
     ...(d.pending_accounts.length
       ? [`Uthyrarkonton:\n${d.pending_accounts.map((a) => `• ${a.name} – ${appUrl()}/admin/konton/${a.id}`).join("\n")}${d.pending_account_count > d.pending_accounts.length ? `\n… och ${d.pending_account_count - d.pending_accounts.length} till` : ""}`]
@@ -48,7 +48,7 @@ export async function sendAdminDigest(now = new Date()) {
     ["Nya bokningar", d.booked ? `${d.booked} (${formatSek(Number(d.booked_ore))})` : "0"],
     ["Avbokningar", String(d.cancelled)],
     ["Bilar ej registrerade vid start", String(d.overdue)],
-    ["Nya platser", String(d.new_spots)],
+    ["Nya parkeringsplatser", String(d.new_spots)],
     ["Nya uthyrarkonton", String(d.new_accounts)],
     ["Nya användare", String(d.new_users)],
   ];

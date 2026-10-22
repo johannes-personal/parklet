@@ -34,7 +34,7 @@ async function Content({ params, searchParams }: P) {
       ) : (
         <>
           <h1 className="text-2xl font-bold">Bli administratör för {found.accountName}</h1>
-          <p className="mt-2 text-ink-soft">Som administratör kan du lägga upp och hantera platser, se bokningar och registrera bilar.</p>
+          <p className="mt-2 text-ink-soft">Som administratör kan du lägga upp och hantera parkeringsplatser, se bokningar och registrera bilar.</p>
           {fel ? (
             <p role="alert" className="mt-4 rounded-xl bg-danger-soft px-4 py-3 text-sm text-danger">
               Inbjudan skickades till {found.invitation.email}. Logga in med den adressen för att acceptera.

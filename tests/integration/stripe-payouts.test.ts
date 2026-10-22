@@ -112,7 +112,7 @@ describe("connecting payouts", () => {
     expect((await notificationsOf(user.id)).map((n) => n.kind)).toEqual(["payouts_restricted", "payouts_active"]);
     // Stripe takes the payouts away again: spots stop being bookable.
     expect(await update("restricted")).toBe("restricted");
-    expect((await notificationsOf(user.id)).at(-1)?.body).toContain("Dina platser kan inte bokas");
+    expect((await notificationsOf(user.id)).at(-1)?.body).toContain("Dina parkeringsplatser kan inte bokas");
   });
 
   it("asks the owner for something in the bell only when there is something to do", async () => {

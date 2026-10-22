@@ -2,8 +2,8 @@ import "server-only";
 import type Stripe from "stripe";
 import { api, must, names, toDb } from "@/db/api";
 import { hostAccounts, users, type HostAccount, type PayoutStatus } from "@/db/schema";
-import { appUrl } from "@/lib/app-url";
 import { notifyAccount } from "./notifications";
+import { returnBase } from "./request-origin";
 import { getStripe } from "./stripe";
 
 /**
@@ -105,7 +105,7 @@ export async function startPayoutOnboarding(account: HostAccount, owner: { id: s
       "startPayoutOnboarding",
     );
   }
-  const base = `${appUrl()}/uthyrare/${account.id}/utbetalningar`;
+  const base = `${await returnBase()}/uthyrare/${account.id}/utbetalningar`;
   const link = await getStripe().accountLinks.create({
     account: ref,
     type: "account_onboarding",
@@ -154,7 +154,7 @@ export async function syncPayoutAccount(stripeAccountId: string): Promise<Payout
         title: "Stripe behöver fler uppgifter för utbetalningar",
         body:
           before === "active"
-            ? "Stripe behöver fler uppgifter innan nya bokningar kan betalas ut. Dina platser kan inte bokas förrän uppgifterna är kompletterade."
+            ? "Stripe behöver fler uppgifter innan nya bokningar kan betalas ut. Dina parkeringsplatser kan inte bokas förrän uppgifterna är kompletterade."
             : "Stripe behöver fler uppgifter innan utbetalningskontot kan kopplas. Komplettera dem hos Stripe via uthyrarsidan.",
         href: `/uthyrare/${id}`,
         cta: "Komplettera uppgifterna",

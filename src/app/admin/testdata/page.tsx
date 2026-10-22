@@ -29,7 +29,7 @@ async function Reset() {
   return (
     <>
       <p className="mt-1 text-ink-soft">
-        Tar bort all data och lägger in demon som den var från början: användare, uthyrarkonton, platser, bokningar, dokument, notiser och
+        Tar bort all data och lägger in demon som den var från början: användare, uthyrarkonton, parkeringsplatser, bokningar, dokument, notiser och
         e-postutkorgen. Administratörer med en riktig e-postadress får vara kvar med sitt lösenord och sin BankID-legitimering, men allt de lagt in
         tas bort och de loggas ut överallt utom här.
       </p>

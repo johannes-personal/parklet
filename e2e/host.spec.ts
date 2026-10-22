@@ -56,7 +56,7 @@ test("a new host onboards, proves the right to rent via BRF approval, and gets a
   // Create a spot rented from a BRF
   await page.getByRole("link", { name: "Lägg upp en plats" }).first().click();
   await page.getByLabel("Adress", { exact: true }).fill("Vegagatan 12");
-  await page.getByLabel("Ort").fill("Göteborg");
+  await page.getByRole("textbox", { name: "Ort", exact: true }).fill("Göteborg");
   await page.getByTestId("location-picker").locator("canvas").waitFor();
   await page.getByTestId("location-picker").click(); // places the pin
   await page.getByLabel("Rubrik").fill("Plats i Linnéstaden");
@@ -150,13 +150,17 @@ test("a new host onboards, proves the right to rent via BRF approval, and gets a
   await page.getByRole("button", { name: /^Notiser, \d+ nya/ }).click();
   await expect(page.getByRole("link", { name: /Registrera ABC123/ })).toBeVisible();
   await page.getByRole("link", { name: "Registrera en bil" }).click();
-  await expect(page).toHaveURL(new RegExp(`${accountUrl}#bilar$`));
+  await expect(page).toHaveURL(new RegExp(`${accountUrl}/granska#bilar$`));
 
   // Host registers the car
   await expect(page.getByRole("heading", { name: "Bilar att registrera" })).toBeVisible();
   await expect(page.getByText("ABC123", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Markera som registrerad" }).click();
-  await expect(page.getByRole("heading", { name: "Bilar att registrera" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: /Bilar att registrera/ })).toHaveCount(0);
+  // The car is now registered for the spot, for next time.
+  await page.getByRole("navigation", { name: "Uthyrarkonto" }).getByRole("link", { name: "Parkeringsplatser" }).click();
+  await page.getByRole("link", { name: "Plats i Linnéstaden" }).click();
+  await expect(page.getByRole("region", { name: "Registrerade bilar" }).getByText("ABC123", { exact: true })).toBeVisible();
   await logout(page);
 
   await signIn(page, "forare@parklet.test");
@@ -205,6 +209,7 @@ test("an association verifies itself and invites another administrator", async (
   await page.getByRole("button", { name: "Skicka in för verifiering" }).click();
   await expect(page.getByText("Underlagen granskas av Parklet.")).toBeVisible();
 
+  await page.getByRole("navigation", { name: "Uthyrarkonto" }).getByRole("link", { name: "Administratörer" }).click();
   await page.getByPlaceholder("namn@exempel.se").fill("erik@parklet.test");
   await page.getByRole("button", { name: "Bjud in" }).click();
   await expect(page.getByText("Inbjudan skickad till erik@parklet.test")).toBeVisible();
@@ -228,7 +233,7 @@ test("uploads are checked by content, not by file name", async ({ page }) => {
   await page.goto("/uthyrare");
   await page.getByRole("link", { name: "Lägg upp en plats" }).first().click();
   await page.getByLabel("Adress", { exact: true }).fill("Storgatan 1");
-  await page.getByLabel("Ort").fill("Uppsala");
+  await page.getByRole("textbox", { name: "Ort", exact: true }).fill("Uppsala");
   await page.getByTestId("location-picker").locator("canvas").waitFor();
   await page.getByTestId("location-picker").click();
   await page.getByLabel("Rubrik").fill("Test av uppladdning");
@@ -238,6 +243,11 @@ test("uploads are checked by content, not by file name", async ({ page }) => {
   const proof = page.getByRole("region", { name: /Bevis på att du äger platsen/ });
   await proof.getByLabel(/^Välj fil/).setInputFiles({ name: "lagfart.pdf", mimeType: "application/pdf", buffer: Buffer.from("<script>alert(1)</script>") });
   await expect(proof.getByText(/Ladda upp en PDF eller en bild/)).toBeVisible();
+  // Over the platform's request limit (4.5 MB): refused in the browser, with the same message.
+  const big = Buffer.concat([Buffer.from("%PDF-1.4\n"), Buffer.alloc(5 * 1024 * 1024, 0x20)]);
+  await proof.getByLabel(/^Välj fil/).setInputFiles({ name: "stor.pdf", mimeType: "application/pdf", buffer: big });
+  await expect(proof.getByText("Filen är större än 4 MB. Ta ett foto med lägre upplösning eller ladda upp en PDF.")).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
 });
 
 test("a company is checked against Bolagsverket and takes its registered name", async ({ page }) => {
