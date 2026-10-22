@@ -146,6 +146,9 @@ test("a household that loses its approval starts over, and its spots can't be bo
     const decision = page.locator("form").filter({ has: page.getByRole("heading", { name: "Beslut" }) });
     if (note) await page.getByLabel(/Motivering till uthyraren/).fill(note);
     await decision.getByRole("button", { name: button }).click();
+    // Wait for the decision to land: the button is replaced by the opposite one. (The URL
+    // alone doesn't say it: it has no "fel=" before the action has even finished.)
+    await expect(decision.getByRole("button", { name: button, exact: true })).toHaveCount(0);
     await expect(page).not.toHaveURL(/fel=/);
   };
   const asHost = async () => {
@@ -204,7 +207,8 @@ test("a household that loses its approval starts over, and its spots can't be bo
   await signIn(page, "admin@parklet.test");
   await page.goto("/");
   await page.getByRole("button", { name: /^Notiser/ }).click();
-  await expect(page.getByRole("link", { name: /Privat uthyrare att granska igen: Lisa Lindgren/ })).toBeVisible();
+  // The newest first (a retried run leaves an earlier one in the bell).
+  await expect(page.getByRole("link", { name: /Privat uthyrare att granska igen: Lisa Lindgren/ }).first()).toBeVisible();
   await decide(`/admin/konton/${account.id}`, "Godkänn");
   await bookable(false);
   await asHost();
