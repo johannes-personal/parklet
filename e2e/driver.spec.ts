@@ -23,7 +23,7 @@ test("driver books, pays, sees instructions and cancels", async ({ page }, testI
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
   await panel.getByRole("button", { name: "Kopiera länk" }).click();
   await expect(panel.getByRole("button", { name: "Kopierad!" })).toBeVisible();
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toMatch(new RegExp(`/plats/[0-9a-f-]+\\?from=${encodeURIComponent(from)}`));
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toMatch(new RegExp(`/sok\\?.*from=${encodeURIComponent(from)}.*&plats=[0-9a-f-]+$`));
   const changed = localAt(day, 11);
   await pickRange(panel.getByRole("form", { name: "Boka platsen" }), changed, to);
   await panel.getByRole("button", { name: /Kopiera länk|Kopierad!/ }).click();
@@ -52,7 +52,7 @@ test("driver books, pays, sees instructions and cancels", async ({ page }, testI
   await expect(page.getByText("Platsen är märkt med en P-skylt.")).toBeVisible();
   const bookingId = new URL(page.url()).pathname.split("/").pop()!;
 
-  await page.goto("/mina-bokningar");
+  await page.goto("/mina-sidor");
   await page.getByText("Carport nära Liseberg").first().click();
   page.once("dialog", (d) => d.accept());
   await page.getByRole("button", { name: "Avboka" }).click();
@@ -66,7 +66,7 @@ test("driver books, pays, sees instructions and cancels", async ({ page }, testI
   // At Stripe: a destination charge to the host's account with Parklet's 9 kr as the
   // application fee, and the whole of it refunded, transfer and fee included.
   const stripe = await stripeState();
-  expect(stripe.paymentIntents[row.payment_ref]).toMatchObject({ amount: 9900, currency: "sek", application_fee_amount: 900, transfer_data: { destination: "acct_mock_seed" } });
+  expect(stripe.paymentIntents[row.payment_ref]).toMatchObject({ amount: 9900, currency: "sek", application_fee_amount: 900, transfer_data: { destination: "acct_e2e_seed" } });
   expect(Object.values(stripe.refunds as Record<string, { payment_intent: string }>).filter((r) => r.payment_intent === row.payment_ref)).toMatchObject([
     { amount: 9900, _reverse_transfer: true, _refund_application_fee: true },
   ]);
@@ -141,6 +141,6 @@ test("logging out from the menu ends the session", async ({ page }) => {
   await page.getByRole("button", { name: "Meny" }).click();
   await page.getByRole("button", { name: "Logga ut" }).click();
   await expect(page).toHaveURL(/\/$/);
-  await page.goto("/mina-bokningar");
+  await page.goto("/mina-sidor");
   await expect(page).toHaveURL(/logga-in/);
 });

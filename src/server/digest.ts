@@ -63,7 +63,7 @@ export async function sendAdminDigest(now = new Date()) {
       details,
       button: { label: "Öppna granskningen", url: `${appUrl()}/admin` },
       footnote: "Skickas varje morgon till Parklets administratörer när det finns något att rapportera.",
-    });
+    }, { kind: "digest" });
   }
   return { sent: admins.length, waiting, happened };
 }

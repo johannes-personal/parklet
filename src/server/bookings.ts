@@ -1,6 +1,6 @@
 import "server-only";
 import { api, ApiError, cols, embed, must, names, parse, parseAll, rpc, toDb } from "@/db/api";
-import { bookings, hostAccountMembers, spots, users, vehicles, type Booking, type Spot, type Vehicle } from "@/db/schema";
+import { bookings, hostAccountMembers, hostAccounts, spots, users, vehicles, type Booking, type HostAccount, type Spot, type Vehicle } from "@/db/schema";
 import { isWithinWindows } from "@/lib/availability";
 import { calculatePrice, durationMinutes, type PriceBreakdown } from "@/lib/pricing";
 import { formatSek } from "@/lib/money";
@@ -166,7 +166,7 @@ export async function announceBooking(bookingId: string) {
     kind: register ? "vehicle_registration" : "booking_new",
     title: register ? `Registrera ${booking.vehicleReg} – ny bokning av ${spot.title}` : `Ny bokning: ${spot.title}`,
     body:
-      `${driverName.split(" ")[0]} har bokat ${spot.title}.` +
+      `${driverName} har bokat ${spot.title}.` +
       (register
         ? `\n\nFöreningen kräver att bilen registreras. Registrera ${booking.vehicleReg} i föreningens parkeringssystem före ${formatDateTime(booking.startsAt)} och markera den som registrerad i Parklet, så att föraren vet att det är klart.`
         : ""),
@@ -176,6 +176,7 @@ export async function announceBooking(bookingId: string) {
   });
   await notifyUsers([booking.driverId], {
     kind: "booking_confirmed",
+    accountId: spot.hostAccountId,
     title: `Bokningsbekräftelse: ${spot.title}`,
     body:
       `Din parkering är bokad och betald. Vägbeskrivning och eventuell portkod finns i bokningen.` +
@@ -244,8 +245,26 @@ export async function getBookingForUser(bookingId: string, userId: string): Prom
   const booking = bookingWithSpot(row);
   const viewerIsHost = await isAccountMember(booking.spot.hostAccountId, userId);
   if (booking.driverId !== userId && !viewerIsHost) return null;
-  const names = await firstNames([booking.driverId]);
+  const names = await driverNames([booking.driverId]);
   return { ...booking, driverName: names.get(booking.driverId) ?? "", viewerIsHost };
+}
+
+/** Any booking, for Parklet's admins: the spot, its host account and the driver. */
+export async function getBookingForAdmin(bookingId: string) {
+  if (!isUuid(bookingId)) return null;
+  const row = must<(Record<string, unknown> & { spot: { account: { id: string; name: string; kind: HostAccount["kind"] } }; driver: { id: string; name: string; email: string } }) | null>(
+    await api()
+      .from("bookings")
+      .select(
+        `${cols(bookings)},spot:spots!inner(${cols(spots, ["id", "title", "address", "city"])},${embed("account", hostAccounts, ["id", "name", "kind"], { inner: true })}),${embed("driver", users, ["id", "name", "email"], { inner: true })}`,
+      )
+      .eq(B.id, bookingId)
+      .maybeSingle(),
+    "getBookingForAdmin",
+  );
+  if (!row) return null;
+  const { account, ...spot } = row.spot as unknown as Pick<Spot, "id" | "title" | "address" | "city"> & { account: { id: string; name: string; kind: HostAccount["kind"] } };
+  return { ...parse<typeof bookings, Booking>(bookings, row), spot, account, driver: row.driver };
 }
 
 export async function listDriverBookings(driverId: string): Promise<BookingWithSpot[]> {
@@ -274,16 +293,16 @@ export async function listAccountBookings(accountId: string): Promise<BookingWit
       .limit(200),
     "listAccountBookings",
   ).map(bookingWithSpot);
-  const firstNameOf = await firstNames(rows.map((r: { driverId: string }) => r.driverId));
-  return rows.map((r: ReturnType<typeof bookingWithSpot>) => ({ ...r, driverName: firstNameOf.get(r.driverId) ?? "", viewerIsHost: true }));
+  const nameOf = await driverNames(rows.map((r: { driverId: string }) => r.driverId));
+  return rows.map((r: ReturnType<typeof bookingWithSpot>) => ({ ...r, driverName: nameOf.get(r.driverId) ?? "", viewerIsHost: true }));
 }
 
-async function firstNames(ids: string[]): Promise<Map<string, string>> {
+/** The drivers' full names, as their hosts see them on bookings. */
+async function driverNames(ids: string[]): Promise<Map<string, string>> {
   const unique = [...new Set(ids)];
   if (unique.length === 0) return new Map();
-  const rows = must<{ id: string; name: string }[]>(await api().from("users").select("id,name").in(names(users).id, unique), "firstNames");
-  // Only first names are shared between drivers and hosts.
-  return new Map(rows.map((r) => [r.id, r.name.split(" ")[0]]));
+  const rows = must<{ id: string; name: string }[]>(await api().from("users").select("id,name").in(names(users).id, unique), "driverNames");
+  return new Map(rows.map((r) => [r.id, r.name]));
 }
 
 export function driverCancellationDeadline(b: Pick<Booking, "startsAt">, cancellationHours: number): Date {
@@ -341,6 +360,7 @@ export async function cancelBooking(bookingId: string, userId: string, now = new
   if (asHost) {
     await notifyUsers([booking.driverId], {
       kind: "booking_cancelled",
+      accountId: booking.spot.hostAccountId,
       title: `Din bokning av ${booking.spot.title} är avbokad`,
       body: `Uthyraren har avbokat din bokning ${when}. Du får tillbaka hela beloppet, ${formatSek(booking.totalOre)}, inom några bankdagar.`,
       href: `/bokning/${booking.id}`,
@@ -375,6 +395,7 @@ async function undoCancellation(booking: BookingWithSpot, cause: unknown) {
     console.error("[cancelBooking] refund failed and the booking could not be restored", booking.id, cause, err);
     await notifyAdmins({
       kind: "refund_failed",
+      accountId: booking.spot.hostAccountId,
       title: `Återbetalning misslyckades: ${booking.spot.title}`,
       body: `Bokningen ${formatRange(booking.startsAt, booking.endsAt)} är avbokad men ${formatSek(booking.totalOre)} har inte betalats tillbaka. Återbetala manuellt (bokning ${booking.id}, betalning ${booking.paymentRef}).`,
       href: "/admin",
@@ -398,6 +419,7 @@ export async function markVehicleRegistered(bookingId: string, userId: string) {
   if (updated.length && booking.status === "confirmed") {
     await notifyUsers([booking.driverId], {
       kind: "vehicle_registered",
+      accountId: booking.spot.hostAccountId,
       title: `${booking.vehicleReg} är registrerad för ${booking.spot.title}`,
       body: `Uthyraren har registrerat din bil i föreningens system. Du kan parkera ${formatRange(booking.startsAt, booking.endsAt)}.`,
       href: `/bokning/${booking.id}`,

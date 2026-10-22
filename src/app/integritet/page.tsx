@@ -18,7 +18,7 @@ export default function PrivacyPage() {
         <li><strong>Uthyrares intäkter</strong> – rapporteras till Skatteverket enligt lagen om plattformsoperatörers rapportering (DAC7).</li>
       </ul>
       <h2>Mottagare</h2>
-      <p>Vi delar bara det som behövs: föraren ser uthyrarens förnamn eller organisationsnamn; uthyraren ser förarens förnamn och registreringsnummer. Våra leverantörer (drift inom EU, betalning, e-legitimation, e-post) behandlar uppgifter enligt personuppgiftsbiträdesavtal.</p>
+      <p>Vi delar bara det som behövs: föraren ser uthyrarens förnamn eller organisationsnamn; uthyraren ser förarens namn och registreringsnummer för sina bokningar. Våra leverantörer (drift inom EU, betalning, e-legitimation, e-post) behandlar uppgifter enligt personuppgiftsbiträdesavtal.</p>
       <h2>Dina rättigheter</h2>
       <p>Du har rätt att få tillgång till, rätta, radera och flytta dina uppgifter, samt att invända mot behandling. Du kan klaga hos Integritetsskyddsmyndigheten (IMY).</p>
     </ContentPage>

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { e2eDb, login, PASSWORD, signIn } from "./helpers";
+import { e2eDb, login, openResults, PASSWORD, signIn } from "./helpers";
 
 /** Ids from the seed (scripts/seed.mts). */
 async function seedIds() {
@@ -99,10 +99,12 @@ test("an admin following a host's link is sent to the admin view", async ({ page
 
 test("a spot that can't be booked says so and offers a search nearby", async ({ page }) => {
   const ids = await seedIds();
+  // An old link to the spot's own page opens the map around it, with what can be booked nearby.
   await page.goto(`/plats/${ids.pendingSpot}`);
+  await expect(page).toHaveURL(new RegExp(`/sok\\?q=G%C3%B6teborg&lat=.*&plats=${ids.pendingSpot}$`));
   await expect(page.getByRole("heading", { name: "Platsen kan inte bokas just nu" })).toBeVisible();
-  await page.getByRole("link", { name: "Hitta parkering i närheten" }).click();
-  await expect(page).toHaveURL(/\/sok\?q=G%C3%B6teborg/);
+  await openResults(page);
+  await expect(page.getByTestId("search-result").first()).toBeVisible();
 
   await page.goto("/plats/00000000-0000-4000-8000-000000000000");
   await expect(page.getByRole("heading", { name: "Platsen finns inte" })).toBeVisible();

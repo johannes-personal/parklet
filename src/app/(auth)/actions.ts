@@ -119,7 +119,7 @@ export async function requestResetAction(_prev: FormState, formData: FormData): 
       paragraphs: ["Någon, förhoppningsvis du, har bett om att få byta lösenord för ditt Parklet-konto. Länken gäller i en timme."],
       button: { label: "Välj nytt lösenord", url: `${appUrl()}/aterstall-losenord/${token}` },
       footnote: "Har du inte bett om detta kan du ignorera mejlet. Ditt lösenord ändras inte.",
-    });
+    }, { kind: "password_reset" });
   }
   // Same answer whether or not the account exists, so the form cannot be used to probe for users.
   return done;

@@ -120,7 +120,7 @@ test("a household that loses its approval starts over, and its spots can't be bo
     select ${email}, 'Lisa Lindgren', password_hash, now(), 'mock-bankid' from users where email = 'anna@parklet.test' returning id`;
   const [account] = await sql`
     insert into host_accounts (kind, name, verification_status, payout_status, payout_account_ref)
-    values ('household', 'Lisa Lindgren', 'verified', 'active', 'acct_mock_e2e') returning id`;
+    values ('household', 'Lisa Lindgren', 'verified', 'active', 'acct_e2e') returning id`;
   await sql`insert into host_account_members (host_account_id, user_id, role) values (${account.id}, ${user.id}, 'owner')`;
   await sql`create temp table copy as select * from spots where title = 'Carport nära Liseberg'`;
   const [original] = await sql`select id from copy`;

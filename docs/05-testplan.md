@@ -127,7 +127,7 @@ each with a car still to register.
    - **Bell:** "Bokningsbekräftelse: Carport nära Liseberg".
    - **E-post (admin log):** the booking confirmation with Plats/Tid/Bil/Bokad/Totalt betalt/Boknings-id. Under **Visa som mejl**, **Visa bokningen** opens the booking in a new tab.
    - Erik gets "Ny bokning: Carport nära Liseberg" (bell + e-mail log).
-7. Open **Mina bokningar**, open the booking and cancel it (**Avboka**, confirm the dialog).
+7. Open **Mina sidor**, open the booking and cancel it (**Avboka**, confirm the dialog).
    - "Bokningen är avbokad och pengarna återbetalas till ditt betalsätt inom några bankdagar."
    - The host (Erik) gets "Avbokning: Carport nära Liseberg" in the bell.
 
@@ -149,11 +149,12 @@ Log in as `forare@parklet.test`. The price box under the times says what's wrong
    - **1 tim**: 12 kr + Serviceavgift 5 kr (the minimum fee) = 17 kr.
    - **1 dygn**: capped at 90 kr + 9 kr = 99 kr.
    - 1 h 5 min is billed as started quarters: "Parkering, 1 tim 15 min", 15 kr.
-5. **Old links.** Open `/plats/<id>?from=…&to=…` with yesterday's times (copy a link from flow 1 and change the date).
+5. **Old links.** Open `/plats/<id>?from=…&to=…` with yesterday's times (the id is in the spot's admin page's URL).
+   - It opens the search map around the spot, with the spot in the panel (`/sok?…&plats=<id>`).
    - The times are cleared: "Välj tid för att se priset.", no "inte tillgänglig".
    - A search link with past times finds the spot as if no time was given.
 6. **A spot you can't book.** Log out and open `/plats/<id>` of **BRF-plats i Haga** (the id is in its admin page's URL).
-   - "Platsen kan inte bokas just nu", with **Hitta parkering i närheten** leading to a search in Göteborg.
+   - The map of Göteborg around it, with "Platsen kan inte bokas just nu" in the panel and the bookable spots nearby in the list.
    - A made-up spot id gives "Platsen finns inte".
 
 ## 3. Two drivers, one slot
@@ -198,7 +199,7 @@ As `forare@parklet.test`, on **Carport nära Liseberg** (free cancellation until
 1. **In time.** Book a slot two days ahead. The booking says "Kostnadsfri avbokning fram till …".
    - **Avboka** asks "Vill du avboka? Det går inte att ångra."; confirm.
    - The page then says "Bokningen är avbokad … 99 kr återbetalas till ditt betalsätt inom några bankdagar." and **Betalt** shows "Återbetalt" (Stripe side: flow 20).
-   - The booking moves to **Tidigare och avbokade** in **Mina bokningar**.
+   - The booking moves to **Tidigare och avbokade** on **Mina sidor**.
 2. **Too late.** Book with **Nu** (it starts within 2 h).
    - No cancel button: "Avbokningsfristen gick ut … Har något hänt? Kontakta supporten."
 3. **By the host.** Log in as `erik@parklet.test`, open that booking from **Bokningar** on the account page.
@@ -583,7 +584,7 @@ Everyone who is logged in has a bell, straight after logging in or registering, 
 
 ## 26. Access rules
 
-1. **Admin pages** (`/admin`, `/admin/epost`, `/admin/platser`, `/admin/konton`, a spot or account in admin): logged out you are sent to the login; as a driver or host you're sent away.
+1. **Admin pages** (`/admin`, `/admin/platser`, `/admin/konton`, `/admin/bokningar`, `/admin/epost`, a spot, account, booking or mail in admin): logged out you are sent to the login; as a driver or host you're sent away.
 2. **Another host's account:** as Anna, open a link to Kvarteret Fastigheter AB's account (`/uthyrare/<id>`).
    - "Du har inte tillgång till sidan", "Du är inloggad som anna@parklet.test." and nothing of the account.
    - **Logga in med ett annat konto** brings you back to the same page after logging in.
@@ -617,7 +618,7 @@ This one can't be triggered from the UI.
 
 ## 29. Your account: details, Mina fordon, deleting it
 
-1. As `forare@parklet.test`, open **Mina bokningar** and scroll to **Ditt konto**.
+1. As `forare@parklet.test`, open **Mina sidor** (the name in the header): **Ditt konto** comes first, the bookings under it.
    - Namn, E-post, **Kontotyp: Förare**, BankID "Inte legitimerad (behövs bara för att hyra ut)".
    - **Mina fordon** with what it is for, and **Bli uthyrare**.
 2. As `erik@parklet.test`: **Kontotyp: Förare och uthyrare**, with his two host accounts (Privatperson, Företag) as links, and **Skapa ett till uthyrarkonto** with why an account can't change type.
@@ -626,4 +627,32 @@ This one can't be triggered from the UI.
    - With both: "Ditt konto är borttaget", logged out; logging in with the old details fails, and the address can register again.
 4. Refusals: with a coming booking ("Du har kommande bokningar …"), as a host with a coming booking on a spot, as the owner of an account with co-administrators, and as an admin.
 5. A host's deleted account: its spots are paused (admin: **Platser**) and its documents gone; bookings already made stay, without the person's name.
+
+## 30. Mina sidor: filtering your bookings
+
+1. As `forare@parklet.test`, open **Mina sidor**. The old address `/mina-bokningar` leads there too.
+2. **Visa: Kommande** (applies at once): "N bokningar", none of them **Avbokad**. **Avbokade** shows only cancelled ones, **Tidigare** the ones that are over.
+3. **Från** and **Till**, then **Filtrera**: the bookings on some day in that range. A range years ahead gives "Inga bokningar matchar."
+4. **Rensa** brings back **Kommande** and **Tidigare och avbokade**.
+
+## 31. Admin: bookings
+
+1. As admin, open **Bokningar** in the admin tabs (or **Meny → Administration → Bokningar**).
+2. The chips count per status (**Alla**, **Bekräftad**, **Väntar på betalning**, **Avbokad**, **Ej genomförd**); each count ignores the status filter, so it shows what the chip would give.
+3. **Search** finds a booking by spot, host, the driver's name or e-mail, the plate (`abc 123` works), the first characters of the booking id, or a Stripe payment or session id.
+4. **Tid** (Kommande / Pågående / Passerade), **Från–Till** (bookings that overlap the range), **Betalning** (Ej betald / Betald / Återbetald), **Ort** and **Sortera** (Senast bokad, Starttid, Högst belopp) combine with the search.
+5. A row opens the booking: spot and host account (links to their admin pages), the driver's full name and e-mail, the car and its registration, the amount split into the host's share and the service fee, the payment's status and Stripe ids, and when it was created, booked and cancelled (and by whom).
+
+## 32. Admin: the e-mail log
+
+1. As admin, open **E-post**: a table of every mail, newest first, with subject, **Typ**, recipient, organisation and time.
+2. **Typ** (e.g. *Bokningsbekräftelse*, *Ny bokning (uthyrare)*, *Nytt lösenord*, *Admin: plats att granska*), **Organisation** (the host account a mail concerns) and the search (recipient, subject or organisation) filter it; **Sortera** orders by recipient, organisation or type.
+3. Mails sent before this version have no type: they are under **Övrigt** and have no organisation.
+4. A row opens the mail as the recipient saw it; its links open in a new tab, and **Som text** shows the plain-text version.
+
+## 33. Full names
+
+1. Book a spot as Oskar Nilsson (`forare@parklet.test`) on one of Anna's spots.
+2. Anna's notification and e-mail say "Oskar Nilsson har bokat …"; the booking and the host dashboard show **Förare: Oskar Nilsson**.
+3. Only the header shows the first name ("Oskar"). The public spot panel shows a private host by first name ("Uthyrare: Anna"), as the privacy policy states.
 

@@ -8,6 +8,7 @@ const TABS = [
   { href: "/admin", label: "Att granska", exact: true },
   { href: "/admin/platser", label: "Platser" },
   { href: "/admin/konton", label: "Uthyrare" },
+  { href: "/admin/bokningar", label: "Bokningar" },
   { href: "/admin/epost", label: "E-post" },
   ...(demoResetEnabled() ? [{ href: "/admin/testdata", label: "Testdata" }] : []),
 ];
@@ -30,21 +31,5 @@ export function AdminTabs() {
         );
       })}
     </nav>
-  );
-}
-
-/** A GET form whose selects apply as soon as they change; the text search applies on Enter or "Sök". */
-export function FilterForm({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return (
-    <form
-      method="get"
-      role="search"
-      className={className}
-      onChange={(e) => {
-        if (e.target instanceof HTMLSelectElement) e.currentTarget.requestSubmit();
-      }}
-    >
-      {children}
-    </form>
   );
 }

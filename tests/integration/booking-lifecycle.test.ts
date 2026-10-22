@@ -143,6 +143,8 @@ describe("confirming a payment", () => {
     // The host is told about the booking, the driver gets a confirmation.
     expect(notes.map((n) => n.kind).sort()).toEqual(["booking_confirmed", "booking_new"]);
     expect(mail).toHaveLength(2);
+    // The host sees who booked by their full name.
+    expect(notes.find((n) => n.kind === "booking_new")!.body).toContain(`${driver.name} har bokat`);
 
     expect(await confirmPayment(r.bookingId, "ref_1")).toEqual({ ok: true });
     expect(await getBooking(r.bookingId)).toEqual(first);

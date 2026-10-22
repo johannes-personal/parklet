@@ -6,7 +6,7 @@ const groups = [
     title: "Förare",
     links: [
       { href: "/sok", label: "Hitta parkering" },
-      { href: "/mina-bokningar", label: "Mina bokningar" },
+      { href: "/mina-sidor", label: "Mina sidor" },
       { href: "/hjalp#forare", label: "Så fungerar det" },
     ],
   },

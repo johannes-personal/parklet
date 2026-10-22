@@ -211,6 +211,7 @@ async function recordVerifiedIdentity(
     if (!resubmitted.length) continue;
     await notifyAdmins({
       kind: "admin_account_submitted",
+      accountId: account.id,
       title: `Privat uthyrare att granska igen: ${account.name}`,
       body: `${account.name} har legitimerat sig med BankID igen efter att kontot inte godkändes.`,
       details: [["Konto", `${account.name} (privatperson)`]],

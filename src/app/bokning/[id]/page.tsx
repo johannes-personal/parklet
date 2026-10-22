@@ -146,8 +146,8 @@ async function BookingDetails({ params, searchParams }: PageProps<"/bokning/[id]
       ) : null}
 
       <p className="mt-8 text-sm">
-        <Link href={isDriver ? "/mina-bokningar" : "/uthyrare"} className="link">
-          ← {isDriver ? "Alla mina bokningar" : "Till uthyrning"}
+        <Link href={isDriver ? "/mina-sidor" : "/uthyrare"} className="link">
+          ← {isDriver ? "Mina sidor" : "Till uthyrning"}
         </Link>
       </p>
     </div>

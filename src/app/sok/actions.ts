@@ -16,8 +16,8 @@ export async function bookAction(_prev: FormState, formData: FormData): Promise<
 
   const user = await getCurrentUser();
   if (!user) {
-    // Back to the spot page or the search overlay it was booked from, with the chosen times.
-    const back = new URL(safeNext(formData.get("returnTo"), `/plats/${spotId}`), "http://x");
+    // Back to the search panel it was booked from, with the chosen times.
+    const back = new URL(safeNext(formData.get("returnTo"), `/sok?plats=${encodeURIComponent(spotId)}`), "http://x");
     back.searchParams.set("from", fromRaw);
     back.searchParams.set("to", toRaw);
     redirect(`/logga-in?next=${encodeURIComponent(back.pathname + back.search)}`);

@@ -30,7 +30,7 @@ export async function AccountNav() {
   return (
     <>
       {host ? null : <BecomeHostLink />}
-      <Link href="/mina-bokningar" className="hidden max-w-40 truncate text-zinc-300 transition-colors hover:text-white sm:inline">
+      <Link href="/mina-sidor" className="hidden max-w-40 truncate text-zinc-300 transition-colors hover:text-white sm:inline">
         {user.name.split(" ")[0]}
       </Link>
       <NotificationBell initial={bell} />

@@ -52,6 +52,7 @@ export async function runRegistrationReminders(now = new Date()) {
     if (!b) continue;
     await notifyUsers([b.booking.driverId], {
       kind: "vehicle_overdue",
+      accountId: b.spot.hostAccountId,
       title: `${b.booking.vehicleReg} är inte registrerad än – vänta med att parkera`,
       body:
         `Din bokning av ${b.spot.title} har börjat, men uthyraren har inte bekräftat att bilen är registrerad hos föreningen. ` +
@@ -61,6 +62,7 @@ export async function runRegistrationReminders(now = new Date()) {
     });
     await notifyAccount(b.spot.hostAccountId, {
       kind: "vehicle_overdue",
+      accountId: b.spot.hostAccountId,
       title: `Bokningen har börjat – ${b.booking.vehicleReg} är inte registrerad`,
       body: `${b.driverName} väntar på att bilen ska registreras för ${b.spot.title}. Registrera den nu och markera den i Parklet. Föraren kan avboka med full återbetalning tills dess.`,
       href: `/bokning/${id}`,
@@ -69,6 +71,7 @@ export async function runRegistrationReminders(now = new Date()) {
     await notifyAdmins(
       {
         kind: "admin_vehicle_overdue",
+        accountId: b.spot.hostAccountId,
         title: `Bil ej registrerad vid start: ${b.spot.title}`,
         body: `Bokningen har börjat men ${b.booking.vehicleReg} är inte markerad som registrerad.`,
         href: `/admin/platser/${b.booking.spotId}`,
@@ -89,8 +92,7 @@ async function load(id: string) {
     "runRegistrationReminders",
   );
   if (!row) return null;
-  // Only the first name is shared with the host.
-  return { booking: parse(bookings, row), spot: row.spot, driverName: row.driver.name.split(" ")[0] };
+  return { booking: parse(bookings, row), spot: row.spot, driverName: row.driver.name };
 }
 
 let lastRun = 0;
