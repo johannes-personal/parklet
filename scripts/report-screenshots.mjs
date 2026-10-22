@@ -152,6 +152,8 @@ const local = (d, h, m = 0) => DateTime.now().setZone("Europe/Stockholm").plus({
 
   await p.goto(`${BASE}/uthyrare`);
   await shot(p, "flow-13-uthyrarens-oversikt", { tall: 1500 });
+  await p.goto(`${BASE}/uthyrare/${host_account_id}/platser`);
+  await shot(p, "flow-20-uthyrarens-parkeringsplatser", { tall: 1500 });
   await p.goto(BASE);
   await p.getByRole("button", { name: /^Notiser/ }).click();
   await p.waitForTimeout(600);
@@ -159,10 +161,18 @@ const local = (d, h, m = 0) => DateTime.now().setZone("Europe/Stockholm").plus({
 }
 {
   const p = await page("styrelsen@parklet.test");
-  await p.goto(`${BASE}/uthyrare`);
-  const cars = p.getByRole("heading", { name: "Bilar att registrera" });
-  if (await cars.count()) await cars.scrollIntoViewIfNeeded();
-  await shot(p, "flow-14-bilar-att-registrera");
+  const garage = await id("Garage Linnégatan – Plats 1");
+  await p.goto(`${BASE}/uthyrare/${garage.host_account_id}/granska`);
+  await shot(p, "flow-14-bilar-att-registrera", { tall: 1400 });
+  // Registering one car keeps it for the space: its list of registered cars.
+  const row = p.getByRole("listitem").filter({ has: p.getByRole("button", { name: "Markera som registrerad" }) }).first();
+  const reg = (await row.locator(".font-mono").innerText()).trim();
+  await row.getByRole("button", { name: "Markera som registrerad" }).click();
+  await p.waitForTimeout(1500);
+  const [{ spot_id }] = await sql`select spot_id from spot_vehicle_approvals where reg = ${reg} order by approved_at desc limit 1`;
+  await p.goto(`${BASE}/uthyrare/${garage.host_account_id}/platser/${spot_id}#bilar`);
+  const cars = p.getByRole("region", { name: "Registrerade bilar" });
+  await shot(p, "flow-21-registrerade-bilar", { tall: 4000, region: { from: cars, pad: 24 } });
 }
 
 // --- Admin ----------------------------------------------------------------
@@ -175,6 +185,8 @@ const local = (d, h, m = 0) => DateTime.now().setZone("Europe/Stockholm").plus({
   await shot(p, "flow-16-granska-plats", { tall: 1600 });
   await p.goto(`${BASE}/admin/epost`);
   await shot(p, "flow-17-epostlogg");
+  await p.goto(`${BASE}/admin/bokningar`);
+  await shot(p, "flow-22-admin-bokningar", { tall: 1200 });
   await p.goto(`${BASE}/admin/testdata`);
   await shot(p, "flow-19-testdata");
 }

@@ -37,9 +37,11 @@ det som en marknadsplats för parkering behöver för att vara pålitlig: uthyra
 med BankID, varje plats granskas av Parklet innan den kan bokas, den som hyr sin plats måste
 visa hyresvärdens eller bostadsrättsföreningens godkännande (som kan lämnas med ett klick från
 ett e-postmeddelande), föreningar och företag kontrolleras mot Bolagsverket, och bilar som
-måste registreras hos föreningen hanteras med påminnelser. Dubbelbokningar är omöjliga.
-Parklets administratörer har en granskningskö, en notisklocka, en logg över all utgående
-e-post och en sammanfattning varje morgon.
+måste registreras hos föreningen hanteras med påminnelser och sparas per plats. Dubbelbokningar
+är omöjliga. Uthyrare har egna sökbara listor över sina parkeringsplatser, bokningar och e-post,
+hanterar sina administratörer och kan ta bort platser och konton. Parklets administratörer har en
+granskningskö, sökbara listor över platser, uthyrare och bokningar, en notisklocka, en logg över
+all utgående e-post och en sammanfattning varje morgon.
 
 **Vad som återstår före lansering.** Den nya versionen är en fungerande MVP (första
 lanseringsbara version) som körs i testläge. Före en skarp lansering behöver betalningarna
@@ -263,7 +265,7 @@ hämtas på två ställen i koden.
 
 | Nr | Problem | I den nya versionen |
 |---|---|---|
-| 1 | Inget att boka | Startsidan förklarar tjänsten och värvar uthyrare. En tom sökning länkar till "Hyr ut den på Parklet". Demodata finns i fyra städer (Göteborg, Stockholm, Uppsala, Malmö). Sökningen visar platserna inom 3 km och under **Andra platser** de närmaste längre bort, så att minst tio platser visas när det finns så många |
+| 1 | Inget att boka | Startsidan förklarar tjänsten och värvar uthyrare. En tom sökning länkar till "Hyr ut den på Parklet". Demodata finns i fyra städer (Göteborg, Stockholm, Uppsala, Malmö). Sökningen visar platserna inom 3 km och under **Andra parkeringsplatser** de närmaste längre bort, så att minst tio platser visas när det finns så många. Filter för typ, tak och elbilsladdning |
 | 2 | Juridik | Sidor för användarvillkor och integritetspolicy (utkast som ska granskas av jurist), kryssruta för samtycke vid registrering, personnummer hämtas via BankID och skrivs aldrig in |
 | 3 | Döda länkar | En tjänst på en domän. Alla länkar kontrolleras av ett automatiskt test |
 | 4 | Platssökning | Ett riktigt sökfält som går att skriva i direkt. Positionen används bara när man själv trycker på "Nära mig". Om adresstjänsten ligger nere går det fortfarande att söka på stad |
@@ -294,41 +296,51 @@ femminutersteg med snabbval för längden (1 tim, 2 tim … 1 dygn), och passera
 ![Startsidan med sökrutan](images/flow-01-startsida.jpg)
 *Bild 1. Startsidan: sökningen direkt på första sidan, kartan i bakgrunden.*
 
-**2. Välj en plats.** Med en tid visas bara platser som är lediga **hela** perioden, med totalpriset
-för just den tiden, både i listan och som prislappar på kartan. Först kommer platserna inom 3 km;
-finns det färre än tio visas de närmaste längre bort under **Andra platser**, så att föraren alltid
-ser minst tio platser när det finns så många.
+**2. Välj en parkeringsplats.** Med en tid visas bara parkeringsplatser som är lediga **hela**
+perioden, med totalpriset för just den tiden, både i listan och som prislappar på kartan. Först
+kommer platserna inom 3 km; finns det färre än tio visas de närmaste längre bort under **Andra
+parkeringsplatser**, så att föraren alltid ser minst tio när det finns så många. Filterknappar
+över resultaten begränsar till en typ (garage, carport, uppfart, utomhusplats), till platser under
+tak eller med elbilsladdning. Filtren gäller båda listorna, ligger i adressen och följer med till
+en ny sökning.
 
 ![Sökresultat på karta och i lista](images/flow-02-sok.jpg)
-*Bild 2. Sökresultat i Göteborg för en vald tid: lista till vänster, prislappar på kartan.*
+*Bild 2. Sökresultat i Göteborg för en vald tid: filterknappar och lista till vänster, prislappar
+på kartan.*
 
-**3. Se platsen och priset.** Platsen öppnas i en panel över kartan, så att föraren inte tappar sin
-sökning. Panelen visar typ och egenskaper, öppettider i klartext ("mån–fre 07:00–18:00"), när
-platsen är upptagen, avbokningsvillkor och priset uppdelat på parkering och serviceavgift. Länken
-till platsen kan kopieras och delas, med de valda tiderna.
+**3. Se parkeringsplatsen och priset.** Platsen öppnas i en panel över kartan, så att föraren inte
+tappar sin sökning. Panelen visar typ och egenskaper, öppettider i klartext ("mån–fre
+07:00–18:00"), när platsen är upptagen, avbokningsvillkor och priset uppdelat på parkering och
+serviceavgift. Länken till platsen kan kopieras och delas, med de valda tiderna.
 
 ![Platsen öppen i en panel över kartan](images/flow-03-plats.jpg)
-*Bild 3. Platsen med tidväljare och pris. Den som inte är inloggad loggar in och kommer tillbaka
-hit med tiderna kvar.*
+*Bild 3. Parkeringsplatsen med tidväljare och pris. Den som inte är inloggad loggar in och kommer
+tillbaka hit med tiderna kvar.*
 
-**4. Betala.** Föraren väljer en sparad bil eller skriver ett registreringsnummer. Platsen hålls i
-15 minuter medan föraren betalar; när Stripes betalsida öppnas hålls den så länge betalsidan går
-att använda. I demon ersätts betalsidan av en knapp i testläge.
+**4. Betala.** Föraren väljer en sparad bil eller skriver ett registreringsnummer. Kräver platsen
+att bilen registreras hos föreningen och är bilen redan registrerad där, står det i formuläret:
+föraren kan parkera direkt när bokningen börjar. Platsen hålls i 15 minuter medan föraren betalar;
+när Stripes betalsida öppnas hålls den så länge betalsidan går att använda. I demon ersätts
+betalsidan av en knapp i testläge.
 
 ![Betalningssidan](images/flow-04-betala.jpg)
 *Bild 4. Sammanställning före betalning, med hur länge platsen är reserverad.*
 
-**5. Bekräftelsen.** Efter betalningen visas bokningen med instruktioner för att hitta och ta sig
-in, vägbeskrivning och till när avbokningen är kostnadsfri. Ett kvitto skickas med e-post.
+**5. Bekräftelsen.** Efter betalningen kommer föraren tillbaka till bokningen, fortfarande
+inloggad, med instruktioner för att hitta och ta sig in, vägbeskrivning och till när avbokningen
+är kostnadsfri. Länken **"Visa parkeringsplatsen och boka igen"** leder tillbaka till platsen. Ett
+kvitto skickas med e-post.
 
 ![Bokningsbekräftelse](images/flow-05-bokad.jpg)
-*Bild 5. Bokad och betald: instruktioner, vägbeskrivning och avbokning.*
+*Bild 5. Bokad och betald: länken tillbaka till parkeringsplatsen och bokningens uppgifter.*
 
 **6. Mina sidor.** Överst under **Ditt konto** ser användaren sitt namn, sin e-postadress och
 kontotyp (förare, eller förare och uthyrare med sina uthyrarkonton). Under kontot samlas kommande
 och tidigare bokningar, som kan filtreras på datum och status, och sparade bilar finns under "Mina
-fordon". Varje bokning visar när den gjordes. Användaren kan också ta bort kontot: personuppgifterna tas bort, medan bokningarna sparas utan namn för bokföringen. Om platsen kräver att bilen registreras hos föreningen ser föraren om det är
-gjort, och får besked om det inte är klart när parkeringen börjar.
+fordon". Varje bokning visar när den gjordes. Användaren kan också ta bort kontot:
+personuppgifterna tas bort, medan bokningarna sparas utan namn för bokföringen. Om platsen kräver
+att bilen registreras hos föreningen ser föraren om det är gjort, och får besked om det inte är
+klart när parkeringen börjar.
 
 ![Mina sidor](images/flow-06-mina-sidor.jpg)
 *Bild 6. Mina sidor: kontot överst, bokningarna under. Klockan i menyn visar nya notiser.*
@@ -338,7 +350,7 @@ platsens sida anpassar sig till skärmen.
 
 <img src="images/flow-07-mobil-plats.jpg" alt="Platsens sida i mobilen" width="260">
 
-*Bild 7. En plats i mobilen, med karta, pris och öppettider.*
+*Bild 7. En parkeringsplats i mobilen, med karta, pris och öppettider.*
 
 ### Uthyraren (privatperson, bostadsrättsförening eller företag)
 
@@ -356,8 +368,8 @@ förklarar vad som väntar och bockas av när det är klart.
 ![Checklistan för en ny uthyrare](images/flow-08-checklista.jpg)
 *Bild 9. En ny uthyrare: inget är klart än, och varje steg har sin knapp.*
 
-**3. Lägg upp platsen.** Platsen läggs upp med adressökning och en nål som går att flytta på
-kartan, typ och egenskaper, öppettider (färdiga mallar eller egna tider per veckodag, även över
+**3. Lägg upp parkeringsplatsen.** Platsen läggs upp med adressökning och en nål som går att flytta
+på kartan, typ och egenskaper, öppettider (färdiga mallar eller egna tider per veckodag, även över
 midnatt), timpris med tak per dygn, kortaste bokning, framförhållning, avbokningsfönster,
 instruktioner, och om platsen ska synas i sökningen eller bara via länk. Uthyraren anger också
 sin **rätt att hyra ut** platsen: äger den, eller hyr den av en bostadsrättsförening eller en
@@ -369,7 +381,7 @@ hyresvärd.
 **4. Underlag och godkännande.** Platsen visar vilka underlag som krävs för just den rätten
 (lagfart, hyresavtal, föreningens godkännande) och vad som saknas innan den kan skickas in.
 Föreningens eller hyresvärdens godkännande kan begäras med en knapp, eller laddas upp som ett
-skriftligt godkännande.
+skriftligt godkännande. En fil över 4 MB stoppas redan i webbläsaren, med ett besked om storleken.
 
 ![Underlagen för en hyrd plats](images/flow-11-underlag.jpg)
 *Bild 11. Hyresavtalet är uppladdat och förfrågan till föreningen skickad; det som saknas står
@@ -383,51 +395,84 @@ Parklet-konto syns förfrågan även i dennes notisklocka.
 ![Föreningens godkännande](images/flow-12-foreningens-godkannande.jpg)
 *Bild 12. Sidan styrelsen kommer till från e-postmeddelandet.*
 
-**6. Översikten.** Översikten visar platserna med granskningsstatus, kommande bokningar och
-intäkter, och bokningarna. Föreningar och företag kan skapa "Plats 1–20" på en gång med samma
-villkor och underlag, och bjuda in fler administratörer via e-post.
+**6. Uthyrarkontots flikar.** Varje uthyrarkonto har samma upplägg som Parklets egna
+administrationssidor, med flikarna **Översikt**, **Granska**, **Parkeringsplatser**,
+**Bokningar**, **E-post** och **Administratörer**. Översikten visar checklistan, utbetalningar och
+tre rutor: vad som väntar på uthyraren, antalet parkeringsplatser och kommande bokningar med
+intäkterna hittills.
 
 ![Uthyrarens översikt](images/flow-13-uthyrarens-oversikt.jpg)
-*Bild 13. En privat uthyrare med platser i olika skeden: godkända, under granskning och utkast.*
+*Bild 13. Översikten för en privat uthyrare, med flikarna överst.*
 
-**7. Bilar att registrera.** Kräver föreningen att bilarna registreras får uthyraren förarens
-registreringsnummer i en lista och bockar av när bilen är registrerad, med påminnelse tre timmar
-före start om det inte är gjort.
+**7. Parkeringsplatser, bokningar och e-post.** Flikarna är sökbara tabeller med filter, som
+administratörens men begränsade till kontots egna uppgifter: parkeringsplatserna med
+granskningsstatus och om de går att boka, bokningarna med förare, bil och betalning, och den
+e-post tjänsten skickat om kontot. Föreningar och företag kan skapa "Plats 1–20" på en gång med
+samma villkor och underlag.
+
+![Uthyrarens parkeringsplatser](images/flow-20-uthyrarens-parkeringsplatser.jpg)
+*Bild 14. Parkeringsplatserna i olika skeden: utkast, under granskning och godkända.*
+
+**8. Granska och registrerade bilar.** Under **Granska** samlas det uthyraren behöver göra något
+åt: parkeringsplatser att slutföra eller som väntar på föreningen eller på Parklet, och bilar att
+registrera. Kräver föreningen att bilarna registreras får uthyraren förarens registreringsnummer,
+grupperat per parkeringsplats, och bockar av när bilen är registrerad, med påminnelse före start
+om det inte är gjort. En bil som bockats av sparas för platsen: nästa bokning med samma bil är
+klar från början, och andra bokningar som väntar med samma bil blir klara direkt. På platsens
+egen sida ser uthyraren de registrerade bilarna och kan lägga till och ta bort dem.
 
 ![Bilar att registrera](images/flow-14-bilar-att-registrera.jpg)
-*Bild 14. Föreningens lista över bilar att registrera före kommande bokningar.*
+*Bild 15. Föreningens Granska-flik: bilar att registrera före kommande bokningar.*
 
-**8. Notiser.** Uthyraren får besked via e-post och notisklockan när föreningen svarat, när en plats
-godkänns, när någon bokar och om en bil behöver registreras. Klockan visar också det som återstår
-att göra.
+![Registrerade bilar](images/flow-21-registrerade-bilar.jpg)
+*Bild 16. En registrerad bil på parkeringsplatsens sida.*
+
+**9. Administratörer och borttagning.** Under **Administratörer** bjuder kontots ägare in fler
+administratörer via e-post, skickar en inbjudan igen, rättar adressen eller drar tillbaka den, tar
+bort en administratör eller lämnar över ägandet; en administratör kan också lämna kontot själv.
+En parkeringsplats eller ett helt uthyrarkonto kan tas bort i vilket skede som helst, även en
+förening som fastnat i granskningen, så länge inga bokningar återstår. Det som redan har bokats
+arkiveras i stället för att raderas, eftersom bokningarna sparas för bokföringen. Den som tar bort
+sitt uthyrarkonto blir en vanlig förare igen.
+
+**10. Notiser.** Uthyraren får besked via e-post och notisklockan när föreningen svarat, när en
+plats godkänns, när någon bokar och om en bil behöver registreras. Klockan visar också det som
+återstår att göra, och bara det uthyraren själv kan göra något åt.
 
 ![Notisklockan](images/flow-18-notiser.jpg)
-*Bild 15. Notisklockan: "Att göra" överst, händelser under.*
+*Bild 17. Notisklockan: "Att göra" överst, händelser under.*
 
 ### Parklet själva (administratörer)
 
-- **Granskningskö** för uthyrarkonton och platser, med dokumentvisare och Bolagsverkets svar.
-  Varje beslut är *godkänn*, *avslå* (med en motivering som mejlas till uthyraren) eller *ta bort
-  godkännandet*.
+- **Granskningskö** för uthyrarkonton och parkeringsplatser, med dokumentvisare och Bolagsverkets
+  svar. Varje beslut är *godkänn*, *avslå* (med en motivering som mejlas till uthyraren) eller
+  *ta bort godkännandet*.
 
 ![Granskningskön](images/flow-15-granskningsko.jpg)
-*Bild 16. Det som väntar på granskning.*
+*Bild 18. Det som väntar på granskning.*
 
 ![Granskning av en plats](images/flow-16-granska-plats.jpg)
-*Bild 17. En plats under granskning: uppgifter, föreningens godkännande, krav, dokument och beslut.*
+*Bild 19. En parkeringsplats under granskning: uppgifter, föreningens godkännande, krav, dokument
+och beslut.*
 
 - **Att ta bort ett godkännande får verkan direkt.** Tar man bort en plats godkännande försvinner
   den ur sökningen. Tar man bort ett kontos godkännande går kontots platser tillbaka till "ej
   godkänd" och måste godkännas på nytt; en förening eller ett företag skickar in sina underlag
   igen, och en privatperson legitimerar sig med BankID igen, vilket skickar kontot till Parklets
   granskning. Befintliga bokningar påverkas inte.
-- **Sökning och filter** över alla platser och uthyrare, med besked om *varför* en plats inte går
-  att boka (till exempel "Utbetalning saknas").
-- **Notisklocka** med det som väntar ("Granska 3 platser"), och en **e-postlogg** där all e-post
-  tjänsten skickat går att läsa som den såg ut.
+- **Sökning och filter** över alla parkeringsplatser, uthyrare och bokningar, med besked om
+  *varför* en plats inte går att boka (till exempel "Utbetalning saknas"). Bokningarna kan sökas
+  på plats, uthyrare, förare, e-post, registreringsnummer, boknings-id eller betalning, och
+  filtreras på tid, period, betalning och ort.
+
+![Bokningarna](images/flow-22-admin-bokningar.jpg)
+*Bild 20. Alla bokningar, med status och om bilen är registrerad.*
+
+- **Notisklocka** med det som väntar ("Granska 3 platser"), och en **e-postlogg**: en sökbar
+  tabell över all e-post tjänsten skickat, där varje meddelande går att läsa som det såg ut.
 
 ![E-postloggen](images/flow-17-epostlogg.jpg)
-*Bild 18. E-postloggen med förfrågan till föreningen.*
+*Bild 21. E-postloggen med förfrågan till föreningen.*
 
 - **Morgonsammanfattning** via e-post: vad som väntar på granskning och hur länge, samt det
   senaste dygnets bokningar, avbokningar, bilar som inte registrerats i tid och nya platser,
@@ -436,7 +481,7 @@ att göra.
   och dokument, så att ett test kan börja om från samma läge.
 
 ![Återställ testdata](images/flow-19-testdata.jpg)
-*Bild 19. Testdata-fliken med demokontona.*
+*Bild 22. Testdata-fliken med demokontona.*
 
 Alla e-postmeddelanden och notiser finns listade i [04-emails.md](04-emails.md).
 
@@ -550,7 +595,8 @@ bokningar över midnatt och vid omställning till sommar- och vintertid blir rä
 omställningarna har egna tester.
 
 **Dokument.** Typen avgörs av filens innehåll, inte av filnamnet (bara PDF, JPEG, PNG och HEIC,
-högst 4 MB, eftersom Vercel begränsar storleken på inskickade data till 4,5 MB). Filerna ligger i
+högst 4 MB, eftersom Vercel begränsar storleken på inskickade data till 4,5 MB; en större fil
+stoppas redan i webbläsaren, eftersom den annars aldrig når servern). Filerna ligger i
 en privat bucket i Supabase Storage som bara servern når, och visas bara för medlemmar i det
 uthyrarkonto som äger dem och för Parklets administratörer, med en säkerhetsinställning
 (`Content-Security-Policy: sandbox`) som hindrar en uppladdad fil från att köra kod. Underlagen
@@ -652,10 +698,22 @@ styrelsens bedömning tillsammans med revisorn.
   som föreningen ställt kan uthyraren inte ta bort så länge godkännandet gäller.
 - Varje bokning är knuten till en bil (tabellen `vehicles` plus registreringsnumret sparat på
   bokningen). Bokningar på sådana platser börjar som "ej registrerad".
-- Uthyrarens översikt har listan **"Bilar att registrera"** med registreringsnummer, plats och
-  tid, där uthyraren trycker *"Markera som registrerad"*. Föraren ser status på sin bokning.
+- Uthyrarens Granska-flik har listan **"Bilar att registrera"** med registreringsnummer, plats
+  och tid, där uthyraren trycker *"Markera som registrerad"*. Föraren ser status på sin bokning.
+- **En registrerad bil gäller för platsen** (tabellen `spot_vehicle_approvals`,
+  `src/server/vehicle-approvals.ts`). När en bil markeras som registrerad sparas den för platsen,
+  och andra bokningar på platsen som väntar med samma bil blir klara direkt, med besked till
+  förarna. En ny bokning med en registrerad bil är klar från början, och bokningsformuläret säger
+  det. Uthyraren kan lägga till och ta bort bilar på platsens sida; en borttagen bil påverkar inte
+  bokningar som redan är klara.
 - Två timmar före start påminns uthyraren. Har bilen inte registrerats när parkeringen börjar får
   föraren beskedet "vänta med att parkera", uthyraren en varning och administratörerna en notis.
+
+**Borttagning** (`src/server/host-deletion.ts`). Uthyraren kan ta bort en parkeringsplats eller
+ett helt uthyrarkonto i vilket skede som helst, men inte medan bokningar återstår. Det som aldrig
+bokats raderas. Det som har bokningar arkiveras (`deleted_at`): pausat, utan medlemmar, dokument
+och registrerade bilar, och borta ur alla listor, medan bokningarna står kvar för bokföringen. När
+en användare tar bort sitt konto går uthyrarkonton som användaren äger samma väg.
 
 **Bokningsregler i övrigt.** En bokning håller platsen i 15 minuter medan föraren betalar
 (hållningen omfattas av exkluderingsvillkoret). En bokning får vara högst 30 dygn och kan göras
@@ -681,7 +739,7 @@ Google Pay, Klarna och Swish, återbetalningar och utbetalningar.
 | Bokning | En bokning med status "väntar på betalning" håller platsen i 15 minuter |
 | Betalning | Föraren betalar på Stripes betalsida (Stripe Checkout, på svenska, i kronor) med de betalsätt som är påslagna hos Stripe: kort, Apple Pay, Google Pay, Klarna m.fl. Parklet ser aldrig kortuppgifterna. När betalsidan öppnas förlängs reservationen till betalsidans livslängd (31 minuter, Stripes minimum är 30), så platsen är reserverad så länge betalningen kan genomföras |
 | Pengarna | En betalning på plattformen (*destination charge*): uthyraren får parkeringspriset (`transfer_data.destination`), Parklet behåller serviceavgiften (`application_fee_amount`) och betalar Stripes avgift ur den |
-| Bekräftelse | När föraren kommer tillbaka från Stripe hämtar servern betalningens status direkt från Stripe, och Stripes signerade händelser (`checkout.session.completed` m.fl.) bekräftar också. Det som kommer först gäller; båda tål att komma flera gånger. Webbläsarens egna uppgifter litas aldrig på |
+| Bekräftelse | Föraren skickas tillbaka till den adress betalningen startades från (`src/server/request-origin.ts`), så att inloggningen gäller även på en förhandsversion eller annan adress till tjänsten. När föraren kommer tillbaka från Stripe hämtar servern betalningens status direkt från Stripe, och Stripes signerade händelser (`checkout.session.completed` m.fl.) bekräftar också. Det som kommer först gäller; båda tål att komma flera gånger. Webbläsarens egna uppgifter litas aldrig på |
 | Avbruten eller sen betalning | Betalas inget släpps platsen när betalsidan går ut. Kommer en betalning ändå för sent behålls bokningen bara om platsen fortfarande är ledig (databasen gör dubbelbokningar omöjliga); annars betalas pengarna tillbaka automatiskt och föraren meddelas |
 | Avbokning | Återbetalning via Stripe enligt avbokningsreglerna, som även återför överföringen till uthyraren och Parklets avgift. En återbetalning som görs direkt i Stripes kontrollpanel avbokar bokningen |
 | Utbetalning | I dag förs pengarna över till uthyrarens Stripe-konto vid betalningen och betalas ut enligt Stripes vanliga schema. Villkoren säger att uthyraren får betalt efter bokningen; före lansering behöver det beslutas (fördröjd utbetalning, eller separata överföringar efter bokningens slut) |
@@ -730,9 +788,10 @@ src/
     (auth)/            Inloggning, registrering, lösenordsåterställning
     sok/               Sökning: kartan med platsen och bokningen i en sidopanel
     betala/ bokning/   Betalning (testläge) och bokningsdetaljer
-    uthyrare/          Uthyrarens översikt, platsformulär, underlag
+    uthyrare/          Uthyrarkontots flikar (översikt, granska, parkeringsplatser, bokningar,
+                       e-post, administratörer), platsformulär, underlag
     godkannande/       Godkännandelänken för hyresvärd/BRF
-    admin/             Granskning, sökning, e-postlogg
+    admin/             Granskning, sökning, bokningar, e-postlogg, testdata
     api/               Adressökning, dokumentnedladdning, hälsokontroll, schemalagda jobb
   components/          Gränssnitt (formulär, kartor, uthyrarvyer)
   db/                  Drizzle-schema, SQL-migreringar, HTTP-lagret mot Supabase
@@ -740,7 +799,7 @@ src/
   server/              Dataåtkomst och integrationer (bara server)
 ```
 
-Tre lärdomar om Next.js 16 och React 19 som påverkar fortsatt utveckling:
+Fyra lärdomar om Next.js 16 och React 19 som påverkar fortsatt utveckling:
 
 - Med Cache Components ligger föregående sida kvar (dold) när man navigerar. Fält-id:n i
   formulär måste därför vara unika per instans (`useFieldIds`), och tillstånd i webbläsaren
@@ -749,6 +808,9 @@ Tre lärdomar om Next.js 16 och React 19 som påverkar fortsatt utveckling:
   `src/components/form.tsx`) hindrar det när något gick fel, flyttar fokus till första felaktiga
   fält och upprepar felet vid skicka-knappen i långa formulär. Så behåller användaren det den
   fyllt i.
+- React återanvänder samma element när en vy byts mot en annan på samma plats. En knapp som
+  växlar till ett formulär kan då bli formulärets skicka-knapp och skicka det med samma klick.
+  Vyer som byts ut får därför var sin `key`, och växlingsknappar anropar `preventDefault()`.
 - Ett `datetime-local`-fält med `step=900` räknar steg från `min`, så `min` måste ligga på en
   kvart, annars blockerar webbläsaren tyst inskickningen.
 
@@ -757,8 +819,8 @@ Tre lärdomar om Next.js 16 och React 19 som påverkar fortsatt utveckling:
 | Nivå | Verktyg | Vad som täcks |
 |---|---|---|
 | Enhetstester (`tests/unit`) | Vitest | Prisberäkning, tillgänglighet, sommar- och vintertid, scheman, kryptering, Bolagsverkets svar, e-postmallar, filtyper |
-| Integrationstester (`tests/integration`) | Vitest mot en riktig Postgres via PostgREST | Hållningar och samtidiga bokningar, synlighet i sökningen, avbokning, bilregistrering, påminnelser, morgonsammanfattning, hyresvärdens godkännande, granskning och borttagna godkännanden, betalningar och utbetalningar via Stripe (signerade händelser, dubbletter, utgångna och sena betalningar, återbetalningar, avgifter), återställning av testdata, behörigheter, radnivåsäkerhet |
-| End-to-end (`e2e/`) | Playwright mot ett produktionsbygge, dator och mobil | Förarens bokning, dubbelbokning, uthyrare med BRF-godkännande, verifiering av organisationer och inbjudningar, kontroll av filtyp vid uppladdning, granskning och borttagna godkännanden, behörigheter, formulär som behåller sitt innehåll, betalning och utbetalningskonto via Stripe, genomgång av alla länkar. BankID, Bolagsverket och Stripe ersätts av lokala testtjänster (`e2e/fake-idp.mjs`, `e2e/fake-bolagsverket.mjs`, `e2e/fake-stripe.mjs`), så att den riktiga koden för kopplingarna körs |
+| Integrationstester (`tests/integration`) | Vitest mot en riktig Postgres via PostgREST | Hållningar och samtidiga bokningar, synlighet i sökningen och sökfilter, avbokning, bilregistrering och registrerade bilar per plats, borttagning av platser och uthyrarkonton, påminnelser, morgonsammanfattning, hyresvärdens godkännande, granskning och borttagna godkännanden, betalningar och utbetalningar via Stripe (signerade händelser, dubbletter, utgångna och sena betalningar, återbetalningar, avgifter), återställning av testdata, behörigheter, radnivåsäkerhet |
+| End-to-end (`e2e/`) | Playwright mot ett produktionsbygge, dator och mobil | Förarens bokning, dubbelbokning, uthyrare med BRF-godkännande, verifiering av organisationer och inbjudningar, uthyrarkontots flikar och administratörer, borttagning, sidhuvudet efter in- och utloggning, kontroll av filtyp och filstorlek vid uppladdning, granskning och borttagna godkännanden, behörigheter, formulär som behåller sitt innehåll, betalning och utbetalningskonto via Stripe, genomgång av alla länkar. BankID, Bolagsverket och Stripe ersätts av lokala testtjänster (`e2e/fake-idp.mjs`, `e2e/fake-bolagsverket.mjs`, `e2e/fake-stripe.mjs`), så att den riktiga koden för kopplingarna körs |
 | Live-tester (`tests/live`) | Vitest mot riktiga tjänster | Bolagsverkets API och Stripes testläge. Körs varje måndag i GitHub Actions ("Live integrations") med uppgifter från repots hemligheter, och hoppas över utan dem |
 
 GitHub Actions kör vid varje ändring lint, typkontroll, enhets- och integrationstester, bygge och

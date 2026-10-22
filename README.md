@@ -9,9 +9,12 @@ organisations rent out their parking spots when they're not using them.
   vehicle-registration rules, integrations, tests, and the steps left before launch.
   Also as a PDF with the screenshots embedded, [docs/01-rapport.pdf](docs/01-rapport.pdf):
   rebuild it with `npm run docs:pdf` after changing the report. The screenshots of the new
-  version (`docs/images/flow-*.jpg`) are taken from the demo data.
+  version (`docs/images/flow-*.jpg`) are taken from the demo data by
+  `scripts/report-screenshots.mjs` (how to run it is at the top of the script).
 - **[docs/04-emails.md](docs/04-emails.md)**: every e-mail and notification.
-- **[docs/05-testplan.md](docs/05-testplan.md)**: manual test plan for the main flows.
+- **[docs/05-testplan.md](docs/05-testplan.md)**: manual test plan for the main flows, also as
+  [docs/05-testplan.pdf](docs/05-testplan.pdf). `npm run docs:pdf` rebuilds both PDFs;
+  `npm run docs:pdf -- testplan` only this one.
 
 ![MVP home page](docs/images/flow-01-startsida.jpg)
 

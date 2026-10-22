@@ -1,5 +1,7 @@
-// Renders docs/01-rapport.md to docs/01-rapport.pdf: the report for Parklet's owner,
-// with its screenshots embedded. Run `npm run docs:pdf` after changing the report.
+// Renders the documents meant to be handed over as PDFs: the report for Parklet's owner
+// (docs/01-rapport.md, with its screenshots embedded) and the manual test plan
+// (docs/05-testplan.md). Run `npm run docs:pdf` after changing either; pass a name
+// (`npm run docs:pdf -- testplan`) to render only the documents whose file matches it.
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -7,16 +9,25 @@ import { pathToFileURL } from "node:url";
 import { chromium } from "@playwright/test";
 import { marked } from "marked";
 
-const SOURCE = path.resolve("docs/01-rapport.md");
-const TARGET = path.resolve("docs/01-rapport.pdf");
+/**
+ * `pageBreak` is the heading level that starts a new page: the report's chapters are `##`,
+ * while the test plan groups its many short flows under `#` headings.
+ */
+const DOCUMENTS = [
+  { source: "docs/01-rapport.md", lang: "sv", pageBreak: "h2" },
+  { source: "docs/05-testplan.md", lang: "en", pageBreak: "h1" },
+];
+const only = process.argv[2];
 
-/** GitHub's heading anchors ("4.9 Nästa steg" → "49-nästa-steg"), so the report's own links work in the PDF. */
+/**
+ * GitHub's heading anchors ("4.9 Nästa steg" → "49-nästa-steg"), so a document's own links work
+ * in the PDF. Like GitHub it doesn't trim: "… link 📧" ends in "-".
+ */
 const slug = (text) =>
   text
     .toLowerCase()
     .replace(/<[^>]+>/g, "")
-    .replace(/[^\p{L}\p{N}\s-]/gu, "")
-    .trim()
+    .replace(/[^\p{L}\p{N}\s_-]/gu, "")
     .replace(/\s/g, "-");
 
 marked.use({
@@ -29,16 +40,19 @@ marked.use({
   },
 });
 
-const markdown = readFileSync(SOURCE, "utf8");
-const title = markdown.match(/^# (.+)$/m)?.[1] ?? "Parklet";
-const body = marked.parse(markdown);
+async function render(browser, { source, lang, pageBreak }) {
+  const sourcePath = path.resolve(source);
+  const targetPath = sourcePath.replace(/\.md$/, ".pdf");
+  const markdown = readFileSync(sourcePath, "utf8");
+  const title = markdown.match(/^# (.+)$/m)?.[1] ?? "Parklet";
+  const body = marked.parse(markdown);
 
-const html = `<!doctype html>
-<html lang="sv">
+  const html = `<!doctype html>
+<html lang="${lang}">
 <head>
 <meta charset="utf-8">
 <title>${title}</title>
-<base href="${pathToFileURL(path.dirname(SOURCE))}/">
+<base href="${pathToFileURL(path.dirname(sourcePath))}/">
 <style>
   @page { size: A4; margin: 20mm 18mm 22mm; }
   :root { --ink: #16181d; --soft: #4b5160; --muted: #7a8090; --line: #dfe2e8; --brand: #2f6fd6; --canvas: #f4f5f8; }
@@ -46,7 +60,8 @@ const html = `<!doctype html>
   body { margin: 0; }
   h1 { font-size: 26pt; line-height: 1.15; letter-spacing: -0.02em; margin: 0 0 6mm; }
   h1 + p { color: var(--soft); }
-  h2 { font-size: 17pt; letter-spacing: -0.01em; margin: 0 0 4mm; padding-top: 2mm; break-before: page; }
+  h2 { font-size: 17pt; letter-spacing: -0.01em; margin: 7mm 0 3mm; padding-top: 2mm; break-after: avoid; }
+  ${pageBreak}:not(:first-child) { break-before: page; margin-top: 0; }
   h3 { font-size: 12.5pt; margin: 7mm 0 2mm; break-after: avoid; }
   h4 { font-size: 11pt; margin: 5mm 0 1.5mm; break-after: avoid; }
   p, li { orphans: 3; widows: 3; }
@@ -74,30 +89,46 @@ const html = `<!doctype html>
 <body>${body}</body>
 </html>`;
 
-// Opened as a file, not with setContent: a page from a string may not load the local screenshots.
-const dir = mkdtempSync(path.join(tmpdir(), "parklet-report-"));
-const file = path.join(dir, "rapport.html");
-writeFileSync(file, html);
+  // Opened as a file, not with setContent: a page from a string may not load the local screenshots.
+  const dir = mkdtempSync(path.join(tmpdir(), "parklet-docs-"));
+  const file = path.join(dir, "document.html");
+  writeFileSync(file, html);
+  const page = await browser.newPage();
+  try {
+    await page.goto(pathToFileURL(file).href, { waitUntil: "load" });
+    const missing = await page.evaluate(() =>
+      [...document.images]
+        .filter((i) => !i.complete || i.naturalWidth === 0)
+        .map((i) => i.getAttribute("src")),
+    );
+    if (missing.length)
+      throw new Error(`Images that didn't load: ${missing.join(", ")}`);
+    await page.evaluate(() =>
+      Promise.all([...document.images].map((i) => i.decode().catch(() => {}))),
+    );
+    await page.pdf({
+      path: targetPath,
+      format: "A4",
+      preferCSSPageSize: true,
+      printBackground: true,
+      displayHeaderFooter: true,
+      headerTemplate: "<span></span>",
+      footerTemplate: `<div style="width:100%;font:8pt Inter,Arial,sans-serif;color:#7a8090;padding:0 18mm;display:flex;justify-content:space-between"><span>${title}</span><span><span class="pageNumber"></span> / <span class="totalPages"></span></span></div>`,
+      outline: true,
+      tagged: true,
+    });
+    console.log(`Wrote ${path.relative(process.cwd(), targetPath)}`);
+  } finally {
+    await page.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+const chosen = DOCUMENTS.filter((d) => !only || d.source.includes(only));
+if (!chosen.length) throw new Error(`No document matches "${only}"`);
 const browser = await chromium.launch();
 try {
-  const page = await browser.newPage();
-  await page.goto(pathToFileURL(file).href, { waitUntil: "load" });
-  const missing = await page.evaluate(() => [...document.images].filter((i) => !i.complete || i.naturalWidth === 0).map((i) => i.getAttribute("src")));
-  if (missing.length) throw new Error(`Images that didn't load: ${missing.join(", ")}`);
-  await page.evaluate(() => Promise.all([...document.images].map((i) => i.decode().catch(() => {}))));
-  await page.pdf({
-    path: TARGET,
-    format: "A4",
-    preferCSSPageSize: true,
-    printBackground: true,
-    displayHeaderFooter: true,
-    headerTemplate: "<span></span>",
-    footerTemplate: `<div style="width:100%;font:8pt Inter,Arial,sans-serif;color:#7a8090;padding:0 18mm;display:flex;justify-content:space-between"><span>${title}</span><span><span class="pageNumber"></span> / <span class="totalPages"></span></span></div>`,
-    outline: true,
-    tagged: true,
-  });
-  console.log(`Wrote ${path.relative(process.cwd(), TARGET)}`);
+  for (const doc of chosen) await render(browser, doc);
 } finally {
   await browser.close();
-  rmSync(dir, { recursive: true, force: true });
 }
