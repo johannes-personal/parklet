@@ -324,14 +324,14 @@ in, vägbeskrivning och till när avbokningen är kostnadsfri. Ett kvitto skicka
 ![Bokningsbekräftelse](images/flow-05-bokad.jpg)
 *Bild 5. Bokad och betald: instruktioner, vägbeskrivning och avbokning.*
 
-**6. Mina bokningar.** Kommande och tidigare bokningar samlas på ett ställe, och sparade bilar
-under "Mina fordon". Varje bokning visar när den gjordes. Under **Ditt konto** ser användaren sitt
-namn, sin e-postadress och kontotyp (förare, eller förare och uthyrare med sina uthyrarkonton), och
-kan ta bort kontot: personuppgifterna tas bort, medan bokningarna sparas utan namn för bokföringen. Om platsen kräver att bilen registreras hos föreningen ser föraren om det är
+**6. Mina sidor.** Överst under **Ditt konto** ser användaren sitt namn, sin e-postadress och
+kontotyp (förare, eller förare och uthyrare med sina uthyrarkonton). Under kontot samlas kommande
+och tidigare bokningar, som kan filtreras på datum och status, och sparade bilar finns under "Mina
+fordon". Varje bokning visar när den gjordes. Användaren kan också ta bort kontot: personuppgifterna tas bort, medan bokningarna sparas utan namn för bokföringen. Om platsen kräver att bilen registreras hos föreningen ser föraren om det är
 gjort, och får besked om det inte är klart när parkeringen börjar.
 
-![Mina bokningar](images/flow-06-mina-bokningar.jpg)
-*Bild 6. Förarens bokningar. Klockan i menyn visar nya notiser.*
+![Mina sidor](images/flow-06-mina-sidor.jpg)
+*Bild 6. Mina sidor: kontot överst, bokningarna under. Klockan i menyn visar nya notiser.*
 
 **7. I mobilen.** Hela tjänsten fungerar i mobilen: sökresultaten ligger som ett ark över kartan och
 platsens sida anpassar sig till skärmen.
@@ -728,7 +728,7 @@ riktig förening.
 src/
   app/                 Sidor och serveråtgärder
     (auth)/            Inloggning, registrering, lösenordsåterställning
-    sok/  plats/[id]/  Sökning och platssida med bokning
+    sok/               Sökning: kartan med platsen och bokningen i en sidopanel
     betala/ bokning/   Betalning (testläge) och bokningsdetaljer
     uthyrare/          Uthyrarens översikt, platsformulär, underlag
     godkannande/       Godkännandelänken för hyresvärd/BRF

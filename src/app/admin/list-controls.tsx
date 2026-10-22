@@ -1,37 +1,6 @@
 import Link from "next/link";
 import { PAGE_SIZE } from "@/server/admin-search";
 
-/** A labelled filter select; the empty option means "any". */
-export function Select({
-  label,
-  name,
-  value,
-  options,
-  all = "Alla",
-}: {
-  label: string;
-  name: string;
-  value: string | undefined;
-  options: (readonly [string, string])[] | [string, string][];
-  all?: string;
-}) {
-  return (
-    <div>
-      <label htmlFor={`f-${name}`} className="label">
-        {label}
-      </label>
-      <select id={`f-${name}`} name={name} defaultValue={value ?? ""} className="input">
-        <option value="">{all}</option>
-        {options.map(([v, l]) => (
-          <option key={v} value={v}>
-            {l}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
-}
-
 export function Pager({ total, page, href }: { total: number; page: number; href: (page: number) => string }) {
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const from = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;

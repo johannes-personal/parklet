@@ -18,8 +18,12 @@ const nextConfig: NextConfig = {
     },
   },
   async redirects() {
-    // How hosting works used to be a page of its own; /uthyrare is now the one way in.
-    return [{ source: "/hyr-ut", destination: "/uthyrare", permanent: true }];
+    return [
+      // How hosting works used to be a page of its own; /uthyrare is now the one way in.
+      { source: "/hyr-ut", destination: "/uthyrare", permanent: true },
+      // The driver's page holds the account as well as the bookings.
+      { source: "/mina-bokningar", destination: "/mina-sidor", permanent: true },
+    ];
   },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];

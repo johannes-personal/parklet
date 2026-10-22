@@ -101,7 +101,8 @@ Live demo: **https://parklet-rebuild.vercel.app**
 - **Payments:** the demo runs the mock until `PAYMENT_PROVIDER=stripe` and the Stripe keys are
   set; the steps are under [Payments](#payments-stripe-connect). The return URLs Parklet gives
   Stripe (after paying, cancelling, onboarding) follow `APP_URL` (or Vercel's URL).
-- **Mail:** every mail lands in the `mail_outbox` table, readable by admins at `/admin/epost`.
+- **Mail:** every mail lands in the `mail_outbox` table, readable by admins at `/admin/epost`
+  (filtered by type and organisation, from the `kind` and `host_account_id` it is stored with).
   With `RESEND_API_KEY` and `MAIL_FROM` set, mail to real addresses is also sent through
   [Resend](https://resend.com); the demo accounts' `@parklet.test` addresses are never sent.
 - **Demo accounts** on production use the password `parklet-demo-1` (they were seeded with
@@ -193,8 +194,12 @@ Parklet never holds drivers' money: Stripe does, under its licence, and pays the
    `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, then redeploy. With `PAYMENT_PROVIDER=stripe` a
    missing key is an error (bookings and the webhook fail loudly), never a fall-back to the mock;
    the mock itself is refused in production unless `NEXT_PUBLIC_DEMO=1`.
-6. The seeded demo hosts have mock payout accounts (`acct_mock_…`). Before taking bookings for
-   them through Stripe, reset them so their owners connect a real (test) account:
+6. Demo data seeded under the mock has mock payout accounts (`acct_mock_…`), which Stripe can't
+   pay. Press **Återställ testdata** once after switching: the demo hosts then start unconnected,
+   or all get `STRIPE_TEST_CONNECTED_ACCOUNT` when it is set (a test account connected through the
+   app's own onboarding). A mock account left over anyway is disconnected the first time a
+   checkout or the host's dashboard meets it, so its spots leave search instead of failing at
+   **Betala**. By hand:
    `update host_accounts set payout_status = 'not_connected', payout_account_ref = null where payout_account_ref like 'acct_mock_%';`
 
 Going live later means the same steps in live mode (live keys, live webhook endpoints, Connect

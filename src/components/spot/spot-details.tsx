@@ -1,4 +1,4 @@
-import { BookingForm } from "@/app/plats/[id]/booking-form";
+import { BookingForm } from "@/app/sok/booking-form";
 import { describeWindows } from "@/lib/availability";
 import { getCurrentUser } from "@/lib/auth/session";
 import { spotFeatures } from "@/lib/labels";
@@ -8,10 +8,7 @@ import { listBusyRanges, listVehicles } from "@/server/bookings";
 import { getAccountForMember } from "@/server/host-accounts";
 import { getSpotWithAccount, isBookable } from "@/server/spots";
 
-/**
- * A spot as a driver sees it, shared by the spot page (/plats/[id]) and the
- * overlay on the search map (/sok?plats=…).
- */
+/** A spot as a driver sees it, in the panel over the search map (/sok?plats=…). */
 export async function loadSpotForViewer(id: string) {
   const [row, user] = await Promise.all([getSpotWithAccount(id), getCurrentUser()]);
   if (!row) return null;

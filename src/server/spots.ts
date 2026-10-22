@@ -273,6 +273,7 @@ export async function announceSubmittedSpots(accountId: string, spotIds: string[
   const more = rows.length > 1 ? ` (+${rows.length - 1} till på samma adress)` : "";
   await notifyAdmins({
     kind: "admin_spot_submitted",
+    accountId: spot.hostAccountId,
     title: `Ny plats att granska: ${spot.title}${more}`,
     body: `${accountName} har skickat in ${rows.length > 1 ? `${rows.length} platser` : "en plats"} för granskning.`,
     details: [
@@ -313,7 +314,7 @@ export async function requestLandlordApproval(accountId: string, spotId: string,
     ],
     button: { label: "Granska och svara", url: `${appUrl()}/godkannande/${token}` },
     footnote: "Parklet förmedlar parkering mellan privatpersoner, föreningar och företag. Uthyraren får inte hyra ut platsen via Parklet utan ert godkännande.",
-  });
+  }, { kind: "landlord_approval", hostAccountId: account.id });
   // The approver needs no account, but one who has one also finds the request in the bell
   // (no second e-mail: the one above is it).
   const approver = must<{ id: string }[]>(
@@ -325,6 +326,7 @@ export async function requestLandlordApproval(accountId: string, spotId: string,
       [approver[0].id],
       {
         kind: "landlord_approval_requested",
+        accountId: account.id,
         title: `Godkännande begärt: parkeringsplats på ${spot.address}`,
         body: `${requestedBy} vill hyra ut parkeringsplatsen på ${spot.address}, ${spot.city} via Parklet och behöver godkännande från ${who}.`,
         href: `/godkannande/${token}`,

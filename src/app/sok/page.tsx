@@ -9,9 +9,11 @@ import { formatDistance } from "@/lib/geo";
 import { spotFeatures } from "@/lib/labels";
 import { formatSek } from "@/lib/money";
 import { formatDuration, formatRange, isPast, parseLocalDateTime } from "@/lib/time";
+import { spotHref } from "@/lib/spot-link";
 import { geocode } from "@/server/geocode";
 import { isUuid } from "@/server/ids";
 import { searchSpots, type SearchResult } from "@/server/search";
+import { getSpotWithAccount } from "@/server/spots";
 import { ListPanel, SpotPanel } from "./panels";
 
 export const metadata: Metadata = { title: "Hitta parkering" };
@@ -230,23 +232,34 @@ function ResultItem({ r, href, selected }: { r: SearchResult; href: string; sele
 async function SelectedSpot({ id, closeHref, returnTo, from, to }: { id: string; closeHref: string; returnTo: string; from?: string; to?: string }) {
   const data = await loadSpotForViewer(id);
   if (!data) {
+    // A link to a spot that is gone, or that is paused or waiting for review (the map is
+    // already around it, with what can be booked nearby).
+    const exists = Boolean(await getSpotWithAccount(id));
+    const title = exists ? "Platsen kan inte bokas just nu" : "Platsen finns inte";
     return (
-      <SpotPanel title="Platsen hittades inte" closeHref={closeHref}>
-        <p className="text-ink-soft">Platsen finns inte eller kan inte bokas längre.</p>
+      <SpotPanel title={title} closeHref={closeHref}>
+        <h2 className="text-xl font-bold">{title}</h2>
+        <p className="mt-2 text-ink-soft">
+          {exists
+            ? "Uthyraren har pausat platsen eller håller på att ändra den. Det finns ofta andra lediga platser i närheten, på kartan och i listan."
+            : "Platsen har tagits bort, eller så är länken fel."}
+        </p>
       </SpotPanel>
     );
   }
   return (
-    <SpotPanel title={data.spot.title} closeHref={closeHref} shareHref={`/plats/${id}${from && to ? `?${new URLSearchParams({ from, to })}` : ""}`}>
+    <SpotPanel title={data.spot.title} closeHref={closeHref} shareHref={spotHref(data.spot, { from, to })}>
       <div className="space-y-6">
+        {!data.bookable ? (
+          <p role="status" className="rounded-xl border border-warn/30 bg-warn-soft px-4 py-3 text-sm font-medium text-warn">
+            Förhandsvisning: platsen är inte bokningsbar ännu (granskning, verifiering eller utbetalningskonto saknas, eller så är den pausad).
+          </p>
+        ) : null}
         <SpotHeading spot={data.spot} level={2} />
         <div className="rounded-2xl border border-line p-4">
           <SpotBooking data={data} from={from} to={to} returnTo={returnTo} />
         </div>
         <SpotFacts spot={data.spot} account={data.account} busy={data.busy} />
-        <Link href={`/plats/${id}`} className="link text-sm">
-          Öppna platsens egen sida
-        </Link>
       </div>
     </SpotPanel>
   );

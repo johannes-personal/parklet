@@ -9,6 +9,7 @@ import { describeWindows } from "@/lib/availability";
 import { requireUser } from "@/lib/auth/session";
 import { DOCUMENT_KIND_LABEL, REVIEW_LABEL, spotFeatures } from "@/lib/labels";
 import { formatSek } from "@/lib/money";
+import { spotHref } from "@/lib/spot-link";
 import { formatDateTime } from "@/lib/time";
 import { getAccountForMember } from "@/server/host-accounts";
 import { documentsEditable, documentsLockedError, getSpot, listSiblingSpots, listSpotDocuments, spotRequirements } from "@/server/spots";
@@ -97,7 +98,7 @@ async function Content({ params, searchParams }: P) {
             <p className="mt-1 text-sm text-ink-soft">{spot.rightBasis === "owns" ? "Du äger platsen" : `Du hyr platsen av ${spot.landlordName || who}`}</p>
           </div>
           <div className="flex shrink-0 gap-2">
-            <Link href={`/plats/${spot.id}`} className="btn-secondary px-3 py-1.5">
+            <Link href={spotHref(spot)} className="btn-secondary px-3 py-1.5">
               {spot.review === "approved" ? "Visa annonsen" : "Förhandsgranska"}
             </Link>
             <Link href={`${base}/uppgifter`} className="btn-secondary px-3 py-1.5">

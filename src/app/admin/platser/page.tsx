@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
-import { FilterForm } from "@/app/admin/admin-tabs";
-import { Pager, Select } from "@/app/admin/list-controls";
+import { FilterForm, Select } from "@/components/filter-form";
+import { Pager } from "@/app/admin/list-controls";
 import { Badge } from "@/components/status-badge";
 import { requireAdmin } from "@/lib/auth/session";
 import { REVIEW_LABEL } from "@/lib/labels";

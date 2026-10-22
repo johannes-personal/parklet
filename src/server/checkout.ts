@@ -9,6 +9,7 @@ import { announceBooking } from "./bookings";
 import { isUuid } from "./ids";
 import { notifyAdmins, notifyUsers } from "./notifications";
 import { getPaymentProvider } from "./payments";
+import { dropMockPayoutAccount, isStripeAccountRef } from "./payouts";
 import { getStripe } from "./stripe";
 
 /**
@@ -53,13 +54,16 @@ async function loadBooking(bookingId: string): Promise<BookingForCheckout | null
   return row ? { ...parse<typeof bookings, Booking>(bookings, row), spot: row.spot } : null;
 }
 
-/** The host's connected account, if it can take payments. */
+/** The host's connected account, if it can take payments. One left over from the mock is disconnected. */
 async function destinationFor(hostAccountId: string): Promise<string | null> {
   const row = must<{ ref: string | null; status: string } | null>(
     await api().from("host_accounts").select(`ref:${A.payoutAccountRef},status:${A.payoutStatus}`).eq(A.id, hostAccountId).maybeSingle(),
     "destinationFor",
   );
-  return row?.status === "active" && row.ref?.startsWith("acct_") ? row.ref : null;
+  if (row?.status !== "active" || !row.ref) return null;
+  if (isStripeAccountRef(row.ref)) return row.ref;
+  await dropMockPayoutAccount(hostAccountId);
+  return null;
 }
 
 /**
@@ -166,6 +170,7 @@ export async function settleCheckoutSession(session: Stripe.Checkout.Session, no
     await getPaymentProvider("stripe").refund({ ref: paymentRef, amountOre });
     await notifyAdmins({
       kind: "payment_unexpected",
+      accountId: booking.spot.hostAccountId,
       title: `Oväntad betalning återbetald: ${booking.spot.title}`,
       body: `Betalningen ${paymentRef} (${formatSek(amountOre)}, session ${session.id}) hörde inte till bokningens betalning och har återbetalats automatiskt. Bokning ${booking.id}.`,
       href: "/admin",
@@ -219,6 +224,7 @@ async function refundLatePayment(booking: BookingForCheckout, paymentRef: string
   if (!marked.length) return "refunded";
   await notifyUsers([booking.driverId], {
     kind: "payment_refunded",
+    accountId: booking.spot.hostAccountId,
     title: `Betalningen för ${booking.spot.title} återbetalas`,
     body: `Betalningen kom fram efter att reservationen hade gått ut, och platsen ${formatRange(booking.startsAt, booking.endsAt)} är inte längre ledig. Du får tillbaka hela beloppet, ${formatSek(amountOre)}, inom några bankdagar.`,
     href: `/bokning/${booking.id}`,

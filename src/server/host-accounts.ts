@@ -114,6 +114,7 @@ export async function submitAccountForReview(accountId: string): Promise<{ ok: t
   if (account) {
     await notifyAdmins({
       kind: "admin_account_submitted",
+      accountId: accountId,
       title: `Ny organisation att verifiera: ${account.name}`,
       body: `${account.name} har skickat in underlag för verifiering.`,
       details: [
@@ -189,7 +190,7 @@ export async function inviteAdmin(account: HostAccount, invitedBy: { id: string;
       "Inbjudan gäller i 7 dagar. Har du inget Parklet-konto skapar du ett när du accepterar.",
     ],
     button: { label: "Acceptera inbjudan", url },
-  });
+  }, { kind: "invitation", hostAccountId: account.id });
 }
 
 export async function getInvitation(token: string) {

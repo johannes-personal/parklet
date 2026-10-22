@@ -87,8 +87,8 @@ const local = (d, h, m = 0) => DateTime.now().setZone("Europe/Stockholm").plus({
   await p.getByRole("button", { name: /Betala .* \(testläge\)/ }).click();
   await p.getByText("Din parkering är bokad och betald").waitFor();
   await shot(p, "flow-05-bokad", { tall: 1400 });
-  await p.goto(`${BASE}/mina-bokningar`);
-  await shot(p, "flow-06-mina-bokningar");
+  await p.goto(`${BASE}/mina-sidor`);
+  await shot(p, "flow-06-mina-sidor");
 }
 {
   const p = await page(null, phone);

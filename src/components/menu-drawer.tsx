@@ -25,7 +25,7 @@ export function MenuDrawer({ user }: Props) {
         { href: "/sok", label: "Hitta parkering" },
         ...(user
           ? [
-              { href: "/mina-bokningar", label: "Mina bokningar" },
+              { href: "/mina-sidor", label: "Mina sidor" },
               { href: "/fordon", label: "Mina fordon" },
             ]
           : []),
@@ -43,6 +43,7 @@ export function MenuDrawer({ user }: Props) {
             links: [
               { href: "/admin", label: "Granskning" },
               { href: "/admin/platser", label: "Platser och uthyrare" },
+              { href: "/admin/bokningar", label: "Bokningar" },
             ],
           },
         ]

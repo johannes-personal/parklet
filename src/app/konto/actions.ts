@@ -6,7 +6,7 @@ import { endSession, requireUser } from "@/lib/auth/session";
 import { deleteOwnAccount } from "@/server/account-deletion";
 
 export async function deleteAccountAction(_prev: FormState, formData: FormData): Promise<FormState> {
-  const user = await requireUser("/mina-bokningar");
+  const user = await requireUser("/mina-sidor");
   if (formData.get("confirm") !== "on") return { fieldErrors: { confirm: "Bekräfta att du vill ta bort kontot." } };
   const password = String(formData.get("password") ?? "");
   if (!password) return { fieldErrors: { password: "Skriv ditt lösenord." } };

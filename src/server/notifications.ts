@@ -32,6 +32,8 @@ export type NotificationInput = {
   details?: [string, string][];
   /** The e-mail's button label (default "Öppna i Parklet"). */
   cta?: string;
+  /** The host account it concerns, for the e-mail log (set by notifyAccount). */
+  accountId?: string;
 };
 
 /** Store a notification for each user and, unless `email: false`, send it as a designed e-mail too. */
@@ -53,7 +55,7 @@ export async function notifyUsers(userIds: string[], n: NotificationInput, { ema
       details: n.details,
       button: { label: n.cta ?? "Öppna i Parklet", url: `${appUrl()}${n.href}` },
       footnote: "Du får det här mejlet för att du har ett konto på Parklet.",
-    });
+    }, { kind: n.kind, hostAccountId: n.accountId });
   }
 }
 
@@ -72,7 +74,7 @@ export async function notifyAccount(accountId: string, n: NotificationInput, opt
   const members = must<{ id: string }[]>(await api().from("host_account_members").select(`id:${M.userId}`).eq(M.hostAccountId, accountId), "notifyAccount");
   await notifyUsers(
     members.map((m) => m.id),
-    n,
+    { ...n, accountId },
     opts,
   );
 }

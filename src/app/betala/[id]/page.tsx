@@ -6,6 +6,7 @@ import { Suspense } from "react";
 import { PayButton } from "@/app/booking-buttons";
 import { requireUser } from "@/lib/auth/session";
 import { formatSek } from "@/lib/money";
+import { spotHref } from "@/lib/spot-link";
 import { formatRange, formatTime } from "@/lib/time";
 import { getBookingForUser } from "@/server/bookings";
 import { isStripeTestMode } from "@/server/stripe";
@@ -60,7 +61,7 @@ async function Checkout({ params, searchParams }: PageProps<"/betala/[id]">) {
       {expired ? (
         <div className="card mt-6 p-5">
           <p className="font-medium text-danger">Reservationen har gått ut. Ingen betalning har dragits.</p>
-          <Link href={`/plats/${b.spot.id}`} className="btn-primary mt-4">
+          <Link href={spotHref(b.spot)} className="btn-primary mt-4">
             Boka igen
           </Link>
         </div>

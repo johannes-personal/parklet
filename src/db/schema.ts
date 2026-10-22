@@ -339,14 +339,22 @@ export const documentBlobs = pgTable("document_blobs", {
 });
 
 /** Outgoing e-mail when no mail provider is configured (development and the demo deployment). */
-export const mailOutbox = pgTable("mail_outbox", {
-  id: serial("id").primaryKey(),
-  to: text("to").notNull(),
-  subject: text("subject").notNull(),
-  text: text("text").notNull(),
-  html: text("html"),
-  createdAt: createdAt(),
-});
+export const mailOutbox = pgTable(
+  "mail_outbox",
+  {
+    id: serial("id").primaryKey(),
+    to: text("to").notNull(),
+    subject: text("subject").notNull(),
+    text: text("text").notNull(),
+    html: text("html"),
+    /** What the mail is: a notification's kind, or "password_reset", "invitation", "landlord_approval", "digest". */
+    kind: text("kind"),
+    /** The host account the mail is about, if any (shown as the organisation in /admin/epost). */
+    hostAccountId: uuid("host_account_id").references(() => hostAccounts.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("mail_outbox_kind_idx").on(t.kind), index("mail_outbox_host_account_idx").on(t.hostAccountId)],
+);
 
 /* --------------------------------------------------------------- bookings */
 

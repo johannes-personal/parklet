@@ -164,8 +164,36 @@ export async function syncPayoutAccount(stripeAccountId: string): Promise<Payout
   return status;
 }
 
+/**
+ * A payout account left over from the mock ("acct_mock_…": demo data seeded before
+ * PAYMENT_PROVIDER became stripe) can't be paid through Stripe. Under Stripe it is
+ * disconnected, so its spots leave search and the owner is asked to connect payouts,
+ * instead of every checkout failing on Stripe's "No such destination".
+ */
+export async function dropMockPayoutAccount(accountId: string): Promise<void> {
+  must(
+    await api()
+      .from("host_accounts")
+      .update(toDb(hostAccounts, { payoutStatus: "not_connected", payoutAccountRef: null }))
+      .eq(A.id, accountId)
+      .like(A.payoutAccountRef, "acct_mock_%"),
+    "dropMockPayoutAccount",
+  );
+}
+
+const isMockAccountRef = (ref: string | null) => !!ref && ref.startsWith("acct_mock_");
+
 /** Re-checks an account Stripe hasn't finished with. Never throws: the page shows the last known status. */
 export async function refreshPendingPayouts(account: HostAccount): Promise<PayoutStatus> {
+  if (isMockAccountRef(account.payoutAccountRef) && process.env.PAYMENT_PROVIDER === "stripe") {
+    try {
+      await dropMockPayoutAccount(account.id);
+      return "not_connected";
+    } catch (err) {
+      console.warn("[payouts] could not disconnect the mock payout account", account.id, err instanceof Error ? err.message : err);
+      return account.payoutStatus;
+    }
+  }
   if (!isStripeAccountRef(account.payoutAccountRef) || account.payoutStatus === "active" || account.payoutStatus === "not_connected") return account.payoutStatus;
   try {
     return (await syncPayoutAccount(account.payoutAccountRef)) ?? account.payoutStatus;

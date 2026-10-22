@@ -9,11 +9,13 @@ import { isDeliverableAddress } from "@/lib/email";
 import { renderEmail, type EmailContent } from "@/lib/email-template";
 
 export type Mail = { to: string; subject: string; text: string; html?: string };
+/** What a mail is and which host account it concerns: for the admins' e-mail log, never sent. */
+export type MailMeta = { kind?: string; hostAccountId?: string };
 
 /** Send one of Parklet's designed e-mails (src/lib/email-template.ts). */
-export async function sendEmail(to: string, subject: string, content: EmailContent) {
+export async function sendEmail(to: string, subject: string, content: EmailContent, meta: MailMeta = {}) {
   const { html, text } = renderEmail(content, { appUrl: appUrl() });
-  await sendMail({ to, subject, text, html });
+  await sendMail({ to, subject, text, html }, meta);
 }
 
 /**
@@ -29,9 +31,9 @@ export async function sendEmail(to: string, subject: string, content: EmailConte
  * If MAIL_OUTBOX is set, mails are also appended to that JSON-lines file
  * (used by the end-to-end tests).
  */
-export async function sendMail(mail: Mail): Promise<void> {
+export async function sendMail(mail: Mail, meta: MailMeta = {}): Promise<void> {
   console.info(`[mail] to=${mail.to} subject="${mail.subject}"`);
-  must(await api().from("mail_outbox").insert(toDb(mailOutbox, mail)), "sendMail");
+  must(await api().from("mail_outbox").insert(toDb(mailOutbox, { ...mail, kind: meta.kind ?? null, hostAccountId: meta.hostAccountId ?? null })), "sendMail");
   if (process.env.MAIL_OUTBOX) {
     const file = path.resolve(/*turbopackIgnore: true*/ process.env.MAIL_OUTBOX);
     await mkdir(path.dirname(file), { recursive: true });

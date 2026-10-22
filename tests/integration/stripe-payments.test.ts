@@ -8,6 +8,7 @@ import { appUrl } from "@/lib/app-url";
 import { cancelBooking, createBooking } from "@/server/bookings";
 import { CHECKOUT_SESSION_SECONDS, startCheckout } from "@/server/checkout";
 import { getPaymentProvider, paymentProviderName } from "@/server/payments";
+import { searchSpots } from "@/server/search";
 import { getStripe } from "@/server/stripe";
 import { allMail, allNotifications, getBooking, hoursFromNow, makeAdmin, makeBookableSpot, makeUser, notificationsOf, resetDb } from "./helpers";
 import { deliver, withFakeStripe } from "./stripe-helpers";
@@ -99,6 +100,16 @@ describe("paying with Stripe Checkout", () => {
     await db.update(bookings).set({ holdExpiresAt: sql`now() - interval '1 second'` }).where(eq(bookings.id, bookingId));
     expect(await startCheckout(bookingId, driver)).toEqual({ ok: false, error: "Reservationen har gått ut. Ingen betalning har dragits. Boka igen." });
     expect(sessionsOf(bookingId)).toHaveLength(0);
+  });
+
+  it("disconnects a payout account left over from the mock instead of sending the payment to it", async () => {
+    const { bookingId, driver, account, spotId } = await heldBooking();
+    await db.update(hostAccounts).set({ payoutAccountRef: "acct_mock_seed" }).where(eq(hostAccounts.id, account.id));
+    expect(await startCheckout(bookingId, driver)).toEqual({ ok: false, error: "Uthyraren kan inte ta emot betalningar just nu. Ingen betalning har dragits." });
+    expect(sessionsOf(bookingId)).toHaveLength(0);
+    // The spot leaves search, and the owner is asked to connect payouts.
+    expect((await db.select().from(hostAccounts).where(eq(hostAccounts.id, account.id)))[0]).toMatchObject({ payoutStatus: "not_connected", payoutAccountRef: null });
+    expect((await searchSpots({ center: null, start: hoursFromNow(48), end: hoursFromNow(50) })).results.map((r) => r.id)).not.toContain(spotId);
   });
 
   it("confirms the booking on the return URL, without waiting for the webhook, and the webhook then changes nothing", async () => {
