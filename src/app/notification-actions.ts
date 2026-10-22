@@ -14,3 +14,8 @@ export async function bellDataAction(): Promise<BellData | null> {
   const user = await getCurrentUser();
   return user ? bellData(user) : null;
 }
+
+/** Who is signed in now: another tab may have logged out or in as someone else. */
+export async function sessionUserAction(): Promise<string | null> {
+  return (await getCurrentUser())?.id ?? null;
+}

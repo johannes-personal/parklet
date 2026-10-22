@@ -1,20 +1,13 @@
 import Link from "next/link";
-import { markRegisteredAction } from "@/app/bokning-actions";
-import { connectPayoutsAction, payoutDashboardAction, toggleSpotAction } from "@/app/uthyrare/actions";
-import { DocumentUploader, InviteForm, SubmitAccountForm } from "@/components/host/forms";
-import { Badge, BookingStatusBadge } from "@/components/status-badge";
+import { connectPayoutsAction, payoutDashboardAction } from "@/app/uthyrare/actions";
+import { DeleteForm } from "@/components/host/admin-forms";
+import { DocumentUploader, SubmitAccountForm } from "@/components/host/forms";
+import { HostTabs } from "@/components/host/host-tabs";
 import type { CurrentUser } from "@/lib/auth/session";
-import { ACCOUNT_DOC_OPTIONS, DOCUMENT_KIND_LABEL, REVIEW_LABEL } from "@/lib/labels";
+import { ACCOUNT_DOC_OPTIONS, DOCUMENT_KIND_LABEL } from "@/lib/labels";
 import { formatSek } from "@/lib/money";
-import { formatDateTime, formatRange } from "@/lib/time";
 import { listAccountBookings } from "@/server/bookings";
-import {
-  type AccountWithRole,
-  HOST_KIND_LABEL,
-  listAccountDocuments,
-  listMembers,
-  listPendingInvitations,
-} from "@/server/host-accounts";
+import { type AccountWithRole, HOST_KIND_LABEL, listAccountDocuments } from "@/server/host-accounts";
 import { paymentProviderName } from "@/server/payments";
 import { isStripeAccountRef, refreshPendingPayouts } from "@/server/payouts";
 import { listAccountSpots } from "@/server/spots";
@@ -27,6 +20,16 @@ const PAYOUT_NOTICE: Record<string, { ok: boolean; text: string }> = {
   restricted: { ok: false, text: "Stripe behöver fler uppgifter innan utbetalningar kan kopplas." },
   fel: { ok: false, text: "Vi kunde inte nå Stripe just nu. Försök igen om en stund." },
 };
+
+function Tile({ href, label, value, detail, warn = false }: { href: string; label: string; value: number; detail: string; warn?: boolean }) {
+  return (
+    <Link href={href} className={`card block p-4 hover:shadow-md ${warn ? "border-warn/40" : ""}`}>
+      <span className="block text-sm text-muted">{label}</span>
+      <span className={`block text-3xl font-bold ${warn ? "text-warn" : ""}`}>{value}</span>
+      <span className="block text-sm text-ink-soft">{detail}</span>
+    </Link>
+  );
+}
 
 function Step({ done, title, children }: { done: boolean; title: string; children?: React.ReactNode }) {
   return (
@@ -54,7 +57,18 @@ function Step({ done, title, children }: { done: boolean; title: string; childre
  * someone with a single account (rendered there rather than redirected to, so a
  * cached redirect can't send the next user who signs in on the device to it).
  */
-export async function AccountDashboard({ user, account: loaded, payoutNotice }: { user: CurrentUser; account: AccountWithRole; payoutNotice?: string }) {
+export async function AccountDashboard({
+  user,
+  account: loaded,
+  payoutNotice,
+  tabs = false,
+}: {
+  user: CurrentUser;
+  account: AccountWithRole;
+  payoutNotice?: string;
+  /** On /uthyrare, outside the account's own pages (whose layout has the tabs). */
+  tabs?: boolean;
+}) {
   // Stripe may have finished verifying since the last webhook: look again while it's pending.
   const account = { ...loaded, payoutStatus: await refreshPendingPayouts(loaded) };
   const accountId = account.id;
@@ -62,16 +76,16 @@ export async function AccountDashboard({ user, account: loaded, payoutNotice }: 
   const viaStripe = paymentProviderName() === "stripe";
   const owner = account.role === "owner";
   const isOrg = account.kind !== "household";
-  const [spots, bookings, docs, members, invites] = await Promise.all([
+  const [spots, bookings, docs] = await Promise.all([
     listAccountSpots(accountId),
     listAccountBookings(accountId),
     isOrg ? listAccountDocuments(accountId) : Promise.resolve([]),
-    isOrg ? listMembers(accountId) : Promise.resolve([]),
-    isOrg ? listPendingInvitations(accountId) : Promise.resolve([]),
   ]);
   const now = new Date();
   const upcoming = bookings.filter((b) => b.status === "confirmed" && b.endsAt > now);
   const regTasks = upcoming.filter((b) => b.vehicleRegistration === "pending");
+  const toReview =
+    regTasks.length + spots.filter((s) => s.review === "rejected" || (s.review === "draft" && s.landlordApproval !== "requested" && s.landlordApproval !== "declined")).length;
   const verified = account.verificationStatus === "verified";
   const payouts = account.payoutStatus === "active";
   const anyApproved = spots.some((s) => s.review === "approved");
@@ -82,7 +96,8 @@ export async function AccountDashboard({ user, account: loaded, payoutNotice }: 
   const blocked = !verified ? "kontot är inte godkänt" : !payouts ? "utbetalningskonto saknas" : null;
 
   return (
-    <div className="mx-auto w-full max-w-5xl space-y-8 px-4 py-10">
+    <div className="mx-auto w-full max-w-5xl space-y-8 px-4 py-8">
+      {tabs ? <HostTabs accountId={accountId} /> : null}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <p className="text-sm text-muted">{HOST_KIND_LABEL[account.kind]}</p>
@@ -90,7 +105,7 @@ export async function AccountDashboard({ user, account: loaded, payoutNotice }: 
           {account.orgNumber ? <p className="text-sm text-muted">Org.nr {account.orgNumber}</p> : null}
         </div>
         <Link href={`/uthyrare/${accountId}/platser/ny`} className="btn-primary">
-          Lägg upp {isOrg ? "platser" : "en plats"}
+          Lägg upp {isOrg ? "parkeringsplatser" : "en parkeringsplats"}
         </Link>
       </div>
 
@@ -124,7 +139,7 @@ export async function AccountDashboard({ user, account: loaded, payoutNotice }: 
                 ) : (
                   <div className="space-y-1">
                     <p className="font-medium text-danger">Ej godkänt: {account.reviewNote ?? "Kontakta supporten."}</p>
-                    <p>Legitimera dig med BankID igen, så granskar vi kontot på nytt. Dina platser behöver sedan skickas in för granskning igen.</p>
+                    <p>Legitimera dig med BankID igen, så granskar vi kontot på nytt. Dina parkeringsplatser behöver sedan skickas in för granskning igen.</p>
                   </div>
                 )}
               </Step>
@@ -155,7 +170,13 @@ export async function AccountDashboard({ user, account: loaded, payoutNotice }: 
                   Lägg upp en plats
                 </Link>
               ) : !anyApproved ? (
-                <p>Öppna platsen nedan för att ladda upp underlag och skicka in den för granskning.</p>
+                <p>
+                  Öppna platsen under{" "}
+                  <Link href={`/uthyrare/${accountId}/platser`} className="link">
+                    Parkeringsplatser
+                  </Link>{" "}
+                  för att ladda upp underlag och skicka in den för granskning.
+                </p>
               ) : null}
             </Step>
           </ol>
@@ -177,129 +198,40 @@ export async function AccountDashboard({ user, account: loaded, payoutNotice }: 
         </section>
       ) : null}
 
-      {regTasks.length ? (
-        <section id="bilar" className="card scroll-mt-24 border-warn/40 p-5 sm:p-6" aria-labelledby="tasks">
-          <h2 id="tasks" className="text-lg font-semibold">
-            Bilar att registrera
-          </h2>
-          <p className="mt-1 text-sm text-ink-soft">Registrera bilarna i föreningens parkeringssystem innan bokningen startar och bocka sedan av här.</p>
-          <ul className="mt-3 divide-y divide-line">
-            {regTasks.map((b) => (
-              <li key={b.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
-                <div>
-                  <p className="font-mono text-lg font-semibold tracking-wider">{b.vehicleReg}</p>
-                  <p className="text-sm text-ink-soft">
-                    {b.spot.title} · {formatRange(b.startsAt, b.endsAt)}
-                  </p>
-                </div>
-                <form action={markRegisteredAction}>
-                  <input type="hidden" name="bookingId" value={b.id} />
-                  <input type="hidden" name="back" value={`/uthyrare/${accountId}`} />
-                  <button className="btn-primary py-2">Markera som registrerad</button>
-                </form>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-
-      <section aria-labelledby="spots">
-        <h2 id="spots" className="text-lg font-semibold">
-          Platser
-        </h2>
-        {spots.length === 0 ? (
-          <p className="mt-2 text-sm text-muted">Inga platser ännu.</p>
-        ) : (
-          <ul className="mt-3 space-y-3">
-            {spots.map((s) => {
-              const r = REVIEW_LABEL[s.review];
-              return (
-                <li key={s.id} className="card flex flex-wrap items-center justify-between gap-4 p-4">
-                  <div className="min-w-0">
-                    <Link href={`/uthyrare/${accountId}/platser/${s.id}`} className="font-semibold hover:underline">
-                      {s.title}
-                    </Link>
-                    <p className="text-sm text-ink-soft">
-                      {s.address}, {s.city} · {formatSek(s.pricePerHourOre)}/h
-                    </p>
-                    <div className="mt-1 flex flex-wrap gap-2">
-                      <Badge kind={r.kind}>{r.text}</Badge>
-                      {s.review === "approved" && blocked ? <Badge kind="warn">Kan inte bokas: {blocked}</Badge> : null}
-                      {s.status === "paused" ? <Badge>Pausad</Badge> : null}
-                      {s.visibility === "link" ? <Badge kind="brand">Endast via länk</Badge> : null}
-                    </div>
-                  </div>
-                  <div className="text-right text-sm">
-                    <p>{s.upcomingBookings} kommande bokningar</p>
-                    <p className="text-muted">Intjänat {formatSek(s.earnedOre)}</p>
-                    <form action={toggleSpotAction} className="mt-2">
-                      <input type="hidden" name="accountId" value={accountId} />
-                      <input type="hidden" name="spotId" value={s.id} />
-                      <input type="hidden" name="status" value={s.status === "active" ? "paused" : "active"} />
-                      <button className="text-sm font-medium text-brand hover:underline">{s.status === "active" ? "Pausa" : "Aktivera"}</button>
-                    </form>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
+      <section aria-label="Sammanfattning" className="grid gap-3 sm:grid-cols-3">
+        <Tile
+          href={`/uthyrare/${accountId}/granska`}
+          label="Att granska"
+          value={toReview}
+          detail={regTasks.length ? `${regTasks.length} ${regTasks.length === 1 ? "bil" : "bilar"} att registrera` : toReview ? "Parkeringsplatser att slutföra" : "Inget just nu"}
+          warn={regTasks.length > 0}
+        />
+        <Tile
+          href={`/uthyrare/${accountId}/platser`}
+          label="Parkeringsplatser"
+          value={spots.length}
+          detail={`${spots.filter((s) => s.review === "approved" && s.status === "active").length} uthyrda${blocked && anyApproved ? `, men ${blocked}` : ""}`}
+        />
+        <Tile
+          href={`/uthyrare/${accountId}/bokningar`}
+          label="Kommande bokningar"
+          value={upcoming.length}
+          detail={`Intjänat totalt ${formatSek(spots.reduce((sum, s) => sum + s.earnedOre, 0))}`}
+        />
       </section>
 
-      <section aria-labelledby="bookings">
-        <h2 id="bookings" className="text-lg font-semibold">
-          Bokningar
-        </h2>
-        {bookings.length === 0 ? (
-          <p className="mt-2 text-sm text-muted">Inga bokningar de senaste sju dagarna eller framåt.</p>
-        ) : (
-          <ul className="card mt-3 divide-y divide-line">
-            {bookings.map((b) => (
-              <li key={b.id}>
-                <Link href={`/bokning/${b.id}`} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 hover:bg-canvas">
-                  <span>
-                    <span className="block font-medium">{formatRange(b.startsAt, b.endsAt)}</span>
-                    <span className="text-sm text-ink-soft">
-                      {b.spot.title} · {b.driverName} · {b.vehicleReg}
-                    </span>
-                  </span>
-                  <span className="text-right">
-                    <BookingStatusBadge status={b.status} endsAt={b.endsAt} />
-                    <span className="block text-sm">{formatSek(b.baseOre)}</span>
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      {isOrg ? (
-        <section className="card p-5 sm:p-6" aria-labelledby="members">
-          <h2 id="members" className="text-lg font-semibold">
-            Administratörer
-          </h2>
-          <ul className="mt-3 divide-y divide-line">
-            {members.map((m) => (
-              <li key={m.userId} className="flex justify-between py-2 text-sm">
-                <span>
-                  {m.name} <span className="text-muted">({m.email})</span>
-                </span>
-                <span className="text-muted">{m.role === "owner" ? "Ägare" : "Administratör"}</span>
-              </li>
-            ))}
-            {invites.map((i) => (
-              <li key={i.email} className="flex justify-between py-2 text-sm text-muted">
-                <span>{i.email}</span>
-                <span>Inbjuden, gäller till {formatDateTime(i.expiresAt)}</span>
-              </li>
-            ))}
-          </ul>
-          <div className="mt-4">
-            <InviteForm accountId={accountId} />
-          </div>
-        </section>
-      ) : null}
+      {owner ? (
+        <details className="card p-5 sm:p-6">
+          <summary className="cursor-pointer font-semibold text-danger">Ta bort uthyrarkontot</summary>
+          <p className="mt-2 text-sm text-ink-soft">
+            Kontot försvinner tillsammans med {isOrg ? "administratörer, inbjudningar, " : ""}parkeringsplatser och underlag. Bokningar som redan har gjorts
+            sparas för bokföringen. Kommande bokningar behöver avbokas först. Har du inget annat uthyrarkonto är du sedan förare igen.
+          </p>
+          <DeleteForm kind="account" accountId={accountId} confirmLabel="Jag förstår att uthyrarkontot tas bort och inte går att återställa." button="Ta bort uthyrarkontot" />
+        </details>
+      ) : (
+        <p className="text-sm text-muted">Bara kontots ägare kan ta bort det. Vill du sluta administrera kontot lämnar du det under Administratörer.</p>
+      )}
 
       {/* With one account /uthyrare shows this dashboard, so this is the way to a second one. */}
       <p className="text-sm text-muted">

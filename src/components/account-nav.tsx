@@ -5,6 +5,7 @@ import { bellData, isHost } from "@/server/notifications";
 import { runRemindersOccasionally } from "@/server/reminders";
 import { MenuDrawer } from "./menu-drawer";
 import { NotificationBell } from "./notification-bell";
+import { SessionWatch } from "./session-watch";
 
 export function AccountNavFallback() {
   return <span className="inline-block h-5 w-24 animate-pulse rounded bg-white/10" aria-hidden />;
@@ -22,6 +23,7 @@ export async function AccountNav() {
           Logga in
         </Link>
         <MenuDrawer user={null} />
+        <SessionWatch userId={null} />
       </>
     );
   }
@@ -35,6 +37,7 @@ export async function AccountNav() {
       </Link>
       <NotificationBell initial={bell} />
       <MenuDrawer user={{ name: user.name, isAdmin: user.isAdmin }} />
+      <SessionWatch userId={user.id} />
     </>
   );
 }

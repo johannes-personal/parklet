@@ -1,7 +1,10 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { closeDb } from "./direct-db";
-import { markAllRead, notifyUsers, unreadCount } from "@/server/notifications";
-import { allMail, makeUser, notificationsOf, resetDb } from "./helpers";
+import { eq } from "drizzle-orm";
+import { spots } from "@/db/schema";
+import { closeDb, db } from "./direct-db";
+import { hostTodos, markAllRead, notifyUsers, unreadCount } from "@/server/notifications";
+import { createSpots } from "@/server/spots";
+import { allMail, makeHost, makeUser, notificationsOf, resetDb, spotInput } from "./helpers";
 
 beforeEach(resetDb);
 afterAll(async () => {
@@ -32,5 +35,18 @@ describe("notifications", () => {
     await notifyUsers([me.id], note("Ny"), { email: false });
     expect(await unreadCount(me.id)).toBe(1);
     expect((await notificationsOf(me.id)).slice(0, 2).map((n) => n.readAt)).toEqual(readAt);
+  });
+
+  it("asks to finish a draft spot, but not one waiting for or refused by the landlord", async () => {
+    const { host, account } = await makeHost();
+    await createSpots(account.id, host.id, spotInput({ title: "Utkast" }));
+    const [waiting] = await createSpots(account.id, host.id, spotInput({ title: "Väntar" }));
+    const [declined] = await createSpots(account.id, host.id, spotInput({ title: "Nekad" }));
+    await db.update(spots).set({ landlordApproval: "requested" }).where(eq(spots.id, waiting));
+    await db.update(spots).set({ landlordApproval: "declined" }).where(eq(spots.id, declined));
+    const user = { id: host.id, name: host.name, email: host.email, isAdmin: false, identityVerified: true };
+    const titles = (await hostTodos(user)).map((t) => t.title);
+    expect(titles).toContain("Slutför och skicka in Utkast");
+    expect(titles.filter((t) => t.startsWith("Slutför"))).toEqual(["Slutför och skicka in Utkast"]);
   });
 });

@@ -12,7 +12,7 @@ function counts(c: DemoResetResult["created"]) {
   return [
     count(c.users, "användare", "användare"),
     count(c.hostAccounts, "uthyrarkonto", "uthyrarkonton"),
-    count(c.spots, "plats", "platser"),
+    count(c.spots, "parkeringsplats", "parkeringsplatser"),
     count(c.bookings, "bokning", "bokningar"),
     count(c.documents, "dokument", "dokument"),
   ].join(", ");

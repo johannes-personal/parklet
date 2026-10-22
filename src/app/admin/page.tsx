@@ -16,7 +16,7 @@ export default function AdminPage() {
       <p className="mt-1 text-sm text-ink-soft">
         Letar du efter något annat? Sök bland alla{" "}
         <Link href="/admin/platser" className="link">
-          platser
+          parkeringsplatser
         </Link>{" "}
         och{" "}
         <Link href="/admin/konton" className="link">
@@ -56,7 +56,7 @@ async function Queue() {
         )}
       </section>
       <section>
-        <h2 className="text-lg font-semibold">Platser ({pendingSpots.length})</h2>
+        <h2 className="text-lg font-semibold">Parkeringsplatser ({pendingSpots.length})</h2>
         {pendingSpots.length === 0 ? (
           <p className="mt-2 text-sm text-muted">Inget att granska.</p>
         ) : (

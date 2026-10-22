@@ -43,6 +43,15 @@ Markers:
   27. [Phone checks](#27-phone-checks)
   28. [Daily summary](#28-daily-summary-)
   29. [Your account: details, Mina fordon, deleting it](#29-your-account-details-mina-fordon-deleting-it)
+  30. [Mina sidor: filtering your bookings](#30-mina-sidor-filtering-your-bookings)
+  31. [Admin: bookings](#31-admin-bookings)
+  32. [Admin: the e-mail log](#32-admin-the-e-mail-log)
+  33. [Full names](#33-full-names)
+  34. [The host's pages](#34-the-hosts-pages)
+  35. [Administrators: invite, correct, take back, remove, hand over](#35-administrators-invite-correct-take-back-remove-hand-over-)
+  36. [Deleting a parking space, an organisation, or hosting altogether](#36-deleting-a-parking-space-an-organisation-or-hosting-altogether)
+  37. [Search filters](#37-search-filters)
+  38. [Coming back from Stripe, and the header after switching account](#38-coming-back-from-stripe-and-the-header-after-switching-account)
 
 ---
 
@@ -109,7 +118,7 @@ each with a car still to register.
 1. Log out. Open **Hitta parkering**. Search for "Göteborg".
    - The map fills the page and the list floats on the left.
    - The map credits show only as a small **(i)** in the corner; clicking it expands them.
-   - The spots within 3 km come first; when there are fewer than ten, **Andra platser** lists the nearest ones further away ("Längre bort än 3 km, närmast först"), so at least ten are shown when there are that many. Search for "Malmö": Uppfart Västra Hamnen first, the other Malmö spots under **Andra platser**.
+   - The spots within 3 km come first; when there are fewer than ten, **Andra parkeringsplatser** lists the nearest ones further away ("Längre bort än 3 km, närmast först"), so at least ten are shown when there are that many. Search for "Malmö": Uppfart Västra Hamnen first, the other Malmö spots under **Andra parkeringsplatser**.
 2. Click **Carport nära Liseberg**, in the list or on its pin.
    - The spot opens in a panel on the right, still over the map (the URL gets `plats=`).
    - Signed out, there is no car field yet and the access instructions are hidden.
@@ -164,7 +173,7 @@ Two browsers (or a normal and a private window).
 1. Browser A, as `forare@parklet.test`: search Malmö with a time two days ahead, open **Uppfart Västra Hamnen**, click **Fortsätt till betalning**. Stay on **Betala bokningen** without paying.
    - "Platsen är reserverad åt dig till kl. …" (15 minutes).
 2. Browser B, as `anna@parklet.test`: the same search.
-   - Malmö's only spot is taken: "Inga lediga platser inom 3 km – här är de närmaste." under **Andra platser** and Uppfart Västra Hamnen is not listed.
+   - Malmö's only spot is taken: "Inga lediga parkeringsplatser inom 3 km – här är de närmaste." under **Andra parkeringsplatser** and Uppfart Västra Hamnen is not listed.
 3. In B, open the spot's link directly.
    - **Redan bokad** lists the time; the box says "Platsen är redan bokad under en del av tiden."
    - Enter a car (e.g. XYZ987) and click **Fortsätt till betalning**: "Tyvärr, någon annan har redan bokat platsen under den här tiden. Välj en annan tid."
@@ -182,12 +191,20 @@ Two browsers (or a normal and a private window).
    - Under **Att göra**: "Registrera en bil" (or "Registrera N bilar", counting the demo bookings).
    - The e-mail's button (e-mail log) is **Markera bilen som registrerad**.
 4. Click the task.
-   - The account page opens at **Bilar att registrera**.
+   - The account's **Granska** tab opens at **Bilar att registrera**, grouped per parking space.
    - Click **Markera som registrerad** next to ABC123. (From the booking itself the button reads **Markera ABC123 som registrerad**.)
 5. Log in as the driver.
    - The bell shows "ABC123 är registrerad för Garage Linnégatan – Plats 1".
    - The booking shows "Registrerad …".
-6. *(Optional, takes time)* Leave a booking unregistered.
+6. **Next time, no wait.** Book the same space again with ABC123.
+   - Under **Bil**: "ABC123 är redan registrerad hos föreningen, så du kan parkera direkt när bokningen börjar."
+   - The booking is registered from the start; the confirmation says so, and the BRF gets a plain "Ny bokning" ("ABC123 är redan registrerad för platsen") with nothing to do.
+   - Book it with another car: that one waits for the host as before.
+7. **The list of registered cars.** As `styrelsen@parklet.test`, open the space (**Parkeringsplatser** tab → the space) and scroll to **Registrerade bilar**.
+   - ABC123 is listed with when and by whom it was registered.
+   - **Lägg till bil** with a plate: "XXX är registrerad för platsen." A booking already waiting with that car is registered at once, and its driver told.
+   - **Ta bort** takes a car off the list; bookings already registered stay registered.
+8. *(Optional, takes time)* Leave a booking unregistered.
    - 3 h before the start, the host gets "Påminnelse: registrera ABC123 före kl. …".
    - At the start, the driver gets "ABC123 är inte registrerad än – vänta med att parkera", the host gets "Bokningen har börjat – ABC123 är inte registrerad", and admins see "Bil ej registrerad vid start: …" in the bell (no e-mail).
    - The reminders run every 10 minutes, so allow for that.
@@ -319,15 +336,15 @@ Log in with your own account (or `anna@parklet.test`, whose e-mails land in the 
    - Upload one under **Typ av dokument** "Registreringsbevis / utdrag från Bolagsverket" with **Ladda upp**; try again: "Ladda upp ett styrelseprotokoll eller firmatecknarbevis …".
    - Upload a "Styrelseprotokoll" (or "Firmatecknarbevis") and click **Skicka in för verifiering**: "Tack! Vi granskar underlagen, oftast inom en arbetsdag." The step then reads "Underlagen granskas av Parklet."
    - Admins get "Ny organisation att verifiera: …" (bell + e-mail, button **Granska organisationen**).
-4. Click **Lägg upp platser**. The right basis starts at **Jag/vi äger platsen**.
-   - Set **Antal likadana platser** to 3 and save: "3 platser är sparade."
+4. Click **Lägg upp parkeringsplatser**. The right basis starts at **Jag/vi äger platsen**.
+   - Set **Antal likadana parkeringsplatser** to 3 and save: "3 parkeringsplatser är sparade."
    - The account lists "<rubrik> – Plats 1", "– Plats 2", "– Plats 3".
-5. Open Plats 1. Upload the ownership proof with **Gäller även de 2 andra platserna på samma adress** ticked (default).
+5. Open Plats 1. Upload the ownership proof with **Gäller även de 2 andra parkeringsplatserna på samma adress** ticked (default).
    - Plats 2 and 3 have the document too.
-6. Click **Skicka in för granskning** with **Skicka även in de 2 andra platserna på samma adress** ticked.
-   - "3 platser är inskickade för granskning. …"
+6. Click **Skicka in för granskning** with **Skicka även in de 2 andra parkeringsplatserna på samma adress** ticked.
+   - "3 parkeringsplatser är inskickade för granskning. …"
    - Admins get one notification: "Ny plats att granska: <rubrik> – Plats N (+2 till på samma adress)".
-7. Invite a co-administrator under **Administratörer**: a real address in the field, **Bjud in**.
+7. Invite a co-administrator under the **Administratörer** tab: a real address in the field, **Bjud in**.
    - "Inbjudan skickad till …"; the list shows the address with "Inbjuden, gäller till …" (7 days).
    - 📧 The invite e-mail has the button **Acceptera inbjudan**.
    - Opened while logged in with another address: "Inbjudan skickades till … Logga in med den adressen för att acceptera."
@@ -362,7 +379,7 @@ As `anna@parklet.test` (approved, bookable spots).
    - The account shows the badge **Endast via länk**; the spot says "Platsen syns bara för dem som får länken till annonsen."
    - A search for Uppsala doesn't list it, but the spot's link (**Visa annonsen**) can be booked by Oskar.
    - Switch it back to **Alla – visas i sökningen och på kartan**.
-2. **Pausa / Aktivera.** On the account page, click **Pausa** on a spot.
+2. **Pausa / Aktivera.** Open an approved spot (**Parkeringsplatser** tab) and click **Pausa**.
    - Badge **Pausad**; gone from search; its link says "Platsen kan inte bokas just nu"; in admin "Nej – Pausad av uthyraren".
    - Existing bookings stay. **Aktivera** brings it back.
 3. **Editing an approved spot.** Change the address of an approved spot.
@@ -379,11 +396,11 @@ Log in as `johannes@jvo.se`, or as `admin@parklet.test` and use the e-mail log.
 
 1. **Bell:**
    - The red number counts new events. It **disappears when you open the bell** and stays gone after you navigate.
-   - "Att göra" lists "Granska N platser" / "Granska N uthyrarkonton" ("en plats", "ett uthyrarkonto" for one). When only tasks remain, the bell shows a yellow dot.
+   - "Att göra" lists "Granska N parkeringsplatser" / "Granska N uthyrarkonton" ("en parkeringsplats", "ett uthyrarkonto" for one). When only tasks remain, the bell shows a yellow dot.
 2. 📧 Check the inbox for "Ny plats att granska: …", with the button **Granska platsen**.
-3. **Granskning:** the tabs are *Att granska · Platser · Uthyrare · E-post*.
-   - **Att granska** lists **Uthyrarkonton (N)** (organisations, and households sent back for review) and **Platser (N)**.
-4. **Platser:**
+3. **Granskning:** the tabs are *Att granska · Parkeringsplatser · Uthyrare · Bokningar · E-post* (and *Testdata* in the demo).
+   - **Att granska** lists **Uthyrarkonton (N)** (organisations, and households sent back for review) and **Parkeringsplatser (N)**.
+4. **Parkeringsplatser:**
    - Search for part of a title, an address, an org. number or a spot ID.
    - Try the filters: Grund, Ort, Bokningsbar, Sortera.
    - Try the status chips; their counts should match the filters.
@@ -391,7 +408,7 @@ Log in as `johannes@jvo.se`, or as `admin@parklet.test` and use the e-mail log.
 5. **Uthyrare:**
    - Search for a name, an org. number, or an owner's name or e-mail.
    - Filter on Typ, Utbetalning and the verification chips.
-   - The owner's BankID status is shown ("BankID ✓" / "ej legitimerad"). "Platser" ("N av M") links to that host's spots.
+   - The owner's BankID status is shown ("BankID ✓" / "ej legitimerad"). "Parkeringsplatser" ("N av M") links to that host's spots.
 6. Open the spot from flow 7.
    - It shows "Godkänt via länk av …" and the requirements with ✓.
    - Click **Godkänn**. You're back on **Att granska**; the host gets "Din plats … är godkänd" (bell + e-mail).
@@ -579,7 +596,7 @@ Everyone who is logged in has a bell, straight after logging in or registering, 
 2. **New host** (`ny@parklet.test`): **Att göra** "Legitimera dig med BankID", "Koppla utbetalningskonto", and "Slutför och skicka in <rubrik>" for a draft spot. Each disappears once done.
 3. **Host with several accounts** (`erik@parklet.test`): tasks carry the account's name in brackets.
 4. **BRF board** (`styrelsen@parklet.test`): "Registrera en bil" / "Registrera N bilar"; "Godkännande begärt: …" when a member asks the board's address.
-5. **Admin:** "Granska N platser", "Granska N uthyrarkonton", and events such as "Ny plats att granska: …".
+5. **Admin:** "Granska N parkeringsplatser", "Granska N uthyrarkonton", and events such as "Ny plats att granska: …".
 6. For all: the red number clears when the bell opens; a click on an item opens its page and closes the bell; Escape closes it.
 
 ## 26. Access rules
@@ -626,7 +643,7 @@ This one can't be triggered from the UI.
    - Without the box ticked: "Bekräfta att du vill ta bort kontot."; with a wrong password: "Fel lösenord.".
    - With both: "Ditt konto är borttaget", logged out; logging in with the old details fails, and the address can register again.
 4. Refusals: with a coming booking ("Du har kommande bokningar …"), as a host with a coming booking on a spot, as the owner of an account with co-administrators, and as an admin.
-5. A host's deleted account: its spots are paused (admin: **Platser**) and its documents gone; bookings already made stay, without the person's name.
+5. A host's deleted account: its spots are removed, or kept out of sight when they were booked (admin: **Parkeringsplatser**) and its documents gone; bookings already made stay, without the person's name.
 
 ## 30. Mina sidor: filtering your bookings
 
@@ -655,4 +672,43 @@ This one can't be triggered from the UI.
 1. Book a spot as Oskar Nilsson (`forare@parklet.test`) on one of Anna's spots.
 2. Anna's notification and e-mail say "Oskar Nilsson har bokat …"; the booking and the host dashboard show **Förare: Oskar Nilsson**.
 3. Only the header shows the first name ("Oskar"). The public spot panel shows a private host by first name ("Uthyrare: Anna"), as the privacy policy states.
+
+## 34. The host's pages
+
+1. As `erik@parklet.test`, open **Uthyrning** and choose **Kvarteret Fastigheter AB**. The tabs, like the admin's: **Översikt · Granska · Parkeringsplatser · Bokningar · E-post · Administratörer**.
+2. **Översikt:** the checklist while something is left, payouts (**Öppna Stripe**), and three tiles: **Att granska**, **Parkeringsplatser** (how many are rented out) and **Kommande bokningar** (with what the account has earned). Each opens its tab.
+3. **Granska:** cars to register per parking space (flow 4), parking spaces to finish (drafts, and those Parklet didn't approve, with the reason), and for information those waiting for the association or landlord, those Parklet is reviewing and those the association refused. Nothing there: "Inget att granska just nu."
+4. **Parkeringsplatser:** the account's spaces as a table with status chips, search (title, address, town, association), **Ort**, **Bokningsbar** and **Sortera**. A space that needs registered cars shows how many it has. **Lägg upp parkeringsplatser** starts a new one.
+5. **Bokningar:** confirmed and cancelled bookings (not unpaid holds), with the driver's full name and plate, the host's share, and a warning when a car still waits for registration. Filters: **Tid**, **Från–Till**, **Sortera**, status chips and search.
+6. **E-post:** the mails Parklet sent about the account to its administrators, and those that went out on their behalf (to the association or landlord, invitations). Not the drivers' confirmations or Parklet's own notices. A row opens the mail.
+7. A household account (e.g. Anna's) has the same tabs; **Administratörer** explains that a private account has one administrator.
+
+## 35. Administrators: invite, correct, take back, remove, hand over 📧
+
+1. As `styrelsen@parklet.test`, open **Brf Linnéstaden → Administratörer**.
+2. Invite an address you can read with **Bjud in**. It is listed under **Inbjudningar** with when it was sent and how long it is valid.
+3. **Ändra e-post**, correct the address, **Skicka till den här adressen**: a new invitation goes to the new address and the old link stops working. **Skicka igen** resends to the same address; **Ta tillbaka** withdraws it.
+4. Accept an invitation with another account (flow 10). As the owner you can then **Gör till ägare** (you stay as administrator) or **Ta bort** the other administrator. The owner can't be removed.
+5. As the other administrator: **Lämna kontot** takes you out of it; you can't remove others.
+
+## 36. Deleting a parking space, an organisation, or hosting altogether
+
+1. **A parking space.** At the bottom of a space's page: **Ta bort parkeringsplatsen**. Without the box ticked: "Bekräfta att du vill ta bort parkeringsplatsen."
+   - A draft or one never booked is removed with its documents: "Parkeringsplatsen är borttagen."
+   - With coming bookings it is refused ("Det finns kommande bokningar …"). One booked before is kept out of sight for the bookkeeping: paused, gone from every list.
+2. **An organisation stuck in verification.** Create an association (flow 10) and don't finish it. On its **Översikt**, **Ta bort uthyrarkontot**, tick the box: you land on **Mina sidor** with "Uthyrarkontot är borttaget." It is gone from your accounts and from the admin's lists.
+3. **Stop hosting.** As the owner of your only host account, delete it the same way: **Mina sidor** then says **Kontotyp: Förare**, and **Uthyrning** shows the introduction again.
+4. Only the owner sees the button; an administrator is told to leave the account under **Administratörer** instead.
+
+## 37. Search filters
+
+1. Search Göteborg. Over the results: **Garage · Carport · Uppfart · Utomhusplats · Under tak · Elbilsladdning**.
+2. **Garage**: only garages, the button marked as on, and in the address (`typ=garage`). Add **Elbilsladdning**: garages with charging. **Under tak** also counts garages and carports.
+3. The filters stay when you open a space, change the place or time, and apply to **Andra parkeringsplatser** too. **Rensa filter** removes them.
+
+## 38. Coming back from Stripe, and the header after switching account
+
+1. Pay a booking (flow 18) while using another address of the site than the usual one (a Vercel preview, or another alias of the deployment): you come back to the same address, still logged in, and see the booking.
+2. Log in as Anna in one tab. In a second tab, log out and log in as Oskar. Back in the first tab, click any link (or just switch to it): the header shows **Oskar**, not Anna.
+3. From a booking, **Visa parkeringsplatsen och boka igen** opens the space on the map, ready to book again.
 

@@ -10,6 +10,7 @@ import { isUuid } from "./ids";
 import { notifyAdmins, notifyUsers } from "./notifications";
 import { getPaymentProvider } from "./payments";
 import { dropMockPayoutAccount, isStripeAccountRef } from "./payouts";
+import { returnBase } from "./request-origin";
 import { getStripe } from "./stripe";
 
 /**
@@ -81,7 +82,7 @@ export async function startCheckout(bookingId: string, driver: { id: string; ema
   const destination = await destinationFor(booking.spot.hostAccountId);
   if (!destination) return { ok: false, error: "Uthyraren kan inte ta emot betalningar just nu. Ingen betalning har dragits." };
 
-  const session = await getStripe().checkout.sessions.create(checkoutSessionParams(booking, destination, driver.email, now));
+  const session = await getStripe().checkout.sessions.create(checkoutSessionParams(booking, destination, driver.email, now, await returnBase()));
 
   // The hold now ends with the session. Only while the hold is still valid, and only
   // one session per booking (two quick clicks: the other session is closed again).
@@ -109,6 +110,7 @@ export function checkoutSessionParams(
   destination: string,
   email: string,
   now = new Date(),
+  base = appUrl(),
 ): Stripe.Checkout.SessionCreateParams {
   const description = `${booking.spot.title}, ${formatRange(booking.startsAt, booking.endsAt)}, ${booking.vehicleReg}`;
   const metadata = { booking_id: booking.id };
@@ -131,8 +133,8 @@ export function checkoutSessionParams(
       metadata,
     },
     expires_at: Math.floor(now.getTime() / 1000) + CHECKOUT_SESSION_SECONDS,
-    success_url: `${appUrl()}/betala/${booking.id}/klar?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${appUrl()}/betala/${booking.id}?avbruten=1`,
+    success_url: `${base}/betala/${booking.id}/klar?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${base}/betala/${booking.id}?avbruten=1`,
   };
 }
 

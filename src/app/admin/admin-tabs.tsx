@@ -6,7 +6,7 @@ import { demoResetEnabled } from "@/lib/demo";
 
 const TABS = [
   { href: "/admin", label: "Att granska", exact: true },
-  { href: "/admin/platser", label: "Platser" },
+  { href: "/admin/platser", label: "Parkeringsplatser" },
   { href: "/admin/konton", label: "Uthyrare" },
   { href: "/admin/bokningar", label: "Bokningar" },
   { href: "/admin/epost", label: "E-post" },

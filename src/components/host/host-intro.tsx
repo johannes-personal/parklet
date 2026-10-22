@@ -68,10 +68,10 @@ export function HostIntro() {
           <h2 className="text-2xl font-bold">För bostadsrättsföreningar och fastighetsägare</h2>
           <ul className="mt-6 grid gap-4 sm:grid-cols-2">
             {[
-              ["Flera platser på en gång", 'Lägg upp "Plats 1–20" med samma villkor och samma underlag.'],
+              ["Flera parkeringsplatser på en gång", 'Lägg upp "Plats 1–20" med samma villkor och samma underlag.'],
               ["Flera administratörer", "Bjud in fler i styrelsen eller förvaltningen."],
               ["Registrering av bilar", "Kräv att tillfälliga hyresgästers bilar registreras, med tydlig att-göra-lista."],
-              ["Bara via länk", "Låt platserna vara dolda i sökningen och dela länken med boende eller grannar."],
+              ["Bara via länk", "Låt parkeringsplatserna vara dolda i sökningen och dela länken med boende eller grannar."],
             ].map(([t, b]) => (
               <li key={t} className="card p-5">
                 <h3 className="font-semibold">{t}</h3>
@@ -81,7 +81,7 @@ export function HostIntro() {
           </ul>
           <p className="mt-6 text-sm text-muted">
             Tänk på: uthyrning till icke-medlemmar kan påverka om en BRF räknas som privatbostadsföretag skattemässigt. Rådgör med er revisor om ni hyr ut många
-            platser externt.
+            parkeringsplatser externt.
           </p>
         </div>
       </section>

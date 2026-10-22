@@ -9,6 +9,7 @@ import { isUuid } from "./ids";
 import { notifyAccount, notifyAdmins, notifyUsers } from "./notifications";
 import { getPaymentProvider, paymentProviderName } from "./payments";
 import { getSpotWithAccount, isBookable, type SpotWithWindows } from "./spots";
+import { approveVehicle, isVehicleApproved } from "./vehicle-approvals";
 
 export const MAX_BOOKING_DAYS = 30;
 /** How long an unpaid booking holds the slot. */
@@ -86,6 +87,8 @@ export async function createBooking(input: {
   const rules = checkRules(spot, input.start, input.end);
   if (!rules.ok) return rules;
   const price = rules.price;
+  // A car the host has already registered for the spot needs no new registration.
+  const registered = spot.requiresVehicleRegistration && (await isVehicleApproved(spot.id, input.vehicleReg));
 
   try {
     // One step in the database (0010_http_api.sql): lock the spot so concurrent bookings
@@ -97,13 +100,16 @@ export async function createBooking(input: {
       p_starts_at: input.start.toISOString(),
       p_ends_at: input.end.toISOString(),
       p_vehicle_reg: input.vehicleReg,
-      p_vehicle_registration: spot.requiresVehicleRegistration ? "pending" : "not_required",
+      p_vehicle_registration: !spot.requiresVehicleRegistration ? "not_required" : registered ? "done" : "pending",
       p_base_ore: price.baseOre,
       p_fee_ore: price.feeOre,
       p_total_ore: price.totalOre,
       p_payment_provider: paymentProviderName(),
       p_hold_minutes: HOLD_MINUTES,
     });
+    if (registered) {
+      must(await api().from("bookings").update(toDb(bookings, { vehicleRegisteredAt: new Date() })).eq(B.id, bookingId), "createBooking");
+    }
     return { ok: true, bookingId };
   } catch (err) {
     if (isExclusionViolation(err)) {
@@ -156,6 +162,8 @@ export async function announceBooking(bookingId: string) {
   const driverName = row.driver.name;
   const when = formatRange(booking.startsAt, booking.endsAt);
   const register = booking.vehicleRegistration === "pending";
+  // Registered from the start: a car the host registered for the spot before.
+  const known = spot.requiresVehicleRegistration && booking.vehicleRegistration === "done";
   const details: [string, string][] = [
     ["Plats", `${spot.title}, ${spot.address}, ${spot.city}`],
     ["Tid", when],
@@ -167,6 +175,7 @@ export async function announceBooking(bookingId: string) {
     title: register ? `Registrera ${booking.vehicleReg} – ny bokning av ${spot.title}` : `Ny bokning: ${spot.title}`,
     body:
       `${driverName} har bokat ${spot.title}.` +
+      (known ? `\n\n${booking.vehicleReg} är redan registrerad för platsen, så du behöver inte göra något.` : "") +
       (register
         ? `\n\nFöreningen kräver att bilen registreras. Registrera ${booking.vehicleReg} i föreningens parkeringssystem före ${formatDateTime(booking.startsAt)} och markera den som registrerad i Parklet, så att föraren vet att det är klart.`
         : ""),
@@ -180,7 +189,8 @@ export async function announceBooking(bookingId: string) {
     title: `Bokningsbekräftelse: ${spot.title}`,
     body:
       `Din parkering är bokad och betald. Vägbeskrivning och eventuell portkod finns i bokningen.` +
-      (register ? `\n\nPlatsen kräver att bilen registreras av uthyraren. Vi meddelar dig när ${booking.vehicleReg} är registrerad.` : ""),
+      (register ? `\n\nPlatsen kräver att bilen registreras av uthyraren. Vi meddelar dig när ${booking.vehicleReg} är registrerad.` : "") +
+      (known ? `\n\n${booking.vehicleReg} är redan registrerad hos föreningen, så du kan parkera direkt när bokningen börjar.` : ""),
     details: [...details, ["Totalt betalt", formatSek(booking.totalOre)], ["Boknings-id", booking.id.slice(0, 8).toUpperCase()]],
     href: `/bokning/${booking.id}`,
     cta: "Visa bokningen",
@@ -404,27 +414,15 @@ async function undoCancellation(booking: BookingWithSpot, cause: unknown) {
 }
 
 /** The host confirms that the driver's car has been registered in the association's parking system. */
+/**
+ * The host has registered the booking's car in the association's system. That registers
+ * the car for the spot (src/server/vehicle-approvals.ts): this booking and any other
+ * waiting with the same car are done, and the next one starts registered.
+ */
 export async function markVehicleRegistered(bookingId: string, userId: string) {
   const booking = await getBookingForUser(bookingId, userId);
   if (!booking || !booking.viewerIsHost) return false;
-  const updated = must(
-    await api()
-      .from("bookings")
-      .update(toDb(bookings, { vehicleRegistration: "done", vehicleRegisteredAt: new Date() }))
-      .eq(B.id, bookingId)
-      .eq(B.vehicleRegistration, "pending")
-      .select(B.id),
-    "markVehicleRegistered",
-  );
-  if (updated.length && booking.status === "confirmed") {
-    await notifyUsers([booking.driverId], {
-      kind: "vehicle_registered",
-      accountId: booking.spot.hostAccountId,
-      title: `${booking.vehicleReg} är registrerad för ${booking.spot.title}`,
-      body: `Uthyraren har registrerat din bil i föreningens system. Du kan parkera ${formatRange(booking.startsAt, booking.endsAt)}.`,
-      href: `/bokning/${booking.id}`,
-    });
-  }
+  await approveVehicle(booking.spotId, booking.vehicleReg, userId);
   return true;
 }
 

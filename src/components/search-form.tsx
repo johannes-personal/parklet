@@ -25,7 +25,7 @@ export function SearchForm({
   function submit(e: React.FormEvent) {
     e.preventDefault();
     if ((from && !to) || (!from && to)) {
-      setError("Ange både från och till, eller lämna båda tomma för att se alla platser.");
+      setError("Ange både från och till, eller lämna båda tomma för att se alla parkeringsplatser.");
       return;
     }
     if (from && to && to <= from) {
@@ -42,6 +42,12 @@ export function SearchForm({
     if (from && to) {
       params.set("from", from);
       params.set("to", to);
+    }
+    // A new place or time keeps the filters chosen on the results.
+    const current = new URLSearchParams(window.location.search);
+    for (const key of ["typ", "el", "tak"]) {
+      const v = current.get(key);
+      if (v) params.set(key, v);
     }
     router.push(`/sok?${params.toString()}`);
   }

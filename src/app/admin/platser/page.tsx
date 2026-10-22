@@ -10,7 +10,7 @@ import { formatDateTime } from "@/lib/time";
 import { searchSpots, type SpotFilters } from "@/server/admin-search";
 import { HOST_KIND_LABEL } from "@/server/host-accounts";
 
-export const metadata: Metadata = { title: "Platser – administration", robots: { index: false } };
+export const metadata: Metadata = { title: "Parkeringsplatser – administration", robots: { index: false } };
 
 type SP = Awaited<PageProps<"/admin/platser">["searchParams"]>;
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) || undefined;
@@ -34,7 +34,7 @@ function filtersFrom(sp: SP): SpotFilters {
 export default function AdminSpotsPage({ searchParams }: PageProps<"/admin/platser">) {
   return (
     <div className="py-8">
-      <h1 className="text-2xl font-bold">Platser</h1>
+      <h1 className="text-2xl font-bold">Parkeringsplatser</h1>
       <Suspense fallback={<div className="card mt-6 h-96 animate-pulse" />}>
         <Results searchParams={searchParams} />
       </Suspense>
@@ -107,7 +107,7 @@ async function Results({ searchParams }: { searchParams: PageProps<"/admin/plats
       </nav>
 
       {rows.length === 0 ? (
-        <p className="card p-6 text-ink-soft">Inga platser matchar.</p>
+        <p className="card p-6 text-ink-soft">Inga parkeringsplatser matchar.</p>
       ) : (
         <div className="card overflow-hidden">
           <table className="w-full text-left text-sm">

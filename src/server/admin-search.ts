@@ -5,7 +5,7 @@ import { bookings, hostAccountMembers, hostAccounts, spots, users, type Booking,
 /**
  * Search and filters for Parklet's admins: every spot, host account, booking
  * and sent e-mail, with the facts a reviewer or support person needs in the list.
- * The queries are Postgres functions (0010_http_api.sql, 0013_admin_lists.sql).
+ * The queries are Postgres functions (0010_http_api.sql, 0014_car_approvals_and_deletion.sql).
  */
 
 export const PAGE_SIZE = 50;
@@ -18,9 +18,25 @@ export type SpotFilters = {
   bookable?: "yes" | "no";
   sort?: "updated" | "submitted" | "title" | "bookings";
   page?: number;
+  /** Only this host account's spots (the host's own list). */
+  account?: string;
 };
 
-export type AdminSpotRow = Pick<Spot, "id" | "title" | "address" | "city" | "review" | "rightBasis" | "landlordKind" | "submittedAt" | "updatedAt"> & {
+type SpotRowKeys =
+  | "id"
+  | "title"
+  | "address"
+  | "city"
+  | "review"
+  | "status"
+  | "rightBasis"
+  | "landlordKind"
+  | "submittedAt"
+  | "updatedAt"
+  | "requiresVehicleRegistration"
+  | "pricePerHourOre";
+
+export type AdminSpotRow = Pick<Spot, SpotRowKeys> & {
   accountId: string;
   accountName: string;
   accountKind: HostKind;
@@ -29,10 +45,21 @@ export type AdminSpotRow = Pick<Spot, "id" | "title" | "address" | "city" | "rev
   notBookable: string | null;
   upcoming: number;
   total: number;
+  /** Cars registered for the spot. */
+  cars: number;
 };
 
 type SpotSearchResult = {
-  rows: (Record<string, unknown> & { account_id: string; account_name: string; account_kind: HostKind; bookable: boolean; not_bookable: string | null; upcoming: number; total: number })[];
+  rows: (Record<string, unknown> & {
+    account_id: string;
+    account_name: string;
+    account_kind: HostKind;
+    bookable: boolean;
+    not_bookable: string | null;
+    upcoming: number;
+    total: number;
+    cars: number;
+  })[];
   total: number;
   by_review: Record<string, number>;
   cities: { city: string; n: number }[];
@@ -40,7 +67,7 @@ type SpotSearchResult = {
 
 export async function searchSpots(f: SpotFilters) {
   const page = Math.max(1, f.page ?? 1);
-  const result = await rpc<SpotSearchResult>("parklet_admin_search_spots", {
+  const result = await rpc<SpotSearchResult>("parklet_search_spots", {
     p_q: f.q?.trim() || null,
     p_review: f.review ?? null,
     p_basis: f.basis ?? null,
@@ -49,9 +76,10 @@ export async function searchSpots(f: SpotFilters) {
     p_sort: f.sort ?? "updated",
     p_limit: PAGE_SIZE,
     p_offset: (page - 1) * PAGE_SIZE,
+    p_account: f.account ?? null,
   });
   const rows: AdminSpotRow[] = result.rows.map((r) => ({
-    ...fromDb<typeof spots, Pick<Spot, "id" | "title" | "address" | "city" | "review" | "rightBasis" | "landlordKind" | "submittedAt" | "updatedAt">>(spots, r),
+    ...fromDb<typeof spots, Pick<Spot, SpotRowKeys>>(spots, r),
     accountId: r.account_id,
     accountName: r.account_name,
     accountKind: r.account_kind,
@@ -59,6 +87,7 @@ export async function searchSpots(f: SpotFilters) {
     notBookable: r.not_bookable,
     upcoming: r.upcoming,
     total: r.total,
+    cars: r.cars,
   }));
   return { rows, total: result.total, page, byReview: result.by_review, cities: result.cities };
 }
@@ -119,6 +148,8 @@ export type MailFilters = {
   account?: string;
   sort?: "sent" | "to" | "account" | "kind";
   page?: number;
+  /** A host's view of their account's mail: only what went to them or that they sent. Needs `account`. */
+  hostView?: boolean;
 };
 
 export type AdminMailRow = { id: number; to: string; subject: string; kind: string | null; createdAt: Date; accountId: string | null; accountName: string | null };
@@ -132,13 +163,14 @@ type MailSearchResult = {
 
 export async function searchMail(f: MailFilters) {
   const page = Math.max(1, f.page ?? 1);
-  const result = await rpc<MailSearchResult>("parklet_admin_search_mail", {
+  const result = await rpc<MailSearchResult>("parklet_search_mail", {
     p_q: f.q?.trim() || null,
     p_kind: f.kind ?? null,
     p_account: f.account ?? null,
     p_sort: f.sort ?? "sent",
     p_limit: PAGE_SIZE,
     p_offset: (page - 1) * PAGE_SIZE,
+    p_host_view: f.hostView ?? false,
   });
   const rows: AdminMailRow[] = result.rows.map((r) => ({
     id: r.id,
@@ -154,7 +186,8 @@ export async function searchMail(f: MailFilters) {
 
 export type BookingFilters = {
   q?: string;
-  status?: Booking["status"];
+  /** A status, or "booked": confirmed or cancelled (a host's bookings, without unpaid holds). */
+  status?: Booking["status"] | "booked";
   payment?: Booking["paymentStatus"];
   when?: "upcoming" | "ongoing" | "past";
   /** yyyy-mm-dd, Swedish time; the bookings that overlap the range. */
@@ -163,11 +196,13 @@ export type BookingFilters = {
   city?: string;
   sort?: "created" | "starts" | "starts_desc" | "total";
   page?: number;
+  /** Only this host account's bookings (the host's own list). */
+  account?: string;
 };
 
 export type AdminBookingRow = Pick<
   Booking,
-  "id" | "startsAt" | "endsAt" | "status" | "paymentStatus" | "paymentProvider" | "totalOre" | "feeOre" | "vehicleReg" | "vehicleRegistration" | "createdAt" | "confirmedAt" | "cancelledAt" | "cancelledBy"
+  "id" | "startsAt" | "endsAt" | "status" | "paymentStatus" | "paymentProvider" | "totalOre" | "baseOre" | "feeOre" | "vehicleReg" | "vehicleRegistration" | "createdAt" | "confirmedAt" | "cancelledAt" | "cancelledBy"
 > & {
   spot: { id: string; title: string; address: string; city: string };
   account: { id: string; name: string; kind: HostKind };
@@ -196,7 +231,7 @@ const isDate = (v: string | undefined) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) &&
 
 export async function searchBookings(f: BookingFilters) {
   const page = Math.max(1, f.page ?? 1);
-  const result = await rpc<BookingSearchResult>("parklet_admin_search_bookings", {
+  const result = await rpc<BookingSearchResult>("parklet_search_bookings", {
     p_q: f.q?.trim() || null,
     p_status: f.status ?? null,
     p_payment: f.payment ?? null,
@@ -207,6 +242,7 @@ export async function searchBookings(f: BookingFilters) {
     p_sort: f.sort ?? "created",
     p_limit: PAGE_SIZE,
     p_offset: (page - 1) * PAGE_SIZE,
+    p_account: f.account ?? null,
   });
   const rows: AdminBookingRow[] = result.rows.map((r) => ({
     ...fromDb<typeof bookings, Omit<AdminBookingRow, "spot" | "account" | "driver">>(bookings, r),

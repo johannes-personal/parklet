@@ -41,7 +41,7 @@ function sortedWindows(rows: AvailabilityWindow[] | undefined): AvailabilityWind
 
 export async function getSpot(id: string): Promise<SpotWithWindows | null> {
   if (!isUuid(id)) return null;
-  const row = must(await api().from("spots").select(`${cols(spots)},${WINDOWS}`).eq(S.id, id).maybeSingle(), "getSpot");
+  const row = must(await api().from("spots").select(`${cols(spots)},${WINDOWS}`).eq(S.id, id).is(S.deletedAt, null).maybeSingle(), "getSpot");
   if (!row) return null;
   const spot = parse(spots, row) as Spot & { windows?: AvailabilityWindow[] };
   return { ...spot, windows: sortedWindows(spot.windows) };
@@ -50,7 +50,12 @@ export async function getSpot(id: string): Promise<SpotWithWindows | null> {
 export async function getSpotWithAccount(id: string) {
   if (!isUuid(id)) return null;
   const row = must(
-    await api().from("spots").select(`${cols(spots)},${WINDOWS},${embed("account", hostAccounts, undefined, { inner: true })}`).eq(S.id, id).maybeSingle(),
+    await api()
+      .from("spots")
+      .select(`${cols(spots)},${WINDOWS},${embed("account", hostAccounts, undefined, { inner: true })}`)
+      .eq(S.id, id)
+      .is(S.deletedAt, null)
+      .maybeSingle(),
     "getSpotWithAccount",
   ) as (Record<string, unknown> & { account: unknown }) | null;
   if (!row) return null;
@@ -275,7 +280,7 @@ export async function announceSubmittedSpots(accountId: string, spotIds: string[
     kind: "admin_spot_submitted",
     accountId: spot.hostAccountId,
     title: `Ny plats att granska: ${spot.title}${more}`,
-    body: `${accountName} har skickat in ${rows.length > 1 ? `${rows.length} platser` : "en plats"} för granskning.`,
+    body: `${accountName} har skickat in ${rows.length > 1 ? `${rows.length} parkeringsplatser` : "en parkeringsplats"} för granskning.`,
     details: [
       ["Plats", `${spot.title}, ${spot.address}, ${spot.city}`],
       ["Uthyrare", accountName],
@@ -385,7 +390,7 @@ export type HostSpotSummary = Spot & { upcomingBookings: number; earnedOre: numb
 
 export async function listAccountSpots(accountId: string): Promise<HostSpotSummary[]> {
   const [rows, stats] = await Promise.all([
-    api().from("spots").select(cols(spots)).eq(S.hostAccountId, accountId).order(S.createdAt),
+    api().from("spots").select(cols(spots)).eq(S.hostAccountId, accountId).is(S.deletedAt, null).order(S.createdAt),
     api().rpc("parklet_account_spot_stats", { p_account_id: accountId }),
   ]);
   const byId = new Map(
@@ -407,7 +412,7 @@ export async function listReviewQueue() {
       .select(`${cols(spots)},${embed("account", hostAccounts, ["name", "kind"], { inner: true })}`)
       .eq(S.review, "pending_review")
       .order(S.submittedAt),
-    api().from("host_accounts").select(cols(hostAccounts)).eq(A.verificationStatus, "pending").order(A.createdAt),
+    api().from("host_accounts").select(cols(hostAccounts)).eq(A.verificationStatus, "pending").is(A.deletedAt, null).order(A.createdAt),
   ]);
   const pendingSpots = (must(spotRows, "listReviewQueue") as (Record<string, unknown> & { account: Pick<HostAccount, "name" | "kind"> })[]).map(
     ({ account, ...spot }) => ({ spot: parse(spots, spot), accountName: account.name, accountKind: account.kind }),
@@ -509,6 +514,7 @@ export async function listSiblingSpots(spot: Pick<Spot, "id" | "hostAccountId" |
       .eq(S.address, spot.address)
       .eq(S.city, spot.city)
       .neq(S.id, spot.id)
+      .is(S.deletedAt, null)
       .order(S.title),
     "listSiblingSpots",
   );

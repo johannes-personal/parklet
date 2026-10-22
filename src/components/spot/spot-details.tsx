@@ -7,6 +7,7 @@ import { formatDuration, formatRange } from "@/lib/time";
 import { listBusyRanges, listVehicles } from "@/server/bookings";
 import { getAccountForMember } from "@/server/host-accounts";
 import { getSpotWithAccount, isBookable } from "@/server/spots";
+import { approvedRegs } from "@/server/vehicle-approvals";
 
 /** A spot as a driver sees it, in the panel over the search map (/sok?plats=…). */
 export async function loadSpotForViewer(id: string) {
@@ -18,7 +19,9 @@ export async function loadSpotForViewer(id: string) {
   // Unbookable spots are only previewed by their own hosts and by admins.
   if (!bookable && !isHost && !user?.isAdmin) return null;
   const [busy, vehicles] = await Promise.all([listBusyRanges(spot.id), user ? listVehicles(user.id) : Promise.resolve([])]);
-  return { spot, account, bookable, isHost, user, busy, vehicles };
+  // The driver's cars the host has already registered for the spot.
+  const registered = spot.requiresVehicleRegistration ? await approvedRegs(spot.id, vehicles.map((v) => v.reg)) : new Set<string>();
+  return { spot, account, bookable, isHost, user, busy, vehicles, registered };
 }
 
 export type ViewerSpot = NonNullable<Awaited<ReturnType<typeof loadSpotForViewer>>>;
@@ -117,6 +120,7 @@ export function SpotBooking({ data, from, to, returnTo }: { data: ViewerSpot; fr
             initialFrom={from}
             initialTo={to}
             requiresVehicleRegistration={spot.requiresVehicleRegistration}
+            registeredRegs={[...data.registered]}
             returnTo={returnTo}
           />
         ) : (

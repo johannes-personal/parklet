@@ -64,6 +64,10 @@ test("a booking says when it was made", async ({ page }) => {
   await page.goto("/mina-sidor");
   await page.getByText("Garage Linnégatan – Plats 1").first().click();
   await expect(page.getByText("Bokad", { exact: true })).toBeVisible();
+  // Back to the spot, to book it again.
+  await page.getByRole("link", { name: "Visa parkeringsplatsen och boka igen" }).click();
+  await expect(page).toHaveURL(/\/sok\?.*plats=/);
+  await expect(page.getByRole("complementary", { name: "Garage Linnégatan – Plats 1" })).toBeVisible();
   await logout(page);
 });
 

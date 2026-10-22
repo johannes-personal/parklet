@@ -133,10 +133,10 @@ export function SpotForm({
         {allowMultiple && !spotId ? (
           <div>
             <label htmlFor={f("count")} className="label">
-              Antal likadana platser
+              Antal likadana parkeringsplatser
             </label>
             <input id={f("count")} name="count" type="number" min={1} max={50} defaultValue={state?.values?.count ?? "1"} className="input w-28" />
-            <p className="hint">Har föreningen flera platser med samma villkor skapas de som &quot;Plats 1&quot;, &quot;Plats 2&quot; osv.</p>
+            <p className="hint">Har föreningen flera parkeringsplatser med samma villkor skapas de som &quot;Plats 1&quot;, &quot;Plats 2&quot; osv.</p>
           </div>
         ) : null}
       </Section>
@@ -152,7 +152,7 @@ export function SpotForm({
               <input type="radio" name="rightBasis" value="owns" className="mt-1 accent-brand" checked={basis === "owns"} onChange={() => setBasis("owns")} />
               <span>
                 <span className="font-medium">Jag/vi äger platsen</span>
-                <span className="block text-sm text-ink-soft">T.ex. egen villa, egen fastighet eller föreningens egna platser.</span>
+                <span className="block text-sm text-ink-soft">T.ex. egen villa, egen fastighet eller föreningens egna parkeringsplatser.</span>
               </span>
             </label>
             <label className="flex cursor-pointer gap-3 rounded-xl border border-line p-4 has-checked:border-brand has-checked:bg-brand-soft">

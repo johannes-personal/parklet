@@ -19,7 +19,7 @@ export function NoAccountAccess({ user, accountId, spotId, returnTo }: { user: C
       }
     >
       <p>Sidan hör till ett uthyrarkonto som du inte är administratör för, eller så finns kontot inte längre.</p>
-      {user.isAdmin ? <p>Som granskare på Parklet ser du kontot och dess platser i administrationen.</p> : null}
+      {user.isAdmin ? <p>Som granskare på Parklet ser du kontot och dess parkeringsplatser i administrationen.</p> : null}
     </Unavailable>
   );
 }

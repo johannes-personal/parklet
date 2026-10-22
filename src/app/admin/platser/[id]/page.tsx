@@ -40,7 +40,7 @@ async function Content({ params, searchParams }: P) {
   const row = await getSpotWithAccount(id);
   if (!row) {
     return (
-      <Unavailable title="Platsen finns inte" actions={[{ href: "/admin/platser", label: "Alla platser" }]}>
+      <Unavailable title="Platsen finns inte" actions={[{ href: "/admin/platser", label: "Alla parkeringsplatser" }]}>
         <p>Platsen har tagits bort, eller så är länken fel.</p>
       </Unavailable>
     );
@@ -53,7 +53,7 @@ async function Content({ params, searchParams }: P) {
   return (
     <div className="space-y-6">
       <Link href="/admin/platser" className="link text-sm">
-        ← Alla platser
+        ← Alla parkeringsplatser
       </Link>
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-bold">{spot.title}</h1>

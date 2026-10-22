@@ -23,6 +23,8 @@ type Props = {
   initialFrom?: string;
   initialTo?: string;
   requiresVehicleRegistration: boolean;
+  /** The driver's saved cars that the host has already registered for this spot. */
+  registeredRegs?: string[];
   /** Where to come back to after logging in. */
   returnTo: string;
 };
@@ -101,7 +103,11 @@ export function BookingForm(p: Props) {
             </div>
           ) : null}
           {p.requiresVehicleRegistration ? (
-            <p className="hint">Föreningen kräver att bilen registreras. Uthyraren registrerar ditt registreringsnummer innan bokningen startar.</p>
+            !useNew && p.registeredRegs?.includes(vehicle) ? (
+              <p className="hint font-medium text-ok">{vehicle} är redan registrerad hos föreningen, så du kan parkera direkt när bokningen börjar.</p>
+            ) : (
+              <p className="hint">Föreningen kräver att bilen registreras. Uthyraren registrerar ditt registreringsnummer innan bokningen startar.</p>
+            )
           ) : null}
         </fieldset>
       ) : p.requiresVehicleRegistration ? (

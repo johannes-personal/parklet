@@ -4,7 +4,7 @@ import { SearchForm } from "@/components/search-form";
 import { CITIES } from "@/lib/geo";
 
 const driverSteps = [
-  { title: "Sök", body: "Ange adress och tid. Du ser bara platser som är lediga hela den tiden, med totalpriset direkt." },
+  { title: "Sök", body: "Ange adress och tid. Du ser bara parkeringsplatser som är lediga hela den tiden, med totalpriset direkt." },
   { title: "Boka och betala", body: "Betala säkert med kort, Apple Pay, Google Pay eller Swish. Inga dolda avgifter." },
   { title: "Parkera", body: "Adress, vägbeskrivning och eventuell portkod visas i bokningen. Avboka kostnadsfritt inom avbokningsfristen." },
 ];
@@ -88,7 +88,7 @@ export default function HomePage() {
         <div className="card p-6" id="foreningar">
           <h2 className="text-xl font-bold">Bostadsrättsförening eller fastighetsägare?</h2>
           <p className="mt-2 text-ink-soft">
-            Lägg upp flera platser på en gång, bjud in fler administratörer och kräv att tillfälliga hyresgästers bilar registreras.
+            Lägg upp flera parkeringsplatser på en gång, bjud in fler administratörer och kräv att tillfälliga hyresgästers bilar registreras.
           </p>
           <Link href="/uthyrare#foreningar" className="btn-secondary mt-4">
             Läs mer för organisationer

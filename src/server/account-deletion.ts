@@ -1,16 +1,15 @@
 import "server-only";
 import { randomBytes, randomUUID } from "node:crypto";
 import { api, cols, embed, must, names, tableName, toDb } from "@/db/api";
-import { bookings, documents, hostAccountMembers, hostAccounts, identityRequests, notifications, passwordResetTokens, sessions, spots, users, vehicles, type User } from "@/db/schema";
+import { bookings, hostAccountMembers, hostAccounts, identityRequests, notifications, passwordResetTokens, sessions, spots, users, vehicles, type User } from "@/db/schema";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
-import { deleteDocumentFiles } from "./storage";
+import { deleteHostAccount } from "./host-deletion";
 
 const U = names(users);
 const B = names(bookings);
 const M = names(hostAccountMembers);
 const A = names(hostAccounts);
 const S = names(spots);
-const D = names(documents);
 
 /** A deleted user's address: unique, on a domain that can't receive mail, never a login. */
 const deletedEmail = () => `borttagen-${randomUUID()}@parklet.invalid`;
@@ -70,7 +69,7 @@ export async function deleteOwnAccount(userId: string, password: string): Promis
         .limit(1),
       "deleteOwnAccount",
     );
-    if (hosted.length) return { ok: false, error: "Det finns kommande bokningar på dina platser. Vänta tills de är klara, och ta sedan bort kontot." };
+    if (hosted.length) return { ok: false, error: "Det finns kommande bokningar på dina parkeringsplatser. Vänta tills de är klara, och ta sedan bort kontot." };
   }
 
   // Paid as a host this year or last: the identity is kept for the DAC7 report.
@@ -88,13 +87,13 @@ export async function deleteOwnAccount(userId: string, password: string): Promis
       ).length > 0
     : false;
 
+  for (const accountId of owned) {
+    // As when the owner deletes the account on its own (src/server/host-deletion.ts).
+    const deleted = await deleteHostAccount(accountId, userId);
+    if (!deleted.ok) return deleted;
+  }
   if (owned.length) {
-    must(await api().from("spots").update(toDb(spots, { status: "paused" })).in(S.hostAccountId, owned), "deleteOwnAccount");
-    const docs = must<{ storageKey: string }[]>(
-      await api().from("documents").delete().in(D.hostAccountId, owned).select(cols(documents, ["storageKey"])),
-      "deleteOwnAccount",
-    );
-    await deleteDocumentFiles(docs.map((d) => d.storageKey)).catch((err) => console.error("account deletion: document files", err));
+    // A household account kept for its bookings no longer carries the person's name.
     must(
       await api().from("host_accounts").update(toDb(hostAccounts, { name: "Borttagen uthyrare" })).in(A.id, owned).eq(A.kind, "household"),
       "deleteOwnAccount",

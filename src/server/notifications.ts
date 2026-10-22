@@ -104,6 +104,7 @@ export async function hostTodos(user: CurrentUser): Promise<Todo[]> {
       .from("spots")
       .select(`${cols(spots, ["id", "title", "review", "landlordApproval"])},accountId:${S.hostAccountId}`)
       .in(S.hostAccountId, ids)
+      .is(S.deletedAt, null)
       .in(S.review, ["draft", "rejected"]),
   ]);
   const carsPerAccount = new Map<string, number>();
@@ -118,7 +119,7 @@ export async function hostTodos(user: CurrentUser): Promise<Todo[]> {
   for (const { account, role } of accounts) {
     const n = carsPerAccount.get(account.id) ?? 0;
     if (n > 0) {
-      todos.push({ key: `cars:${account.id}`, title: `Registrera ${n === 1 ? "en bil" : `${n} bilar`}${suffix(account.name)}`, href: `/uthyrare/${account.id}#bilar` });
+      todos.push({ key: `cars:${account.id}`, title: `Registrera ${n === 1 ? "en bil" : `${n} bilar`}${suffix(account.name)}`, href: `/uthyrare/${account.id}/granska#bilar` });
     }
     if (account.kind !== "household" && (account.verificationStatus === "unverified" || account.verificationStatus === "rejected")) {
       todos.push({ key: `verify:${account.id}`, title: `Skicka in underlag för att verifiera ${account.name}`, href: `/uthyrare/${account.id}` });
@@ -137,7 +138,8 @@ export async function hostTodos(user: CurrentUser): Promise<Todo[]> {
   for (const s of spotRows) {
     const href = `/uthyrare/${s.accountId}/platser/${s.id}`;
     if (s.review === "rejected") todos.push({ key: `spot:${s.id}`, title: `Komplettera ${s.title}`, href });
-    else if (s.landlordApproval !== "requested") todos.push({ key: `spot:${s.id}`, title: `Slutför och skicka in ${s.title}`, href });
+    // Waiting for the landlord, or refused by them: nothing the host can finish.
+    else if (s.landlordApproval !== "requested" && s.landlordApproval !== "declined") todos.push({ key: `spot:${s.id}`, title: `Slutför och skicka in ${s.title}`, href });
   }
   return todos;
 }
@@ -166,12 +168,12 @@ export async function isHost(userId: string): Promise<boolean> {
 export async function adminTodos(): Promise<Todo[]> {
   const [spotCount, accountCount] = await Promise.all([
     api().from("spots").select(S.id, { count: "exact", head: true }).eq(S.review, "pending_review"),
-    api().from("host_accounts").select(A.id, { count: "exact", head: true }).eq(A.verificationStatus, "pending"),
+    api().from("host_accounts").select(A.id, { count: "exact", head: true }).eq(A.verificationStatus, "pending").is(A.deletedAt, null),
   ]);
   const spotsPending = { n: mustCount(spotCount, "adminTodos") };
   const accountsPending = { n: mustCount(accountCount, "adminTodos") };
   const todos: Todo[] = [];
-  if (spotsPending.n > 0) todos.push({ key: "admin:spots", title: `Granska ${spotsPending.n === 1 ? "en plats" : `${spotsPending.n} platser`}`, href: "/admin" });
+  if (spotsPending.n > 0) todos.push({ key: "admin:spots", title: `Granska ${spotsPending.n === 1 ? "en parkeringsplats" : `${spotsPending.n} parkeringsplatser`}`, href: "/admin" });
   if (accountsPending.n > 0) {
     todos.push({ key: "admin:accounts", title: `Granska ${accountsPending.n === 1 ? "ett uthyrarkonto" : `${accountsPending.n} uthyrarkonton`}`, href: "/admin" });
   }

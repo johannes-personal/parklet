@@ -80,14 +80,14 @@ function accountDecisionMessage(
   const household = kind === "household";
   if (decision === "approve") {
     return household
-      ? { title: "Ditt uthyrarkonto är godkänt på Parklet", body: "Kontot är godkänt. Dina platser kan bokas när de är godkända och utbetalningar är kopplade." }
+      ? { title: "Ditt uthyrarkonto är godkänt på Parklet", body: "Kontot är godkänt. Dina parkeringsplatser kan bokas när de är godkända och utbetalningar är kopplade." }
       : { title: "Er organisation är verifierad på Parklet", body: "Organisationen är verifierad." };
   }
   const redo = household
     ? "Legitimera dig med BankID igen från ditt uthyrarkonto, så granskar vi kontot på nytt."
     : "Ladda upp underlagen och skicka in organisationen för granskning igen.";
   const spots = spotsReset
-    ? `\n\n${spotsReset === 1 ? "Platsen" : `De ${spotsReset} platserna`} behöver också skickas in för granskning igen när kontot är godkänt.`
+    ? `\n\n${spotsReset === 1 ? "Platsen" : `De ${spotsReset} parkeringsplatserna`} behöver också skickas in för granskning igen när kontot är godkänt.`
     : "";
   if (decision === "reject") {
     return {
@@ -97,6 +97,6 @@ function accountDecisionMessage(
   }
   return {
     title: household ? "Godkännandet av ditt uthyrarkonto har tagits bort" : "Verifieringen av er organisation har tagits bort",
-    body: `${household ? "Dina platser" : "Organisationens platser"} kan inte bokas förrän kontot är godkänt igen. Bokningar som redan är gjorda gäller.\n\n${note}\n\n${redo}${spots}`,
+    body: `${household ? "Dina parkeringsplatser" : "Organisationens parkeringsplatser"} kan inte bokas förrän kontot är godkänt igen. Bokningar som redan är gjorda gäller.\n\n${note}\n\n${redo}${spots}`,
   };
 }

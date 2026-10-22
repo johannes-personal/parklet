@@ -13,7 +13,7 @@ export function DeleteAccountForm() {
       <FormAlert state={state} />
       <p className="text-sm text-ink-soft">
         Ditt namn, din e-postadress, dina bilar och notiser tas bort och du loggas ut. Bokningar du gjort sparas utan ditt namn, eftersom de måste finnas
-        kvar i bokföringen. Är du uthyrare pausas dina platser och underlagen tas bort. Det går inte att ångra.
+        kvar i bokföringen. Är du uthyrare pausas dina parkeringsplatser och underlagen tas bort. Det går inte att ångra.
       </p>
       <div>
         <label htmlFor={f("password")} className="label">

@@ -13,6 +13,7 @@ import {
   uploadDocumentAction,
   withdrawSpotAction,
 } from "@/app/uthyrare/actions";
+import { fileTooLarge, TOO_LARGE } from "@/lib/documents";
 import { errProps, FieldError, FormAlert, FormErrorSummary, SubmitButton, type FormState } from "@/components/form";
 
 export function DocumentUploader({
@@ -27,7 +28,7 @@ export function DocumentUploader({
   siblings?: number;
 }) {
   const f = useFieldIds();
-  const [state, action] = useActionState<FormState, FormData>(uploadDocumentAction, null);
+  const [state, action] = useActionState<FormState, FormData>((prev, data) => (fileTooLarge(data) ? { error: TOO_LARGE } : uploadDocumentAction(prev, data)), null);
   return (
     <form action={action} className="space-y-3 rounded-xl border border-dashed border-line p-4">
       <FormAlert state={state} />
@@ -65,7 +66,7 @@ export function DocumentUploader({
       </div>
       {siblings > 0 ? (
         <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" name="applyToSiblings" defaultChecked className="accent-brand" /> Gäller även de {siblings} andra platserna på samma adress
+          <input type="checkbox" name="applyToSiblings" defaultChecked className="accent-brand" /> Gäller även de {siblings} andra parkeringsplatserna på samma adress
         </label>
       ) : null}
       <SubmitButton className="btn-secondary" pendingText="Laddar upp…">
@@ -119,7 +120,7 @@ export function DocumentSlot({
   const [notice, setNotice] = useState<FormState>(null);
   const [state, action] = useActionState<FormState, FormData>((prev, data) => {
     setNotice(null);
-    return uploadDocumentAction(prev, data);
+    return fileTooLarge(data) ? { error: TOO_LARGE } : uploadDocumentAction(prev, data);
   }, null);
   const done = docs.length > 0;
   return (
@@ -192,7 +193,7 @@ export function DocumentSlot({
               </div>
               {siblings > 0 ? (
                 <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" name="applyToSiblings" defaultChecked className="accent-brand" /> Gäller även de {siblings} andra platserna på samma
+                  <input type="checkbox" name="applyToSiblings" defaultChecked className="accent-brand" /> Gäller även de {siblings} andra parkeringsplatserna på samma
                   adress
                 </label>
               ) : null}
@@ -266,7 +267,7 @@ export function SubmitSpotForm({ accountId, spotId, label, siblings = 0 }: { acc
       <input type="hidden" name="spotId" value={spotId} />
       {siblings > 0 && !state?.success ? (
         <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" name="includeSiblings" defaultChecked className="accent-brand" /> Skicka även in de {siblings} andra platserna på samma adress
+          <input type="checkbox" name="includeSiblings" defaultChecked className="accent-brand" /> Skicka även in de {siblings} andra parkeringsplatserna på samma adress
         </label>
       ) : null}
       {!state?.success ? <SubmitButton className="btn-primary btn-lg">{label}</SubmitButton> : null}
@@ -331,8 +332,8 @@ export function InviteForm({ accountId }: { accountId: string }) {
 
 const KINDS = [
   { value: "household", title: "Privatperson", body: "Du hyr ut din egen plats, t.ex. på uppfarten eller platsen du hyr i din BRF." },
-  { value: "association", title: "Bostadsrättsförening", body: "Föreningen hyr ut sina platser till boende och/eller andra. Flera administratörer." },
-  { value: "company", title: "Företag eller fastighetsägare", body: "Hyr ut kontorets eller fastighetens platser när de inte används." },
+  { value: "association", title: "Bostadsrättsförening", body: "Föreningen hyr ut sina parkeringsplatser till boende och/eller andra. Flera administratörer." },
+  { value: "company", title: "Företag eller fastighetsägare", body: "Hyr ut kontorets eller fastighetens parkeringsplatser när de inte används." },
 ];
 
 export function CreateAccountForm({ identityVerified }: { identityVerified: boolean }) {
