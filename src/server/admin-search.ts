@@ -5,7 +5,7 @@ import { bookings, hostAccountMembers, hostAccounts, spots, users, type Booking,
 /**
  * Search and filters for Parklet's admins: every spot, host account, booking
  * and sent e-mail, with the facts a reviewer or support person needs in the list.
- * The queries are Postgres functions (0010_http_api.sql, 0013_admin_lists.sql).
+ * The queries are Postgres functions (0010_http_api.sql, 0014_car_approvals_and_deletion.sql).
  */
 
 export const PAGE_SIZE = 50;
@@ -67,7 +67,7 @@ type SpotSearchResult = {
 
 export async function searchSpots(f: SpotFilters) {
   const page = Math.max(1, f.page ?? 1);
-  const result = await rpc<SpotSearchResult>("parklet_admin_search_spots", {
+  const result = await rpc<SpotSearchResult>("parklet_search_spots", {
     p_q: f.q?.trim() || null,
     p_review: f.review ?? null,
     p_basis: f.basis ?? null,
@@ -163,7 +163,7 @@ type MailSearchResult = {
 
 export async function searchMail(f: MailFilters) {
   const page = Math.max(1, f.page ?? 1);
-  const result = await rpc<MailSearchResult>("parklet_admin_search_mail", {
+  const result = await rpc<MailSearchResult>("parklet_search_mail", {
     p_q: f.q?.trim() || null,
     p_kind: f.kind ?? null,
     p_account: f.account ?? null,
@@ -231,7 +231,7 @@ const isDate = (v: string | undefined) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) &&
 
 export async function searchBookings(f: BookingFilters) {
   const page = Math.max(1, f.page ?? 1);
-  const result = await rpc<BookingSearchResult>("parklet_admin_search_bookings", {
+  const result = await rpc<BookingSearchResult>("parklet_search_bookings", {
     p_q: f.q?.trim() || null,
     p_status: f.status ?? null,
     p_payment: f.payment ?? null,

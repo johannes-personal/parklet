@@ -20,7 +20,7 @@ export async function getMail(id: string): Promise<LoggedMail | null> {
 /**
  * The same mail for a host, if it is one they may read: about their account, and sent
  * to one of its administrators or by them (to the landlord, to an invited administrator),
- * as parklet_admin_search_mail's host view lists them.
+ * as parklet_search_mail's host view lists them.
  */
 export async function getHostMail(accountId: string, id: string): Promise<LoggedMail | null> {
   const mail = await getMail(id);

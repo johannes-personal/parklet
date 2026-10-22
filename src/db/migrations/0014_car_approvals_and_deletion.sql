@@ -14,13 +14,12 @@ ALTER TABLE "spot_vehicle_approvals" ADD CONSTRAINT "spot_vehicle_approvals_appr
 ALTER TABLE "spot_vehicle_approvals" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 
 -- The admin lists, now also used by a host for their own account (p_account), without
--- deleted spots and accounts. The new arguments have defaults, so a running app that
--- doesn't pass them keeps working while this is applied before its deploy.
-DROP FUNCTION public.parklet_admin_search_spots(text, text, text, text, text, text, integer, integer);
---> statement-breakpoint
-CREATE FUNCTION public.parklet_admin_search_spots(
+-- deleted spots and accounts. New names rather than new arguments on the old ones: the
+-- running app keeps calling parklet_admin_search_spots/_bookings/_mail (0010, 0013) until
+-- the deploy that uses these, and nothing has to be dropped while it does.
+CREATE FUNCTION public.parklet_search_spots(
   p_q text, p_review text, p_basis text, p_city text, p_bookable text, p_sort text, p_limit integer, p_offset integer,
-  p_account uuid DEFAULT NULL
+  p_account uuid
 ) RETURNS jsonb
 LANGUAGE sql STABLE SET search_path = public, pg_temp AS $$
   WITH params AS (
@@ -85,11 +84,9 @@ LANGUAGE sql STABLE SET search_path = public, pg_temp AS $$
 $$;
 --> statement-breakpoint
 
-DROP FUNCTION public.parklet_admin_search_bookings(text, text, text, text, date, date, text, text, integer, integer);
---> statement-breakpoint
-CREATE FUNCTION public.parklet_admin_search_bookings(
+CREATE FUNCTION public.parklet_search_bookings(
   p_q text, p_status text, p_payment text, p_when text, p_from date, p_to date, p_city text, p_sort text, p_limit integer, p_offset integer,
-  p_account uuid DEFAULT NULL
+  p_account uuid
 ) RETURNS jsonb
 LANGUAGE sql STABLE SET search_path = public, pg_temp AS $$
   WITH params AS (
@@ -158,11 +155,9 @@ $$;
 -- A host's own e-mail (p_host_view): the mail about the account that went to its
 -- administrators, or that they sent through Parklet (to the landlord, to invited
 -- administrators). Not the drivers' confirmations or the admins' notices.
-DROP FUNCTION public.parklet_admin_search_mail(text, text, uuid, text, integer, integer);
---> statement-breakpoint
-CREATE FUNCTION public.parklet_admin_search_mail(
+CREATE FUNCTION public.parklet_search_mail(
   p_q text, p_kind text, p_account uuid, p_sort text, p_limit integer, p_offset integer,
-  p_host_view boolean DEFAULT false
+  p_host_view boolean
 ) RETURNS jsonb
 LANGUAGE sql STABLE SET search_path = public, pg_temp AS $$
   WITH params AS (
@@ -262,9 +257,9 @@ $$;
 --> statement-breakpoint
 
 REVOKE EXECUTE ON FUNCTION
-  public.parklet_admin_search_spots(text, text, text, text, text, text, integer, integer, uuid),
-  public.parklet_admin_search_bookings(text, text, text, text, date, date, text, text, integer, integer, uuid),
-  public.parklet_admin_search_mail(text, text, uuid, text, integer, integer, boolean),
+  public.parklet_search_spots(text, text, text, text, text, text, integer, integer, uuid),
+  public.parklet_search_bookings(text, text, text, text, date, date, text, text, integer, integer, uuid),
+  public.parklet_search_mail(text, text, uuid, text, integer, integer, boolean),
   public.parklet_admin_search_accounts(text, text, text, text, text, integer, integer),
   public.parklet_account_spot_stats(uuid)
 FROM PUBLIC;
@@ -280,7 +275,7 @@ BEGIN
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = role_name) THEN
       FOR fn IN SELECT p.oid::regprocedure::text FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
                 WHERE n.nspname = 'public' AND p.proname IN (
-                  'parklet_admin_search_spots', 'parklet_admin_search_bookings', 'parklet_admin_search_mail',
+                  'parklet_search_spots', 'parklet_search_bookings', 'parklet_search_mail',
                   'parklet_admin_search_accounts', 'parklet_account_spot_stats') LOOP
         IF role_name = 'service_role' THEN
           EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO service_role', fn);
