@@ -21,7 +21,7 @@ const call = (handler: (req: Request) => Promise<Response>, token?: string) =>
 
 const ROUTES: [string, (req: Request) => Promise<Response>, unknown][] = [
   ["/api/cron/paminnelser", reminders, { reminded: 0, overdue: 0 }],
-  ["/api/cron/sammanfattning", digest, { sent: 0 }],
+  ["/api/cron/sammanfattning", digest, { sent: 0, enabled: false }],
 ];
 
 describe.each(ROUTES)("%s", (_path, handler, expected) => {

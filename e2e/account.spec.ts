@@ -140,3 +140,34 @@ test("admins find any booking, filter on status and open it", async ({ page }) =
   await expect(page.getByRole("definition").filter({ hasText: "Oskar Nilsson" })).toContainText("forare@parklet.test");
   await expect(page.getByRole("link", { name: "← Alla bokningar" })).toBeVisible();
 });
+
+test("the admins' daily summary: off by default, on to one address, off again", async ({ page }) => {
+  await signIn(page, "admin@parklet.test");
+  await page.goto("/admin/epost");
+  const form = page.locator("form").filter({ has: page.getByRole("heading", { name: "Dagens sammanfattning" }) });
+  const enabled = form.getByRole("checkbox", { name: "Skicka dagens sammanfattning" });
+  const to = form.getByRole("textbox", { name: "Skicka till" });
+  await expect(enabled).not.toBeChecked();
+  await expect(to).toHaveValue("");
+
+  await enabled.check();
+  await to.fill("inte-en-adress");
+  await form.getByRole("button", { name: "Spara" }).click();
+  // The browser's own check stops it first; the server says the same without it.
+  await expect(form.getByText("Sammanfattningen skickas")).toHaveCount(0);
+  await to.fill("Drift@Example.se ");
+  await form.getByRole("button", { name: "Spara" }).click();
+  await expect(form.getByText("Sammanfattningen skickas varje morgon till drift@example.se.")).toBeVisible();
+
+  await page.reload();
+  await expect(enabled).toBeChecked();
+  await expect(to).toHaveValue("drift@example.se");
+
+  await enabled.uncheck();
+  await to.fill("");
+  await form.getByRole("button", { name: "Spara" }).click();
+  await expect(form.getByText("Sammanfattningen är avstängd.")).toBeVisible();
+  await page.reload();
+  await expect(enabled).not.toBeChecked();
+  await expect(to).toHaveValue("");
+});

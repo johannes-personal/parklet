@@ -1,7 +1,10 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import type { FormState } from "@/components/form";
 import { requireAdmin } from "@/lib/auth/session";
+import { emailSchema } from "@/lib/validation";
+import { setDigestSettings } from "@/server/app-settings";
 import { getSpot, reviewAccount, reviewSpot, type ReviewDecision } from "@/server/spots";
 import { notifyAccount } from "@/server/notifications";
 
@@ -98,5 +101,19 @@ function accountDecisionMessage(
   return {
     title: household ? "Godkännandet av ditt uthyrarkonto har tagits bort" : "Verifieringen av er organisation har tagits bort",
     body: `${household ? "Dina parkeringsplatser" : "Organisationens parkeringsplatser"} kan inte bokas förrän kontot är godkänt igen. Bokningar som redan är gjorda gäller.\n\n${note}\n\n${redo}${spots}`,
+  };
+}
+
+/** The morning summary on or off, and its address (empty: every admin). */
+export async function saveDigestSettingsAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const admin = await requireAdmin();
+  const enabled = formData.get("enabled") === "on";
+  const raw = String(formData.get("to") ?? "").trim();
+  const values = { to: raw, ...(enabled ? { enabled: "on" } : {}) };
+  const to = raw ? emailSchema.safeParse(raw) : null;
+  if (to && !to.success) return { fieldErrors: { to: "Ange en giltig e-postadress, eller lämna fältet tomt." }, values };
+  await setDigestSettings({ enabled, to: to?.data ?? null }, admin.id);
+  return {
+    success: enabled ? `Sammanfattningen skickas varje morgon till ${to?.data ?? "alla administratörer"}.` : "Sammanfattningen är avstängd.",
   };
 }

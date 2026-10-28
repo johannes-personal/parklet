@@ -476,7 +476,8 @@ och beslut.*
 
 - **Morgonsammanfattning** via e-post: vad som väntar på granskning och hur länge, samt det
   senaste dygnets bokningar, avbokningar, bilar som inte registrerats i tid och nya platser,
-  uthyrare och användare. Den skickas bara när det finns något att berätta.
+  uthyrare och användare. Den skickas bara när det finns något att berätta, och bara när den
+  är påslagen under E-post, till en vald adress eller till alla administratörer.
 - **Återställ testdata** (bara i demon): lägger tillbaka demokontona med deras platser, bokningar
   och dokument, så att ett test kan börja om från samma läge.
 
