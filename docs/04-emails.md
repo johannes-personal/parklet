@@ -40,11 +40,16 @@ rendered, at `/admin/epost`. Addresses on demo domains (`*.test`,
 | Refund failed (at cancellation, or later at Stripe) | All admins | Återbetalning misslyckades: Garage X / Återbetalning misslyckades hos Stripe | ✓ | Öppna i Parklet |
 | A payment that doesn't belong to the booking, refunded | All admins | Oväntad betalning återbetald: Garage X | ✓ | Öppna i Parklet |
 | **Admins** | | | | |
-| Every morning (06:00 UTC), if anything to report | All admins | Parklet: 3 att granska / Parklet: dagens sammanfattning | – | Öppna granskningen |
+| Every morning (06:00 UTC), if turned on and anything to report | The address set for it, else all admins | Parklet: 3 att granska / Parklet: dagens sammanfattning | – | Öppna granskningen |
 
 The daily summary lists what is waiting for review (with the oldest wait and
 links), and the last 24 hours: bookings and their total, cancellations, cars
 not registered in time, and new spots, host accounts and users.
+
+It is **off** until an admin turns it on under **Dagens sammanfattning** on
+`/admin/epost`, where an address can be set too (empty: every admin). The
+setting is the `admin_digest` row in `public.app_settings`; without a row the
+summary is off.
 
 ## Scheduling
 
@@ -53,3 +58,4 @@ Two Supabase `pg_cron` jobs call the app with a token stored in
 
 - `parklet-reminders`, every 10 minutes: `/api/cron/paminnelser`
 - `parklet-admin-digest`, daily at 06:00 UTC: `/api/cron/sammanfattning`
+  (it sends nothing while the summary is turned off in the admin pages)

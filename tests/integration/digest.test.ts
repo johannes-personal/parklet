@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { eq, inArray } from "drizzle-orm";
 import { closeDb, db } from "./direct-db";
-import { spots, users } from "@/db/schema";
+import { appSettings, spots, users } from "@/db/schema";
 import { formatSek } from "@/lib/money";
 import { sendAdminDigest } from "@/server/digest";
 import { allMail, hoursFromNow, makeAdmin, makeBookableSpot, makeConfirmedBooking, makeHost, makeUser, resetDb } from "./helpers";
@@ -10,6 +10,17 @@ beforeEach(resetDb);
 afterAll(async () => {
   await closeDb();
 });
+
+/** The setting on the admin E-post page. */
+async function turnOn(to: string | null = null) {
+  await db.insert(appSettings).values({ key: "admin_digest", value: { enabled: true, to } });
+}
+
+/** Something to report: a spot waiting for review (and the new user and account behind it). */
+async function somethingWaiting() {
+  const { spotId } = await makeBookableSpot();
+  await db.update(spots).set({ review: "pending_review", submittedAt: new Date() }).where(eq(spots.id, spotId));
+}
 
 /** Admins who joined long ago, so they don't count as news themselves. */
 async function oldAdmins(count: number) {
@@ -25,14 +36,35 @@ async function oldAdmins(count: number) {
 }
 
 describe("the admins' daily summary", () => {
+  it("is off until an admin turns it on", async () => {
+    await oldAdmins(1);
+    await somethingWaiting();
+    expect(await sendAdminDigest()).toEqual({ sent: 0, enabled: false });
+    expect(await allMail()).toEqual([]);
+
+    await db.insert(appSettings).values({ key: "admin_digest", value: { enabled: false, to: "ops@example.se" } });
+    expect(await sendAdminDigest()).toEqual({ sent: 0, enabled: false });
+    expect(await allMail()).toEqual([]);
+  });
+
+  it("goes only to the address set for it", async () => {
+    await oldAdmins(2);
+    await somethingWaiting();
+    await turnOn("ops@example.se");
+    expect(await sendAdminDigest()).toMatchObject({ sent: 1, waiting: 1 });
+    expect((await allMail()).map((m) => m.to)).toEqual(["ops@example.se"]);
+  });
+
   it("is not sent when there is nothing to report", async () => {
     await oldAdmins(2);
+    await turnOn();
     expect(await sendAdminDigest()).toEqual({ sent: 0 });
     expect(await allMail()).toEqual([]);
   });
 
-  it("goes to every admin, with what is waiting and what happened", async () => {
+  it("goes to every admin without an address, with what is waiting and what happened", async () => {
     const admins = await oldAdmins(2);
+    await turnOn();
     const { spotId } = await makeBookableSpot(); // a new user, account and spot
     const driver = await makeUser("Dora Förare"); // a new user
     const booking = await makeConfirmedBooking(spotId, driver.id, hoursFromNow(24), hoursFromNow(26));

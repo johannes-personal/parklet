@@ -4,14 +4,18 @@ import { users } from "@/db/schema";
 import { appUrl } from "@/lib/app-url";
 import { formatSek } from "@/lib/money";
 import { formatDateTime } from "@/lib/time";
+import { getDigestSettings } from "./app-settings";
 import { sendEmail } from "./mailer";
 
 /**
  * The admins' morning summary: what is waiting for review (and for how
- * long), and what happened in the last 24 hours. Sent only when there is
- * something to report.
+ * long), and what happened in the last 24 hours. Sent only when it is turned
+ * on (E-post in the admin pages) and there is something to report; to the
+ * address set there, or to every admin.
  */
 export async function sendAdminDigest(now = new Date()) {
+  const settings = await getDigestSettings();
+  if (!settings.enabled) return { sent: 0, enabled: false };
   const since = new Date(now.getTime() - 24 * 3600_000).toISOString();
   const d = await rpc<{
     pending_spots: { id: string; title: string }[];
@@ -54,16 +58,18 @@ export async function sendAdminDigest(now = new Date()) {
   ];
 
   const U = names(users);
-  const admins = must<{ email: string }[]>(await api().from("users").select(U.email).eq(U.isAdmin, true), "sendAdminDigest");
-  for (const a of admins) {
-    await sendEmail(a.email, waiting ? `Parklet: ${waiting} att granska` : "Parklet: dagens sammanfattning", {
+  const recipients = settings.to
+    ? [settings.to]
+    : must<{ email: string }[]>(await api().from("users").select(U.email).eq(U.isAdmin, true), "sendAdminDigest").map((a) => a.email);
+  for (const to of recipients) {
+    await sendEmail(to, waiting ? `Parklet: ${waiting} att granska` : "Parklet: dagens sammanfattning", {
       heading: "Dagens sammanfattning",
       preheader: paragraphs[0],
       paragraphs: [...paragraphs, "Senaste dygnet:"],
       details,
       button: { label: "Öppna granskningen", url: `${appUrl()}/admin` },
-      footnote: "Skickas varje morgon till Parklets administratörer när det finns något att rapportera.",
+      footnote: "Skickas varje morgon när det finns något att rapportera. Stängs av eller skickas till en annan adress under E-post i administrationen.",
     }, { kind: "digest" });
   }
-  return { sent: admins.length, waiting, happened };
+  return { sent: recipients.length, waiting, happened };
 }

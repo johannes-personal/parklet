@@ -446,6 +446,18 @@ export const appSecrets = pgTable("app_secrets", {
 });
 
 /**
+ * Settings an admin changes in the app, one JSON value per key (see
+ * src/server/app-settings.ts for the keys and their shapes). A missing row
+ * means the default.
+ */
+export const appSettings = pgTable("app_settings", {
+  key: text("key").primaryKey(),
+  value: jsonb("value").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
+});
+
+/**
  * Stripe webhook events that have been handled, so a redelivered event is
  * acknowledged without running again. Handlers are idempotent on their own as
  * well; this saves the API calls and notifications a second run would repeat.

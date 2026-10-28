@@ -7,7 +7,9 @@ import { requireAdmin } from "@/lib/auth/session";
 import { MAIL_KIND_LABEL, mailKindLabel } from "@/lib/labels";
 import { formatDateTime } from "@/lib/time";
 import { searchMail, type MailFilters } from "@/server/admin-search";
+import { getDigestSettings } from "@/server/app-settings";
 import { isUuid } from "@/server/ids";
+import { DigestSettingsForm } from "./digest-form";
 
 export const metadata: Metadata = { title: "E-post – administration", robots: { index: false } };
 
@@ -39,6 +41,19 @@ export default function OutboxPage({ searchParams }: PageProps<"/admin/epost">) 
       <Suspense fallback={<div className="card mt-6 h-96 animate-pulse" />}>
         <Results searchParams={searchParams} />
       </Suspense>
+      <Suspense fallback={<div className="card mt-6 h-56 animate-pulse" />}>
+        <DigestSettings />
+      </Suspense>
+    </div>
+  );
+}
+
+async function DigestSettings() {
+  await requireAdmin();
+  const settings = await getDigestSettings();
+  return (
+    <div className="mt-6">
+      <DigestSettingsForm {...settings} />
     </div>
   );
 }

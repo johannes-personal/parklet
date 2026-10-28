@@ -628,10 +628,13 @@ On a phone (or the browser's phone view), around 375 px wide.
 
 ## 28. Daily summary 📧
 
-This one can't be triggered from the UI.
+It is off until it is turned on, and the mail itself can't be triggered from the UI.
 
-- It is sent every morning at 06:00 UTC (08:00 Swedish summer time) to all admins, but only when something is waiting or happened in the last 24 hours.
-- Check `johannes@jvo.se` the next morning for "Parklet: N att granska" or "Parklet: dagens sammanfattning", with the button **Öppna granskningen**.
+1. As admin, open **E-post**. Under **Dagens sammanfattning** the box **Skicka dagens sammanfattning** is unticked and **Skicka till** is empty.
+2. Tick it, type a wrong address (`inte-en-adress`) and click **Spara**: it is refused.
+3. Type your own address and click **Spara**: "Sammanfattningen skickas varje morgon till …". Reload: both are kept. With the field empty it goes to all admins.
+4. It is sent every morning at 06:00 UTC (07:00 Swedish winter time, 08:00 summer time), but only when something is waiting or happened in the last 24 hours. Check that address the next morning for "Parklet: N att granska" or "Parklet: dagens sammanfattning", with the button **Öppna granskningen**.
+5. Untick the box and click **Spara**: "Sammanfattningen är avstängd.", and no mail the next morning.
 
 ## 29. Your account: details, Mina fordon, deleting it
 
